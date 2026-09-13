@@ -1,0 +1,51 @@
+{
+  "name": "bf-urban-infantry",
+  "version": "1.0.0",
+  "description": "BF 撤离突袭 · 军械库/仓库/6级防弹衣 · 废墟城市搜刮带出",
+  "main": "main.js",
+  "author": "BATTLEFIELD Fans (local)",
+  "license": "MIT",
+  "scripts": {
+    "serve": "python _tools/serve_nocache.py 8123",
+    "start": "python _tools/serve_nocache.py 8123",
+    "electron": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.local.bfurbaninfantry",
+    "productName": "BF Urban Infantry",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "css/**/*",
+      "js/**/*",
+      "vendor/**/*"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "BF Urban Infantry"
+    },
+    "electronLanguages": [
+      "zh-CN"
+    ]
+  },
+  "dependencies": {
+    "ws": "^8.21.3"
+  }
+}
