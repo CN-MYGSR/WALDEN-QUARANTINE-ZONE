@@ -112,21 +112,21 @@ function buildThrowRow(){
  for(const k of THROW_KEYS){
   const d=THROW_DEFS[k], own=throwOwned(k);
   const cell=document.createElement('div');
-  cell.style.cssText='flex:1 1 30%;min-width:104px;border:1px solid #475466;border-radius:6px;padding:6px 8px;background:rgba(0,0,0,.35)';
+  cell.style.cssText='flex:1 1 30%;min-width:104px;border:1px solid #666666;border-radius:6px;padding:6px 8px;background:rgba(0,0,0,.35)';
   const title=document.createElement('div');
-  title.style.cssText='font-size:12px;color:#d8d2b8;white-space:nowrap';
+  title.style.cssText='font-size:12px;color:#d8d8d8;white-space:nowrap';
   title.innerHTML=`✷ ${d.name} <span style="opacity:.55">[${d.key}]</span>`;
   const line=document.createElement('div');
   line.style.cssText='display:flex;align-items:center;gap:5px;margin-top:5px';
   const mk=(txt,fn)=>{
    const b=document.createElement('button');
    b.type='button'; b.textContent=txt;
-   b.style.cssText='width:22px;height:22px;line-height:1;border-radius:4px;border:1px solid #475466;background:#17202b;color:#dce6ea;cursor:pointer;font-size:13px;padding:0';
+   b.style.cssText='width:22px;height:22px;line-height:1;border-radius:4px;border:1px solid #666666;background:#2b2b2b;color:#eaeaea;cursor:pointer;font-size:13px;padding:0';
    b.onclick=fn;
    return b;
   };
   const lab=document.createElement('span');
-  lab.style.cssText='font-size:12px;color:#e8e0c0;min-width:44px;text-align:center';
+  lab.style.cssText='font-size:12px;color:#e8e8e8;min-width:44px;text-align:center';
   const refresh=()=>{ lab.textContent=`${want[k]} / ${throwOwned(k)}`; };
   line.appendChild(mk('−',()=>{ if(want[k]>0){ want[k]--; markThrowTouched(); if(typeof saveMeta==='function') saveMeta(); refresh(); if(typeof updateConsumSummary==='function') updateConsumSummary(); } }));
   line.appendChild(lab);
@@ -137,7 +137,7 @@ function buildThrowRow(){
  }
  if(!THROW_KEYS.some(k=>throwOwned(k)>0)){
   const tip=document.createElement('div');
-  tip.style.cssText='flex:1 1 100%;font-size:11px;color:#9aa;line-height:1.5';
+  tip.style.cssText='flex:1 1 100%;font-size:11px;color:#aaa;line-height:1.5';
   tip.textContent='仓库里没有投掷物 · 到「军械库 → 市集」购买手雷 / 闪光弹 / 烟雾弹';
   row.appendChild(tip);
  }

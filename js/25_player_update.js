@@ -1,59 +1,13 @@
 'use strict';
 function tryInteract(){
 if(!player.alive) return;
-if(player.onVehicle){
-const t=player.onVehicle;
-if(t.kind==='apc'){
-// 下车(司机或乘客)
-if(player.playerSeat>=0){ player.playerSeat=-1; t.playerSeat=-1; }
-else { t.playerDriven=false; t.vel*=0.4; }
-player.onVehicle=null;
-for(const off of [[2.8,0],[-2.8,0],[0,3.6],[0,-3.6]]){
-const px=t.pos.x+off[0], pz=t.pos.z+off[1];
-if(!occBlocked(px,pz)){ player.pos.set(px,0,pz); break; }
-player.pos.set(t.pos.x+2.8,0,t.pos.z);
-}
-player.pos.y=standHeight(player.pos.x,player.pos.z,t.pos.y+2);
-player.vel.set(0,0,0);
-VM.root.visible=true;
-document.getElementById('heatWrap').style.display='none';
-return;
-}
-if(t.kind==='plane'){
-// 跳伞
-t.playerDriven=false;
-player.onVehicle=null;
-player.pos.set(t.pos.x,t.pos.y-2.5,t.pos.z);
-player.vel.set(t.fwdDir().x*6,0,t.fwdDir().z*6);
-player.chute=true;
-player.onGround=false;
-if(!playerChuteMesh){ playerChuteMesh=mkChute(); scene.add(playerChuteMesh); }
-VM.root.visible=true;
-document.getElementById('heatWrap').style.display='none';
-showScorePop('跳伞!');
-return;
-}
-t.playerDriven=false; t.isAI=true; t.vel=0;
-player.onVehicle=null;
-for(const off of [[3.2,0],[-3.2,0],[0,4],[0,-4],[4,4]]){
-const px=t.pos.x+off[0], pz=t.pos.z+off[1];
-if(!occBlocked(px,pz)){ player.pos.set(px,0,pz); break; }
-player.pos.set(t.pos.x+3.2,0,t.pos.z);
-}
-player.pos.y=standHeight(player.pos.x,player.pos.z,t.pos.y+2);
-player.vel.set(0,0,0);
-VM.root.visible=true;
-document.getElementById('heatWrap').style.display='none';
-return;
-}
 if(player.onMG){
 player.onMG.user=null; player.onMG=null;
 VM.root.visible=true;
 document.getElementById('heatWrap').style.display='none';
 return;
 }
-if(player.onAT){ player.onAT.user=null; player.onAT=null; VM.root.visible=true; document.getElementById('heatWrap').style.display='none'; return; }
-if(player.onAA){ player.onAA.user=null; player.onAA=null; VM.root.visible=true; document.getElementById('heatWrap').style.display='none'; return; }
+
 // 迫击炮: 上炮/下炮 (架设后所有人可用, 回收=迫击炮手按B)
 if(player.onMortar){
 const m3=player.onMortar;
@@ -61,6 +15,8 @@ m3.user=null; player.onMortar=null; VM.root.visible=true;
 document.getElementById('heatWrap').style.display='none';
 return;
 }
+// 救援倒地队友 (优先级高于其它交互) —— 由 57_downed 提供
+if(typeof playerTryRescue==='function'&&playerTryRescue()) return;
 {
 const m2=MORTARS.find(m=>m.alive&&!m.user&&Math.hypot(m.x-player.pos.x,m.z-player.pos.z)<2.8);
 if(m2){
@@ -71,44 +27,6 @@ showScorePop('迫击炮瞄准中');
 return;
 }
 }
-for(const t of tanks){
-if(!t.alive||t.team!==player.team) continue;
-if(Math.hypot(t.pos.x-player.pos.x,t.pos.z-player.pos.z)<4.5){
-if(t.crewBot){ t.crewBot.dismountVehicle(false); showScorePop('你接管了坦克'); }
-t.playerDriven=true; t.isAI=false; t.vel=0;
-player.onVehicle=t;
-player.ads=false; player.nadeHeld=false;
-player.yaw=t.yaw+t.turretYaw+Math.PI; player.pitch=0;
-VM.root.visible=false;
-document.getElementById('heatWrap').style.display='block';
-return;
-}
-}
-// 运兵车: 无司机→驾驶; 有司机→上车斗(乘客可车内开枪)
-for(const a of apcs){
-if(!a.alive||a.team!==player.team) continue;
-if(Math.hypot(a.pos.x-player.pos.x,a.pos.z-player.pos.z)<4.2){
-if(!a.crewBot&&!a.playerDriven){
-a.playerDriven=true;
-player.onVehicle=a;
-player.playerSeat=-1; a.playerSeat=-1;
-player.ads=false; player.nadeHeld=false;
-player.yaw=a.yaw+Math.PI;
-VM.root.visible=false;
-showScorePop('驾驶 '+a.name+' · 附近步兵会自动上车');
-return;
-}
-const seat=a.freeSeat();
-if(seat>=0){
-player.onVehicle=a;
-player.playerSeat=seat; a.playerSeat=seat;
-player.ads=false; player.nadeHeld=false;
-VM.root.visible=true;
-showScorePop('已上车斗 · 可直接射击 · F 下车');
-return;
-}
-}
-}
 for(const mg of MG42S){
 if(mg.user) continue;
 if(Math.hypot(mg.x-player.pos.x,mg.z-player.pos.z)<2.6){
@@ -116,29 +34,6 @@ player.onMG=mg; mg.user=player;
 player.pos.x=mg.x-Math.sin(mg.face)*0.85;
 player.pos.z=mg.z-Math.cos(mg.face)*0.85;
 player.yaw=mg.face+Math.PI; player.pitch=0; player.ads=false;
-VM.root.visible=false;
-document.getElementById('heatWrap').style.display='block';
-return;
-}
-}
-for(const g of ATGUNS){
-if(g.user) continue;
-if(Math.hypot(g.x-player.pos.x,g.z-player.pos.z)<3){
-player.onAT=g; g.user=player;
-player.pos.x=g.x-Math.sin(g.face)*1.3;
-player.pos.z=g.z-Math.cos(g.face)*1.3;
-player.yaw=g.face+Math.PI; player.pitch=0; player.ads=false;
-VM.root.visible=false;
-document.getElementById('heatWrap').style.display='block';
-return;
-}
-}
-for(const g of AAGUNS){
-if(g.user) continue;
-if(Math.hypot(g.x-player.pos.x,g.z-player.pos.z)<3){
-player.onAA=g; g.user=player;
-player.pos.x=g.x; player.pos.z=g.z-0.9;
-player.pitch=0.5; player.ads=false;
 VM.root.visible=false;
 document.getElementById('heatWrap').style.display='block';
 return;
@@ -180,23 +75,17 @@ let camTrauma=0, dmgFlash=0;
 function addTrauma(x){ camTrauma=Math.min(1.2,camTrauma+x); }
 function updatePlayer(dt){
 if(!player.alive){ return; }
+// 倒地: 不能移动/开火/交互 (视角仍可转 —— 鼠标监听在 24_input, 只要求 player.alive)
+// 倒计时与 HUD 由 57_downed 的 updatePlayerDowned 负责
+if(player.downed) return updatePlayerDowned(dt);
 const p=player;
 p.meleeCd-=dt; p.resupplyCd-=dt;
 p.bandResupCd=Math.max(0,(p.bandResupCd||0)-dt);
 p.suppressV=Math.max(0,p.suppressV-dt*0.8);
-// 呼吸回血(削弱): 仅能自然恢复到70, 满血需绷带
-// 呼吸回血(削弱): 胸部只能自然恢复到 70/85, 满血必须靠医疗品
-// 注意: p.hp 现在是"全身总血量"(上限 440), 不再是胸部血量, 回血一律走 body.thorax + tkSyncHp
-if(nowT-p.lastDmgT>6){
-const _th=p.body&&p.body.thorax;
-if(_th&&_th.hp>0&&_th.hp<70){
-_th.hp=Math.min(70,_th.hp+4*dt);
-if(typeof tkSyncHp==='function') tkSyncHp(p); else p.hp=_th.hp;
-}
-}
-if(p.limbs&&p.body&&p.body.thorax&&p.body.thorax.hp<50){
-for(const k in p.limbs) p.limbs[k]=Math.min(100,p.limbs[k]+0.8*dt);
-}
+// 自然回血已移除 (2026-09-15): 这里原本有两条被动回血 ——
+//   ① 脱战 6s 后胸部缓慢回到 70 (4/s)
+//   ② 胸部 <50 时四肢自动愈合 (0.8/s)
+// 玩家反映不该有自动回血。现在唯一的回血途径是绷带 / 医疗品 / 医疗箱, 全都要消耗物品。
 // 绷带包扎
 if(p.bandaging>0){
 p.bandaging-=dt;
@@ -236,16 +125,6 @@ const rel=clamp(angDiff(p.braceYaw,p.yaw),-0.72,0.72);
 p.yaw=p.braceYaw+rel;
 p.pitch=clamp(p.pitch,-0.5,0.42);
 }
-if(p.onVehicle){
-if(p.onVehicle.kind==='plane') updatePlayerPlane(dt);
-else if(p.onVehicle.kind==='apc'){
-if(p.playerSeat>=0) updatePlayerApcPassenger(dt);
-else updatePlayerApcDriver(dt);
-}
-else updatePlayerTank(dt);
-return;
-}
-if(p.onAT){ updatePlayerAT(dt); return; }
 if(p.onAA){ updatePlayerAA(dt); return; }
 if(p.onMG){ updatePlayerMG(dt); return; }
 if(p.onMortar){ updatePlayerMortar(dt); return; }
@@ -315,14 +194,6 @@ break;
 }
 }
 p.vel.y-=13*dt;
-if(p.chute){
-if(p.vel.y<-3.2) p.vel.y=-3.2;
-if(p.onGround) p.chute=false;
-// 降落伞模型: 头上打开圆顶+系绳
-if(!playerChuteMesh){ playerChuteMesh=mkChute(); scene.add(playerChuteMesh); }
-playerChuteMesh.position.set(p.pos.x,p.pos.y+3.8,p.pos.z);
-playerChuteMesh.rotation.set(Math.sin(nowT*0.7)*0.12,0,Math.cos(nowT*0.6)*0.08);
-} else if(playerChuteMesh){ scene.remove(playerChuteMesh); playerChuteMesh=null; }
 p.pos.x+=p.vel.x*dt; p.pos.y+=p.vel.y*dt; p.pos.z+=p.vel.z*dt;
 collideMove(p.pos,0.42);
 const gh=standHeight(p.pos.x,p.pos.z,p.pos.y+0.6);
@@ -373,14 +244,6 @@ nades.push({m,pos:camera.position.clone().addScaledVector(dir,0.7),vel:v,fuse:9,
 spawnP(PT.dark,camera.position.x+dir.x,camera.position.y+dir.y,camera.position.z+dir.z,dir.x,1.5,dir.z,0.6,2,0.7,0.6,0.3);
 return;
 }
-if(w.def.rocket){
-const sp=w.def.spreadAds*(Math.PI/180)*0.5;
-const rv=camRight(), uv=rv.clone().cross(dir).negate();
-dir.addScaledVector(rv,rand(-sp,sp)).addScaledVector(uv,rand(-sp,sp)).normalize();
-vmFireKick(); (typeof shakeShot==='function' ? shakeShot(0.4) : addTrauma(0.4));
-fireRocket(p,camera.position.clone(),dir,w.def,V3());
-return;
-}
 const adsB=VM.adsBlend;
 let spread=lerp(w.def.spreadHip,w.def.spreadAds,adsB)*(Math.PI/180)*0.5;
 spread*=(1+p.bloom*1.4)*(p.prone?0.5:p.crouch?0.8:1)*(p.onGround?1:2.2)*(Math.hypot(p.vel.x,p.vel.z)>1?1.4:1);
@@ -419,99 +282,6 @@ vmSndFlags={};
 if(w.mag===0&&w.def.type!=='bolt'){ setTimeout(tryReload,350); }
 else if(w.mag===0){ setTimeout(tryReload,1000); }
 }
-function updatePlayerTank(dt){
-const p=player, t=p.onVehicle;
-if(!t.alive){ p.onVehicle=null; return; }
-if(t.kind==='plane') return; // 飞机由Plane.update驱动
-const fwd=(keys.KeyW?1:0)-(keys.KeyS?1:0);
-const turn=(keys.KeyD?1:0)-(keys.KeyA?1:0);
-const spdMul=(t.engineHitT>0?0.35:1)*(t.crewDown&&t.crewDown('driver')?0:1);
-t.vel=dampF(t.vel,(fwd<0?-t.def.rev:fwd*t.def.spd)*spdMul,2.5,dt);
-t.yaw-=turn*t.def.turn*dt*(fwd<0?-1:1);
-let wantTY=angDiff(t.yaw,p.yaw+Math.PI);
-if(t.def.casemate){
-// 坦歼: 火炮射界有限, 超界需转动车体
-wantTY=clamp(wantTY,-0.21,0.21);
-}
-t.turretYaw=angleLerpTo(t.turretYaw,wantTY,t.def.tRate*dt);
-let wantPitch=clamp(p.pitch,-0.12,0.32);
-if(p.tankView){
-// 炮手镜: 测距并抬炮补偿弹道下坠
-const cd=camForward(), co=camera.position.clone();
-let D=320;
-const wr2=raycastWorld(co,cd,D);
-if(wr2) D=wr2.dist;
-for(const t2 of tanks){
-if(t2===t||!t2.alive) continue;
-const r2=rayCyl(co,cd,{x:t2.pos.x,z:t2.pos.z,r:2.3,y0:t2.pos.y,y1:t2.pos.y+2.6},D);
-if(r2) D=r2.t;
-}
-wantPitch=clamp(p.pitch+3.5*D/(2*130*130),-0.12,0.35);
-}
-t.turretPitch=dampF(t.turretPitch,wantPitch,6,dt);
-p.fireT-=dt;
-// 准星汇聚: 主炮朝相机瞄准点开火
-if(mouseDown&&t.cannonCd<=0&&!matchOver){ t.fireCannon(); }
- // 同轴机枪(右键) / BMPT: 优先对坦克发射反坦克导弹
- if(mouse2Down&&!matchOver){
- let bmptRk=false;
- if(t.def.bmpt&&t.atgmCd<=0){
- const cd=camForward();
- const co=camera.position.clone();
- let aimD=230;
- const wr0=raycastWorld(co,cd,aimD);
- if(wr0) aimD=wr0.dist;
- for(const t2 of tanks){
- if(t2===t||!t2.alive||t2.team===t.team) continue;
- const r2=rayCyl(co,cd,{x:t2.pos.x,z:t2.pos.z,r:2.6,y0:t2.pos.y,y1:t2.pos.y+2.8},aimD);
- if(r2){ t.fireCannon(null,true); bmptRk=true; break; }
- }
- }
- if(!bmptRk){
- const cd=camForward();
- const co=camera.position.clone();
- let aimD=200;
- const wr=raycastWorld(co,cd,aimD);
- if(wr) aimD=wr.dist;
- const aimP=co.addScaledVector(cd,aimD);
- const dir=aimP.sub(t.coaxMuzzle()).normalize();
- if(dir.dot(t.aimDir())>0.85){
- dir.x+=rand(-0.012,0.012); dir.y+=rand(-0.009,0.009); dir.z+=rand(-0.012,0.012); dir.normalize();
- t.firePlayerMG(dir);
- }
- }
- }
-p.pos.copy(t.pos);
-p.vel.set(0,0,0);
-const pip=document.getElementById('tankPip');
-{
-// 战雷式炮塔朝向指示圈: 显示炮管当前实际指向(慢速转塔时落后于视角中心)
-const dir2=t.aimDir();
-const o2=t.muzzle.clone();
-let D2=140;
-const wr3=raycastWorld(o2,dir2,D2);
-if(wr3) D2=wr3.dist;
-const hitP=o2.addScaledVector(dir2,Math.max(6,D2));
-const v=hitP.project(camera);
-if(v.z<1){
-pip.style.display='block';
-pip.style.left=((v.x*0.5+0.5)*innerWidth)+'px';
-pip.style.top=((1-(v.y*0.5+0.5))*innerHeight)+'px';
-} else pip.style.display='none';
-}
-document.getElementById('mgPip').style.display='none';
-document.getElementById('tankSight').style.display='block';
-document.getElementById('heatFill').style.width=(clamp(1-t.cannonCd/t.def.reload,0,1)*100)+'%';
-document.getElementById('heatFill').style.background=t.cannonCd<=0?'#8fd18f':'linear-gradient(90deg,#e8c56a,#e83a1a)';
-updateInteractHint();
-}
-function updatePlayerPlane(dt){
-const p=player, pl=p.onVehicle;
-if(!pl.alive){ p.onVehicle=null; return; }
-document.getElementById('heatFill').style.width=(pl.bombs/pl.def.bombs*100)+'%';
-document.getElementById('heatFill').style.background='#9fc0e8';
-updateInteractHint();
-}
 function updatePlayerMortar(dt){
 const p=player, m=p.onMortar;
 // 允许左右回旋 ±0.6rad, 炮身视觉随动
@@ -546,66 +316,6 @@ spawnP(PT.dark,m.x,m.y+0.4,m.z,0,1.4,0,0.5,1.6,0.6,0.5,0.2);
 // 炮管俯仰随视角(高抛→炮管更竖直), 开火后阻尼回位
 m.tube.rotation.x=dampF(m.tube.rotation.x,0.62-(p.pitch-0.95)*0.3,5,dt);
 document.getElementById('heatFill').style.width=(clamp(1-m.cd/3.2,0,1)*100)+'%';
-updateInteractHint();
-}
-function updatePlayerAT(dt){
-const p=player, g=p.onAT;
-g.cd-=dt;
-const rel=clamp(angDiff(g.face+Math.PI,p.yaw),-1.0,1.0);
-p.yaw=g.face+Math.PI+rel;
-p.pitch=clamp(p.pitch,-0.12,0.3);
-g.yaw.rotation.y=rel;
-g.pitch.rotation.x=-p.pitch;
-p.pos.x=g.x-Math.sin(g.face)*1.3;
-p.pos.z=g.z-Math.cos(g.face)*1.3;
-p.pos.y=standHeight(p.pos.x,p.pos.z,p.pos.y+1);
-p.vel.set(0,0,0);
-if(mouseDown&&g.cd<=0&&!matchOver){
-g.cd=4.5;
-const dir=camForward();
-const o=V3(g.x,g.y+0.25,g.z).addScaledVector(dir,2.7);
-AudioSys.cannon(0);
-(typeof shakeVehicle==='function' ? shakeVehicle(0.45) : addTrauma(0.45));
-spawnP(PT.flash,o.x,o.y,o.z,dir.x*3,dir.y*3,dir.z*3,0.9,9,0.1,1,0,true);
-spawnP(PT.dark,o.x,o.y,o.z,dir.x*2,1,dir.z*2,0.9,2.6,0.9,0.7,0.5);
-shells.push({pos:o.clone(),vel:dir.clone().multiplyScalar(150),team:p.team,owner:p,life:3,kind:'at',trail:0});
-p.lastFiredT=nowT;
-}
-document.getElementById('heatFill').style.width=(clamp(1-g.cd/4.5,0,1)*100)+'%';
-updateInteractHint();
-}
-function updatePlayerAA(dt){
-const p=player, g=p.onAA;
-g.cd-=dt;
-p.pitch=clamp(p.pitch,0.02,1.35);
-g.yaw.rotation.y=p.yaw+Math.PI;
-g.pitch.rotation.x=-p.pitch;
-p.pos.x=g.x; p.pos.z=g.z-0.9;
-p.pos.y=standHeight(p.pos.x,p.pos.z,p.pos.y+1);
-p.vel.set(0,0,0);
-// 提前量指示圈
-const pip=document.getElementById('leadPip');
-let ep=null,bd=1e9;
-for(const pl2 of planes){ if(pl2.alive&&pl2.team!==p.team){ const d=pl2.pos.distanceTo(V3(g.x,g.y,g.z)); if(d<bd){ bd=d; ep=pl2; } } }
-if(ep&&bd<280){
-const tof=bd/150;
-const lead=ep.pos.clone().addScaledVector(ep.velVec(),tof);
-const v=lead.project(camera);
-if(v.z<1&&Math.abs(v.x)<1.1&&Math.abs(v.y)<1.1){
-pip.style.display='block';
-pip.style.left=((v.x*0.5+0.5)*innerWidth)+'px';
-pip.style.top=((1-(v.y*0.5+0.5))*innerHeight)+'px';
-} else pip.style.display='none';
-} else pip.style.display='none';
-if(mouseDown&&g.cd<=0&&!matchOver){
-g.cd=0.34;
-const dir=camForward();
-fireFlak(g,p,dir);
-(typeof shakeVehicle==='function' ? shakeVehicle(0.1) : addTrauma(0.1));
-p.recoilPitch+=0.004;
-p.lastFiredT=nowT;
-}
-document.getElementById('heatFill').style.width=(clamp(1-g.cd/0.34,0,1)*100)+'%';
 updateInteractHint();
 }
 function updatePlayerMG(dt){
@@ -648,11 +358,11 @@ const tip=document.getElementById('clsTip');
 let tt='';
 if(player.alive&&player.deployed&&!player.onVehicle&&!player.onMG&&!player.onAT&&!player.onAA){
 if(player.onMortar) tt='<b>左键</b> 发射 · <b>鼠标</b> 调弹道 · <b>F</b> 离开';
-else if(player.cls===2) tt='<b>B</b> 放置医疗箱';
+else if(player.cls===2) tt='<b>'+keyLabelOf('skill')+'</b> 放置医疗箱';
 else if(player.cls===4){
 const bt2=BUILD_MENU[player.buildSel||0];
 const bn2=bt2==='mg'?mgDefOfTeam(player.team).name:BUILD_NAMES[bt2];
-tt='<b>5</b> 工事: '+bn2+' ('+BUILD_COST[bt2]+'点) · <b>B</b> 建造 · 剩 '+(player.buildCount||0)+' 点';
+tt='<b>'+keyLabelOf('build')+'</b> 工事: '+bn2+' ('+BUILD_COST[bt2]+'点) · <b>'+keyLabelOf('skill')+'</b> 建造 · 剩 '+(player.buildCount||0)+' 点';
 }
 }
 if(tip._last!==tt){ tip._last=tt; tip.innerHTML=tt; tip.style.display=tt?'block':'none'; }
@@ -662,46 +372,13 @@ INTERACT_INFO=short?{label:short}:null;
 if(html){ el.style.display='block'; el.innerHTML=html; }
 else el.style.display='none';
 };
- if(player.onVehicle&&player.onVehicle.kind==='plane'){
- if(player.onVehicle.def.chopper) setInter('<b>F</b> 跳伞 · <b>W/S</b>节流阀(爬升/下降) <b>A/D</b>方向舵 <b>鼠标</b>俯仰(反转) <b>左键</b>机枪','跳伞');
- else setInter('<b>F</b> 跳伞 · <b>W/S</b>油门 <b>A/D</b>压坡转向 <b>Q/E</b>方向舵 <b>鼠标</b>拉杆(反转) <b>左键</b>机枪 <b>右键/B</b>炸弹','跳伞');
- return; }
-if(player.onVehicle&&player.onVehicle.kind==='apc'){
-if(player.playerSeat>=0) setInter('<b>F</b> 下车 · 车斗内可直接射击','下车');
-else setInter('<b>F</b> 下车 · <b>WASD</b>驾驶 · 附近步兵自动上车','下车');
-return;
-}
-if(player.onVehicle){ setInter('<b>F</b> 离开坦克 · <b>WASD</b>驾驶 <b>左键</b>主炮 <b>右键</b>机枪 <b>C</b>炮手镜','离开坦克'); return; }
 if(player.onMG){ setInter('<b>F</b> 离开机枪','离开机枪'); return; }
 if(player.onMortar){ setInter('<b>F</b> 离开迫击炮 · <b>左键</b> 发射 · <b>鼠标</b> 调整弹道','离开迫击炮'); return; }
-if(player.onAT){ setInter('<b>F</b> 离开反坦克炮','离开火炮'); return; }
-if(player.onAA){ setInter('<b>F</b> 离开防空炮','离开火炮'); return; }
+
 if(!player.alive){ setInter(null,null); return; }
-for(const t of tanks){
-if(t.alive&&t.team===player.team&&Math.hypot(t.pos.x-player.pos.x,t.pos.z-player.pos.z)<4.5){
-const vb=(t.crewBot?'接管':'进入');
-setInter('<b>F</b> '+vb+' '+t.name, vb+'坦克'); return;
-}
-}
-for(const a of apcs){
-if(a.alive&&a.team===player.team&&Math.hypot(a.pos.x-player.pos.x,a.pos.z-player.pos.z)<4.2){
-if(!a.crewBot&&!a.playerDriven){ setInter('<b>F</b> 驾驶 '+a.name,'驾驶卡车'); return; }
-if(a.freeSeat()>=0){ setInter('<b>F</b> 搭乘 '+a.name+' · 车斗内可射击','上车斗'); return; }
-}
-}
 for(const mg of MG42S){
 if(!mg.user&&Math.hypot(mg.x-player.pos.x,mg.z-player.pos.z)<2.6){
 setInter('<b>F</b> 使用 '+((mg.def&&mg.def.name)||'重机枪'),'上机枪'); return;
-}
-}
-for(const g of ATGUNS){
-if(!g.user&&Math.hypot(g.x-player.pos.x,g.z-player.pos.z)<3){
-setInter('<b>F</b> 使用反坦克炮','上反坦克炮'); return;
-}
-}
-for(const g of AAGUNS){
-if(!g.user&&Math.hypot(g.x-player.pos.x,g.z-player.pos.z)<3){
-setInter('<b>F</b> 使用防空炮','上防空炮'); return;
 }
 }
 for(const m of MORTARS){
@@ -710,6 +387,11 @@ if(Math.hypot(m.x-player.pos.x,m.z-player.pos.z)<2.8){
 setInter((m.owner===player)?'<b>F</b> 使用迫击炮 · <b>B</b> 回收':'<b>F</b> 使用迫击炮','上迫击炮');
 return;
 }
+}
+// 倒地队友优先 (救命最要紧) —— 由 57_downed 提供
+if(typeof nearestDownedMateNear==='function'){
+const _dm=nearestDownedMateNear(player.pos.x,player.pos.z,DOWN_RESCUE_R+0.8);
+if(_dm){ setInter('<b>F</b> 救援 '+((_dm.name)||'队友'),'救援'); return; }
 }
 if(GAMEMODE==='extract'&&typeof INTERACT_LOOT!=='undefined'&&INTERACT_LOOT){
 const isCorpse=INTERACT_LOOT.kind==='corpse';
@@ -738,14 +420,24 @@ setInter(null,null);
 let camBobT=0;
 // ===== 玩家可见身体: 低头可见自己的胸/腿, 与移动同步; 死亡时被布娃娃直接接管 =====
 function ensurePlayerBody(){
-if(player.mesh&&player.meshTeam===player.team) return;
+// 本局实际穿着的胸挂 (穿在护甲外面, 决定躯干颜色) —— raidLoadout() 会处理 SCAV 的随机配装
+let _chestK='';
+try{
+const _L=(typeof raidLoadout==='function')?raidLoadout():null;
+const _ck=(_L&&_L.chest)||'';
+if(_ck&&typeof CHEST_DEFS!=='undefined'&&CHEST_DEFS[_ck]) _chestK=_ck;
+}catch(e){}
+// ⚠️ 还要比对 armorKey 与胸挂 —— 只在换阵营时重建的话, 换了护甲/胸挂模型不会更新
+if(player.mesh&&player.meshTeam===player.team&&player.meshArmor===(player.armorKey||'')&&player.meshChest===_chestK) return;
 if(player.mesh){
 if(player.mesh.tag&&player.mesh.tag.material.map) player.mesh.tag.material.map.dispose();
 if(player.mesh.tag) player.mesh.tag.material.dispose();
 scene.remove(player.mesh.root);
 }
-player.mesh=buildSoldierMesh(player.team,'');
+player.mesh=buildSoldierMesh(player.team,'',player.armorKey,_chestK);
 player.meshTeam=player.team;
+player.meshArmor=player.armorKey||'';
+player.meshChest=_chestK;
 player.mesh.tag.visible=false;
 }
 function updatePlayerBody(dt){

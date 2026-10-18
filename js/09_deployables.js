@@ -131,7 +131,7 @@ let wires=[]; function isWire(x,z){for(const w of wires){if(Math.hypot(w.x-x,w.z
 function updateWires(dt){
 if(!wires.length) return;
 for(const s of combatants){
-if(!s.alive||s.onVehicle||s.onMG||s.onAT||s.onAA||s.onMortar||s.mortUse||s.mgUse||s.empUse) continue;
+if(!s.alive||s.onVehicle||s.onMG||s.onAA||s.onMortar||s.mortUse||s.mgUse) continue;
 const w=isWire(s.pos.x,s.pos.z);
 if(!w) continue;
 s.wireT=nowT;

@@ -52,18 +52,6 @@ showDeploy(true);
 }
 function updateCamera(dt){
 const p=player;
-if(p.chute){
-// 跳伞第三人称: 镜头后拉并微微下视, 能看到降落伞和周围环境
-const trg=V3(p.pos.x,p.pos.y+0.8,p.pos.z);
-const behind=V3(-Math.sin(p.yaw)*Math.cos(p.pitch),Math.sin(p.pitch)+0.3,-Math.cos(p.yaw)*Math.cos(p.pitch));
-const hit=raycastWorld(trg,behind.clone().negate().normalize(),7.5);
-const dd=hit?Math.max(2.8,hit.dist-0.5):6.5;
-camera.position.set(trg.x+behind.x*dd, trg.y+behind.y*dd, trg.z+behind.z*dd);
-camera.lookAt(trg.x,trg.y,trg.z);
-camera.fov=dampF(camera.fov,68,8,dt);
-camera.updateProjectionMatrix();
-return;
-}
 if(!p.alive){
 // ===== 死亡视角: 摄像机绑进布娃娃头部眼位, 随物理翻滚, 渐黑 + 名言 =====
 p.deathCamT-=dt;
@@ -114,70 +102,6 @@ camera.updateProjectionMatrix();
 return;
 }
 // 乘客: 落到常规第一人称(可低头看到车斗)
-}
-if(p.onVehicle&&p.onVehicle.kind!=='apc'){
-const t=p.onVehicle;
-camTrauma=Math.max(0,camTrauma-dt*2.2);
-const sh=camTrauma*camTrauma*0.04;
- if(t.kind==='plane'){
- // 飞机追尾视角
- const fd=t.fwdDir();
- const anchor=V3(t.pos.x,t.pos.y,t.pos.z);
-  if(p.planeView){
-  // 驾驶舱第一人称视角: 相机置于座舱, 随飞机姿态(含横滚), 沿弹道轴线直视
-  if(!t.cockpitHide){
-   t.cockpitHide=true;
-   t.grp.traverse(function(o){ if(o.userData.cockpitBlk) o.visible=false; });
-  }
-  const off=V3(0,t.def.chopper?0.35:0.27*t.def.size,t.def.chopper?1.1*t.def.size:0.35*t.def.size);
-  t.grp.localToWorld(off);
-  camera.rotation.order='YXZ';
-  camera.rotation.set(-t.pitch+Math.sin(nowT*53)*sh*0.3,t.yaw+Math.sin(nowT*67)*sh*0.3,t.roll);
-  camera.position.copy(off);
-  camera.fov=dampF(camera.fov,30,8,dt);
-  camera.updateProjectionMatrix();
-  document.getElementById('planeSight').style.display='block';
-  document.getElementById('scopeOv').style.display='block';
-  return;
-  }
-  document.getElementById('scopeOv').style.display='none';
-  if(t.cockpitHide){
-   t.cockpitHide=false;
-   t.grp.traverse(function(o){ if(o.userData.cockpitBlk) o.visible=true; });
-  }
- const back=fd.clone().negate(); back.y+=0.34; back.normalize();
- camera.position.copy(anchor).addScaledVector(back,13).add(V3(Math.sin(nowT*53)*sh,Math.sin(nowT*67)*sh,0));
- camera.lookAt(anchor.x+fd.x*22,anchor.y+fd.y*22,anchor.z+fd.z*22);
- camera.fov=dampF(camera.fov,72+t.speed*0.2,6,dt);
- camera.updateProjectionMatrix();
- return;
- }
-if(p.tankView){
-// 舱内(车长)视角: 隐藏炮管防止穿模
-t.pitchG.visible=false;
-const a=t.yaw+t.turretYaw;
-camera.rotation.order='YXZ';
-camera.rotation.set(p.pitch+Math.sin(nowT*53)*sh*0.5, p.yaw+Math.sin(nowT*67)*sh*0.5, 0);
-camera.position.set(t.pos.x+Math.sin(a)*1.8, t.pos.y+1.95, t.pos.z+Math.cos(a)*1.8);
-camera.fov=dampF(camera.fov,30,10,dt);
-camera.updateProjectionMatrix();
-document.getElementById('scopeOv').style.display='block';
-return;
-}
-document.getElementById('scopeOv').style.display='none';
-if(t.pitchG) t.pitchG.visible=true;
-const anchor=V3(t.pos.x,t.pos.y+2.6,t.pos.z);
-camera.rotation.order='YXZ';
-camera.rotation.set(p.pitch+Math.sin(nowT*53)*sh, p.yaw+Math.sin(nowT*67)*sh, 0);
-const fwdV=V3(-Math.sin(p.yaw)*Math.cos(p.pitch), Math.sin(p.pitch), -Math.cos(p.yaw)*Math.cos(p.pitch));
-const back=fwdV.clone().negate(); back.y+=0.35; back.normalize();
-let camD=10.5;
-const hit=raycastWorld(anchor,back,camD);
-if(hit) camD=Math.max(2.5,hit.dist-0.5);
-camera.position.copy(anchor).addScaledVector(back,camD);
-camera.fov=dampF(camera.fov,68,10,dt);
-camera.updateProjectionMatrix();
-return;
 }
 const eyeTgt=p.prone?0.48:p.crouch?1.12:1.62;
 p.eyeH=dampF(p.eyeH,eyeTgt,12,dt);

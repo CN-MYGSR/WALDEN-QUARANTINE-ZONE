@@ -7,13 +7,72 @@
 // 4) 手雷: 点按快投, 按住烹饪; 蹲键长按 = 趴; 摇杆推满 = 疾跑
 // 5) 载具内按钮语义自动切换 (主炮/机枪/炮手镜/跳伞)
 function applyTouchScale(){
-if(!MOBILE) return;
+if(!TOUCHUI) return;
 const k=(parseInt(localStorage.getItem('sf_tsize')||'100'))/100;
 const ui=document.getElementById('touchUI');
 if(ui) ui.style.zoom=k;
 }
-if(MOBILE){
-document.body.classList.add('mobile');
+// ===================== 触控层让位: 模态界面打开时必须隐藏 =====================
+// 为什么必须做: #touchUI 是 z-index:40, 而菜单/部署/结算面板 .screen 只有 z-index:20,
+// 局内背包 #bagPanel 更是在 #ui(z-index:10) 里面; 而 #tLook 是 pointer-events:auto 且铺满全屏,
+// #tStickZone 又占了左下 42%x60% —— 触控层一旦显示, 面板上的触摸全被它吃掉
+// (手机上表现为"点了没反应": 点背包里的丢弃/安全箱, 结果是转视角)。
+// 所以只要有 blocks 里任何一个可见, 就给 body 加 uiOpen, 由 CSS 隐藏整个触控层。
+// 用 MutationObserver 盯 class 变化, 不依赖各面板是否记得调用某个同步函数。
+(function(){
+// 会挡住触控层的"模态"界面: .screen(菜单/部署/结算) + #bagPanel(局内背包)。
+// ⚠️ #bagPanel 必须算进来 —— 它在 #ui(z-index 10) 里, 而 #touchUI 是 40,
+//    #tLook 全屏 + #tStickZone 左下 42%×60% + 右侧按键簇都会盖在面板上抢走触摸。
+// ⚠️ #lootPanel **不要**加进来: 它是故意 pointer-events:none 的,
+//    靠触控层的 tSelUp/tSelDown/tTake 操作, 藏了触控层就没法搜刮了。
+const blocks=[...document.querySelectorAll('.screen')];
+const bagP=document.getElementById('bagPanel');
+if(bagP) blocks.push(bagP);
+// 药品轮盘: 全屏模态(z-index 60), 但触控层不藏掉的话会在半透明遮罩下透出来, 很乱
+const medW=document.getElementById('medWheel');
+if(medW) blocks.push(medW);
+if(!blocks.length) return;
+function syncTouchLayerBlock(){
+let open=false;
+for(const s of blocks){ if(!s.classList.contains('hidden')){ open=true; break; } }
+document.body.classList.toggle('uiOpen',open);
+}
+const mo=new MutationObserver(syncTouchLayerBlock);
+for(const s of blocks) mo.observe(s,{attributes:true,attributeFilter:['class']});
+syncTouchLayerBlock();
+})();
+// ===== 虚拟按键: 手动开关 + 键盘探测 (2026-09-28) =====
+// 设置面板「虚拟按键」: 自动 / 常开 / 常关 —— 改完重载生效 (TOUCHUI 是加载时算出的 const)
+(function touchModeBtn(){
+const b=document.getElementById('touchModeBtn');
+if(!b) return;
+const cur=()=>{ try{ return localStorage.getItem('sf_touch'); }catch(e){ return null; } };
+const sync=()=>{ const v=cur(); b.textContent=(v==='1')?'常开':((v==='0')?'常关':'自动'); b.classList.toggle('sel',v!==null); };
+sync();
+b.onclick=()=>{
+const v=cur();
+const next=(v===null)?'1':((v==='1')?'0':null);
+try{ if(next===null){ localStorage.removeItem('sf_touch'); localStorage.removeItem('sf_kb'); } else localStorage.setItem('sf_touch',next); }catch(e){}
+sync();
+if(typeof showScorePop==='function') showScorePop('虚拟按键: '+((next==='1')?'常开':((next==='0')?'常关':'自动'))+' · 重载生效');
+setTimeout(()=>location.reload(),600);
+};
+})();
+// 键盘探测: 真的按下物理键 → 有键盘 → 收起虚拟按键并记住 (写 sf_kb)
+// ⚠️ 只对「触控屏 PC」这条软路径生效: 有触摸屏、主指针不是粗指针、且不是手机/平板。
+//    手机/平板即使外接键盘也保留虚拟按键 (少数派, 且拔掉键盘就没法操作了)。
+if(TOUCHUI&&HAS_TOUCH&&!COARSE_PTR&&!MOBILE){
+const onKey=e=>{
+ if(e.key==='Shift'||e.key==='Control'||e.key==='Alt'||e.key==='Meta') return;   // 纯修饰键不算
+ window.removeEventListener('keydown',onKey,true);
+ try{ localStorage.setItem('sf_kb','1'); }catch(_){}
+ document.body.classList.remove('touchui');
+ if(typeof showScorePop==='function') showScorePop('检测到键盘 · 已收起虚拟按键 (设置里可改成「常开」)');
+};
+window.addEventListener('keydown',onKey,true);
+}
+if(TOUCHUI){
+document.body.classList.add('touchui');
 const $=id=>document.getElementById(id);
 const ui=$('touchUI');
 const stickZone=$('tStickZone'), stickEl=$('tStick'), knob=$('tKnob');
@@ -21,7 +80,8 @@ const STICK_R=62; // 摇杆半径(px, zoom前)
 // ---------- 触摸路由表 ----------
 const claims=new Map(); // touchId -> claim
 let sprintLatch=false;
-let nadeSel=0; // 0=手雷 1=烟雾 2=AT雷
+let leanHoldL=false, leanHoldR=false; // 触屏侧身: 按住状态, 隐藏按钮或离开步战时强制释放
+let nadeSel=0; // 手雷种类: 0=手雷 1=闪光 2=烟雾
 // ---------- 视角 ----------
  function applyLook(dx,dy){
  if(!player.alive) return;
@@ -75,8 +135,9 @@ const counts=[player.nadeCount,player.flashCount||0,player.smokeCount];
 const av=nadeAvail();
 if(av.length&&!av.includes(nadeSel)) nadeSel=av[0];
 const nb=$('tNade');
-nb.querySelector('.tLbl').textContent=names[nadeSel]+'×'+(counts[nadeSel]||0);
-$('tNadeType').querySelector('.tLbl').textContent='换'+names[(av[(av.indexOf(nadeSel)+1)%Math.max(av.length,1)]??nadeSel)];
+if(nb) nb.querySelector('.tLbl').textContent=names[nadeSel]+'×'+(counts[nadeSel]||0);
+const nt=$('tNadeType');
+if(nt) nt.querySelector('.tLbl').textContent='换'+names[(av[(av.indexOf(nadeSel)+1)%Math.max(av.length,1)]??nadeSel)];
 }
 // ---------- 按钮动作 ----------
 function pressAct(act,claim){
@@ -92,6 +153,7 @@ else if(!player.onMG&&!player.onAT&&!player.onAA&&!player.onMortar){ player.ads=
 break;
 case 'jump': keys.Space=true; claim.jumpKey=true; break;
 case 'crouch':
+// 点按 = 蹲/起立, 长按(430ms) = 趴/起身
 claim.longT=setTimeout(()=>{ claim.longT=null; if(player.alive) InputActions.toggleProne(); },430);
 break;
 case 'reload': if(player.alive) tryReload(); break;
@@ -100,7 +162,7 @@ case 'melee': if(player.alive) InputActions.melee(); break;
 case 'nade':
 if(!player.alive) break;
 if(nadeSel===0){
-// 触屏: 第一次按 = 拿出手雷; 已就位时按住 = 蓄力, 松手投出
+// 第一次按 = 拿出手雷; 已就位时按住 = 蓄力, 松手投出
 if(VM.state==='nade'&&player.nadeHeld){ InputActions.nadeChargeStart(); claim.nadeHold=true; }
 else InputActions.nadeEquip();
 }
@@ -114,19 +176,24 @@ syncNadeUI();
 break;
 }
 case 'heal': if(player.alive) InputActions.bandage(); break;
+case 'medwheel': if(player.alive&&typeof toggleMedWheel==='function') toggleMedWheel(); break;
 case 'eat': if(player.alive) InputActions.eatFood(); break;
-case 'selup': if(typeof lootSelMove==='function') lootSelMove(-1); break;
-case 'seldown': if(typeof lootSelMove==='function') lootSelMove(1); break;
-case 'take': if(player.alive&&typeof lootTakeSelected==='function') lootTakeSelected(); break;
 case 'skill': if(player.alive) InputActions.classSkill(); break;
 case 'buildsel': if(player.alive) InputActions.buildNext(); break;
 case 'brace': if(player.alive) InputActions.toggleBrace(); break;
+case 'nvg': if(typeof NVG!=='undefined') NVG.toggle(); break;
+case 'selup': if(typeof lootSelMove==='function') lootSelMove(-1); break;
+case 'seldown': if(typeof lootSelMove==='function') lootSelMove(1); break;
+case 'take': if(player.alive&&typeof lootTakeSelected==='function') lootTakeSelected(); break;
 case 'carry': if(player.alive&&typeof setCarryStance==='function') setCarryStance(player.carry==='high'?'low':'high'); break;
 case 'bag': if(player.alive&&typeof toggleBagPanel==='function') toggleBagPanel(); break;
 case 'bagdrop': if(player.alive&&typeof bagDropSelected==='function') bagDropSelected(false); break;
 case 'interact': if(player.alive) tryInteract(); break;
-case 'squadmove': if(player.alive) squadOrderMove(); break;
+case 'flash': if(player.alive&&typeof flashToggle==='function') flashToggle(); break;
+case 'leanl': if(player.alive){ keys.KeyQ=true; leanHoldL=true; } break;
+case 'leanr': if(player.alive){ keys.KeyE=true; leanHoldR=true; } break;
 case 'squadguard': if(player.alive) squadOrderGuard(); break;
+case 'squadattack': if(player.alive) squadOrderAttack(); break;
 case 'squadfollow': if(player.alive) squadOrderFollow(); break;
 case 'bigmap': if(typeof toggleBigMap==='function') toggleBigMap(); break;
 case 'score': {
@@ -153,10 +220,14 @@ break;
 case 'nade':
 if(claim.nadeHold) InputActions.nadeChargeRelease();
 break;
+case 'leanl': keys.KeyQ=false; leanHoldL=false; break;
+case 'leanr': keys.KeyE=false; leanHoldR=false; break;
 }
 }
 // ---------- 触摸事件 ----------
 ui.addEventListener('touchstart',e=>{
+// 按钮布局编辑中: 交给 51_settings 的捕获阶段处理拖动, 这里一律不响应
+if(window.LAYOUT_EDIT) return;
 AudioSys.resume&&AudioSys.resume();
 e.preventDefault();
 for(const t of e.changedTouches){
@@ -228,12 +299,12 @@ const inPlane=inGame&&p.onVehicle&&p.onVehicle.kind==='plane';
 const onGun=inGame&&(p.onMG||p.onAT||p.onAA||p.onMortar);
 show('tStickZone',inGame&&!inPlane||inPlane); // 飞机也用摇杆(油门/滚转)
 show('tFire',inGame);
-show('tFireL',inGame);
 setLbl('tFire',inTank?'主炮':inPlane?'机枪':onGun?'开火':'开火');
 show('tAds',inGame&&!onGun||inTank||inPlane);
 setLbl('tAds',inTank?'机枪':inPlane?'炸弹':'瞄准');
 setOn('tAds',onFoot&&p.ads);
 show('tJump',onFoot);
+// 右手战斗簇
 show('tCrouch',onFoot||inTank);
 setLbl('tCrouch',inTank?'炮镜':(p.prone?'起身':p.crouch?'起立':'蹲/趴'));
 setOn('tCrouch',p.crouch||p.prone||(inTank&&p.tankView));
@@ -243,8 +314,13 @@ show('tMelee',onFoot);
 show('tNade',onFoot&&nadeAvail().length>0);
 show('tNadeType',onFoot&&nadeAvail().length>1);
 if(onFoot) syncNadeUI();
+// 左手工具簇
 show('tHeal',onFoot&&p.bandages>0&&p.hp<(p.maxHp||100));
 setLbl('tHeal','绷带×'+p.bandages);
+show('tEat',onFoot&&!!(p.foodItems&&p.foodItems.length));
+// 药品轮盘: 身上有可用药品时才显示 (medWheelKeys 在 53_medwheel.js, 加载在本文件之后, 所以运行时判存在)
+const mwAvail=onFoot&&typeof medWheelKeys==='function'&&medWheelKeys().length>0;
+show('tMedWheel',mwAvail);
 const skillOn=onFoot&&(p.cls===2||p.cls===4);
 show('tSkill',skillOn);
 if(skillOn) setLbl('tSkill',p.cls===2?'医疗箱':'建造');
@@ -252,11 +328,31 @@ show('tBuildSel',onFoot&&p.cls===4);
 if(onFoot&&p.cls===4){ const bt=BUILD_MENU[p.buildSel||0]; setLbl('tBuildSel',bt==='mg'?'机枪':BUILD_NAMES[bt]); }
 show('tBrace',onFoot&&(p.canBrace||p.braced));
 setOn('tBrace',p.braced);
+// 夜视仪: 手上这把枪的战术配件槽装了 gear_nvg 才显示
+const nvgOn=onFoot&&!!p.curW&&typeof getModChoice==='function'&&getModChoice(p.curW.key,'gear')==='gear_nvg';
+show('tNvg',nvgOn);
+if(nvgOn&&typeof NVG!=='undefined') setOn('tNvg',!!NVG.active());
+show('tLeanL',onFoot);
+show('tLeanR',onFoot);
+setOn('tLeanL',!!keys.KeyQ);
+setOn('tLeanR',!!keys.KeyE);
+if(!onFoot){ if(leanHoldL){ keys.KeyQ=false; leanHoldL=false; } if(leanHoldR){ keys.KeyE=false; leanHoldR=false; } }
+show('tBag',inGame);
+setOn('tBag',typeof BAG_UI!=='undefined'&&BAG_UI.open);
+show('tFlash',onFoot&&!!FLASH.hasMod);
+setOn('tFlash',!!FLASH.want);
+if(onFoot) setLbl('tFlash',FLASH.isLaser?'激光':'手电');
+// 搜刮面板三键: 以前靠 38_tarkov 写内联 display, 但初始化时加的 hiddenT 是 display:none !important,
+// 内联样式压不过它 → 按钮永远出不来。改成统一走 show()。
+const lootOpen=typeof LOOT_UI!=='undefined'&&LOOT_UI.open;
+show('tSelUp',lootOpen);
+show('tSelDown',lootOpen);
+show('tTake',lootOpen);
 // 情境交互键
 const it=(inGame||p.onVehicle)&&INTERACT_INFO?INTERACT_INFO.label:null;
 show('tInteract',!!it);
 if(it) setLbl('tInteract',it);
-show('tSquad',inGame&&SQUAD.members.length>0);
+show('tAttack',inGame&&SQUAD.members.length>0);
 show('tGuard',inGame&&SQUAD.members.length>0);
 show('tFollow',inGame&&SQUAD.members.length>0);
 show('tMap',inGame);

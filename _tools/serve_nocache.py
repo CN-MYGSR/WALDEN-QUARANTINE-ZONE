@@ -25,9 +25,15 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
         pass  # 静音, 免得刷屏
 
 
-socketserver.TCPServer.allow_reuse_address = True
-with socketserver.TCPServer(('127.0.0.1', PORT), NoCacheHandler) as httpd:
-    print('serving %s at http://127.0.0.1:%d/  (no-cache)' % (ROOT, PORT))
+# ⚠️ 必须用 ThreadingTCPServer: 单线程 TCPServer 一次只处理一个请求,
+#    Chrome 会并发拉 60+ 个脚本, 队列溢出后连接被丢 -> 页面拿到 502/空响应,
+#    表现为 "某某 is not defined" 的连锁报错, 极难排查 (2026-09-19 踩过)。
+class ThreadedServer(socketserver.ThreadingTCPServer):
+    allow_reuse_address = True
+    daemon_threads = True
+
+with ThreadedServer(('127.0.0.1', PORT), NoCacheHandler) as httpd:
+    print('serving %s at http://127.0.0.1:%d/  (no-cache, threaded)' % (ROOT, PORT))
     print('press Ctrl+C to stop')
     try:
         httpd.serve_forever()

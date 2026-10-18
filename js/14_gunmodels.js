@@ -290,7 +290,7 @@ rHand:{pos:V3(0.01,-0.09,0.16),rot:V3(0.35,0,0)},
 lHand:{pos:V3(-0.02,-0.1,-0.12),rot:V3(0.3,-0.05,0)},
 });
 }
-// ============ 德军 ============
+// ============ 原德军枪族 (现归 PMC) ============
 else if(key==='kar98'||key==='kar98zf'){
 // 毛瑟 Kar98k: 短步枪, 下弯拉机柄, 麦粒护翼准星, 表尺; ZF41 低倍镜
 bx(wd,0.05,0.07,0.66, 0,-0.012,-0.10,G);
@@ -1003,14 +1003,16 @@ ads:{pos:V3(0.05,-0.145,-0.3),rot:ADSROT0},
 rHand:{pos:V3(0.01,-0.09,0.16),rot:V3(0.35,0,0)},
 lHand:{pos:V3(-0.02,-0.1,-0.12),rot:V3(0.3,-0.05,0)},
 });
-} else if(key==='p320'||key==='g17'){
-// P320 / G17: 现代聚合物底把手枪
+} else if(key==='p320'||key==='g17'||key==='glock18'){
+// P320 / G17 / G18: 现代聚合物底把手枪 (G18 只多一个快慢机拨片)
 const isP320=key==='p320';
+const isG18=key==='glock18';
 bx(gm,0.028,0.042,0.16, 0,0.016,0.0,G);
 parts.slide=bx(gl,0.03,0.03,0.17, 0,0.046,-0.005,G);
 for(let i=0;i<3;i++) bx(gl,0.032,0.006,0.002, 0,0.047,0.05+i*0.008,G);
 bx(gl,0.008,0.014,0.012, 0,0.045,0.08,G).rotation.x=0.5;
-const poly=new THREE.MeshLambertMaterial({color:isP320?0x333a3c:0x22262a});
+const poly=new THREE.MeshLambertMaterial({color:isP320?0x333a3c:(isG18?0x1e2224:0x22262a)});
+if(isG18) bx(gl,0.009,0.009,0.024, 0.017,0.028,0.028,G);   // G18 快慢机拨片
 bx(poly,0.028,0.075,0.05, 0,-0.035,0.05,G).rotation.x=-0.28;
 bx(gl,0.012,0.012,0.008, 0,-0.05,0.13,G);
 parts.mag=bx(gm,0.019,0.085,0.03, 0,-0.075,0.045,G);
@@ -1130,7 +1132,117 @@ magWell:V3(0,-0.075,0.045),
  magWell:V3(0,-0.08,0.045),
  });
  }
- // ============ 兜底: 通用手枪 ============
+else if(key==='deagle'){
+// 沙漠之鹰: 大号半自动手枪, 长滑套 + 粗枪口 + 橡胶握把
+bx(gm,0.036,0.052,0.20, 0,0.018,-0.01,G);
+parts.slide=bx(gl,0.04,0.038,0.24, 0,0.05,-0.02,G);
+bx(gl,0.026,0.014,0.07, 0,0.05,-0.17,G);
+for(let i=0;i<5;i++) bx(gl,0.042,0.005,0.002, 0,0.052,0.05+i*0.009,G);
+bx(gl,0.01,0.018,0.014, 0,0.048,0.105,G).rotation.x=0.5;
+const rub=new THREE.MeshLambertMaterial({color:0x2b2622});
+bx(rub,0.034,0.088,0.056, 0,-0.042,0.06,G).rotation.x=-0.30;
+bx(gl,0.013,0.013,0.008, 0,-0.058,0.145,G);
+parts.mag=bx(gm,0.023,0.09,0.034, 0,-0.085,0.055,G);
+parts.mag.rotation.x=-0.30;
+sFront_blade(G,gl,0,0.068,-0.145);
+sRear_notch(G,gl,0,0.068,0.09);
+cyl(gm,0.008,0.013,0.036, 0,0.052,-0.215,G,0.5);
+parts.muzzle.set(0,0.052,-0.235);
+mkAnchors(parts,{
+ads:adsFromSight(0,0.078,-0.26),
+rHand:{pos:V3(0.014,-0.055,0.135),rot:V3(0.26,0,0)},
+lHand:{pos:V3(-0.032,-0.075,0.10),rot:V3(0.3,0.24,0)},
+magWell:V3(0,-0.085,0.055),
+});
+} else if(key==='awm'){
+// AWM: 长管栓动狙击, 拇指孔枪托, 高倍镜
+bx(pk,0.05,0.064,0.64, 0,-0.014,-0.06,G);
+bx(pk,0.046,0.026,0.3, 0,0.034,-0.28,G);
+cyl(gl,0.0095,0.0095,0.62, 0,0.028,-0.72,G);
+cyl(gm,0.012,0.0085,0.09, 0,0.028,-1.02,G);
+bx(gl,0.046,0.036,0.18, 0,0.03,0.04,G);
+bx(pk,0.05,0.1,0.22, 0,-0.05,0.28,G).rotation.x=-0.14;
+bx(gl,0.012,0.05,0.06, 0,-0.018,0.33,G);
+parts.mag=bx(gl,0.022,0.06,0.1, 0,-0.036,0.03,G);
+const baA=boltAssembly(G,0.024,0.038,0.05,false);
+parts.bolt=baA.bolt; parts.boltHandle=baA.handle;
+const syA=scopeTube(G,0,0.09,0.0,0.19,0.021);
+sFront_blade(G,gl,0,0.05,-0.86);
+sRear_peep(G,gl,0,0.05,0.14);
+parts.muzzle.set(0,0.028,-1.07);
+mkAnchors(parts,{
+ads:adsFromSight(0,syA,-0.22),
+rHand:{pos:V3(0.02,-0.06,0.22),rot:V3(0.32,0,0)},
+lHand:{pos:V3(-0.012,-0.068,-0.32),rot:V3(0.26,-0.08,0)},
+boltHand:baA.knob, magWell:V3(0,-0.036,0.03),
+});
+} else if(key==='qbz95'){
+// QBZ-95: 无托结构, 弹匣在握把后方, 提把内藏准星
+bx(gm,0.048,0.06,0.42, 0,0.0,-0.10,G);
+bx(gm,0.044,0.03,0.24, 0,0.036,-0.24,G);
+bx(gl,0.05,0.03,0.26, 0,0.06,-0.16,G);
+cyl(gm,0.01,0.01,0.3, 0,0.03,-0.52,G);
+cyl(gm,0.014,0.011,0.07, 0,0.03,-0.67,G);
+bx(gl,0.042,0.07,0.1, 0,-0.035,-0.02,G).rotation.x=-0.1;
+parts.mag=bx(gm,0.024,0.13,0.05, 0,-0.10,0.10,G);
+parts.mag.rotation.x=-0.06;
+bx(gm,0.03,0.05,0.06, 0,-0.03,0.24,G);
+sFront_blade(G,gl,0,0.076,-0.52);
+sRear_peep(G,gl,0,0.076,0.06);
+parts.bolt=bx(gl,0.02,0.016,0.06, 0.03,0.03,-0.20,G);
+parts.muzzle.set(0,0.03,-0.70);
+mkAnchors(parts,{
+ads:adsFromSight(0,0.086,-0.26),
+rHand:{pos:V3(0.018,-0.07,0.02),rot:V3(0.34,0,0)},
+lHand:{pos:V3(-0.014,-0.09,-0.34),rot:V3(0.3,-0.06,0)},
+magWell:V3(0,-0.10,0.10), boltHand:V3(0.04,0.03,-0.20),
+});
+} else if(key==='qbz191'){
+// QBZ-191: 常规布局现代步枪, 全长顶部导轨, 伸缩托
+bx(pk,0.045,0.055,0.3, 0,0.0,-0.02,G);
+bx(pk,0.044,0.024,0.2, 0,0.032,-0.16,G);
+bx(gl,0.026,0.008,0.42, 0,0.046,-0.14,G);
+cyl(pk,0.0105,0.0105,0.3, 0,0.028,-0.44,G);
+cyl(gm,0.014,0.011,0.07, 0,0.028,-0.60,G);
+cyl(pk,0.016,0.016,0.22, 0,0.013,-0.38,G);
+bx(gl,0.038,0.086,0.05, 0,-0.03,0.16,G).rotation.x=-0.16;
+bx(gl,0.03,0.05,0.03, 0,-0.036,0.29,G);
+parts.mag=bx(pk,0.023,0.16,0.05, 0,-0.11,-0.12,G);
+parts.mag.rotation.x=-0.06;
+sRear_peep(G,gl,0,0.052,0.03);
+sFront_blade(G,gl,0,0.052,-0.52);
+parts.bolt=bx(gl,0.02,0.016,0.06, 0.028,0.03,-0.14,G);
+parts.muzzle.set(0,0.028,-0.62);
+mkAnchors(parts,{
+ads:adsFromSight(0,0.064,-0.27),
+rHand:{pos:V3(0.018,-0.065,0.14),rot:V3(0.34,0,0)},
+lHand:{pos:V3(-0.014,-0.09,-0.34),rot:V3(0.3,-0.06,0)},
+magWell:V3(0,-0.11,-0.12), boltHand:V3(0.04,0.03,-0.14),
+});
+} else if(key==='hk416'){
+// HK416: 四面导轨护木 + 实心伸缩托, 短行程活塞
+bx(pk,0.045,0.056,0.3, 0,0.0,-0.02,G);
+bx(pk,0.044,0.026,0.18, 0,0.03,-0.13,G);
+bx(gl,0.028,0.008,0.34, 0,0.046,-0.06,G);
+cyl(pk,0.0105,0.0105,0.26, 0,0.028,-0.40,G);
+bx(pk,0.038,0.038,0.2, 0,0.028,-0.36,G);
+cyl(gm,0.014,0.011,0.07, 0,0.028,-0.545,G);
+bx(gl,0.04,0.092,0.055, 0,-0.032,0.16,G).rotation.x=-0.16;
+bx(gl,0.034,0.062,0.03, 0,-0.038,0.325,G);
+parts.mag=bx(pk,0.023,0.16,0.05, 0,-0.11,-0.12,G);
+parts.mag.rotation.x=-0.06;
+sRear_peep(G,pk,0,0.05,0.02);
+sFront_blade(G,pk,0,0.05,-0.50);
+parts.bolt=bx(gl,0.02,0.016,0.06, 0.028,0.028,-0.12,G);
+parts.muzzle.set(0,0.028,-0.58);
+mkAnchors(parts,{
+ads:adsFromSight(0,0.062,-0.27),
+rHand:{pos:V3(0.018,-0.065,0.14),rot:V3(0.34,0,0)},
+lHand:{pos:V3(-0.014,-0.09,-0.32),rot:V3(0.3,-0.06,0)},
+magWell:V3(0,-0.11,-0.12), boltHand:V3(0.04,0.028,-0.12),
+});
+}
+// ============ 兜底: 通用手枪 ============
 else {
 bx(gm,0.032,0.05,0.19, 0,0.02,-0.02,G);
 parts.slide=bx(gl,0.034,0.032,0.2, 0,0.045,-0.02,G);
@@ -1153,7 +1265,10 @@ addModVisuals(parts, modKey);
 // ===== 机瞄锚点汇总 =====
 // 前准星顶高度优先; 无前准星记录时退回照门高度。供 vmEquip 校准 ADS 锚点,
 // 使开镜时准星精确落在屏幕中心(相机射线方向)。
-if(SIGHT_REC.front.length||SIGHT_REC.rear.length){
+// 装了瞄具就以**瞄具的光学中心**为准 —— 否则开镜会对齐机瞄顶, 而镜体通常比机瞄略低/略高, 看起来是偏的
+if(parts.opticSightY!=null){
+parts.sightAnchor=V3(0,parts.opticSightY,0);
+} else if(SIGHT_REC.front.length||SIGHT_REC.rear.length){
 const fy=SIGHT_REC.front.length?Math.max.apply(null,SIGHT_REC.front):null;
 const ry=SIGHT_REC.rear.length?Math.max.apply(null,SIGHT_REC.rear):null;
 parts.sightAnchor=V3(0, fy!=null?fy:(ry!=null?ry:0), 0);

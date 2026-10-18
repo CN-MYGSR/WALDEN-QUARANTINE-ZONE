@@ -68,7 +68,7 @@ let v = amt * m;
 if(typeof dist==='number') v *= clamp(1 - dist/40, 0.25, 1);
 if(typeof addTrauma==='function') addTrauma(v);
 }
-// 玩家在载具里时整体衰减 (驾驶坦克/飞机/APC 时减小创伤, 避免视觉过载)
+// 大威力武器(火箭筒/反坦克炮)开火时的震颤衰减
 function shakeVehicle(amt){
 if(!SHAKE_CFG.enabled || SHAKE_CFG.masterMul<=0) return;
 if(typeof addTrauma==='function') addTrauma(amt * SHAKE_CFG.vehicleMul * SHAKE_CFG.masterMul);

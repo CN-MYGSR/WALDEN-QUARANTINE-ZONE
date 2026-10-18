@@ -6,7 +6,9 @@ const V = process.argv[2] || '20260913b';
 const file = 'index.html';
 let html = fs.readFileSync(file, 'utf8');
 let n = 0;
-html = html.replace(/(<script\s+src=")(js\/[^"?]+)(\?v=[^"]*)?(")/g, (m, a, src, old, d) => { n++; return a + src + '?v=' + V + d; });
+// ⚠ 必须容忍 src 不是第一个属性: `<script type="module" src="js/50_workshop_boot.js">`
+// 旧正则写成 `<script\s+src="` → 漏掉 module 脚本, 表现为"改了 50_workshop_boot.js 却没生效"。
+html = html.replace(/(<script\b[^>]*?\ssrc=")(js\/[^"?]+)(\?v=[^"]*)?(")/g, (m, a, src, old, d) => { n++; return a + src + '?v=' + V + d; });
 fs.writeFileSync(file, html, 'utf8');
 const total = (html.match(/<script\s+src="js\//g) || []).length;
 const versioned = (html.match(/\?v=/g) || []).length;

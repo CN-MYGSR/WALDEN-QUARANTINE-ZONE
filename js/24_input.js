@@ -13,7 +13,7 @@ return new THREE.CanvasTexture(c);
 }
 function squadMarkerInit(){
 if(!SQUAD.marker){
-SQUAD.marker=new THREE.Sprite(new THREE.SpriteMaterial({map:squadMarkerTex('攻','#ffd75a'),transparent:true,depthTest:false}));
+SQUAD.marker=new THREE.Sprite(new THREE.SpriteMaterial({map:squadMarkerTex('攻','#ffffff'),transparent:true,depthTest:false}));
 SQUAD.marker.scale.set(2.2,2.2,1);
 SQUAD.marker.renderOrder=6;
 SQUAD.marker.visible=false;
@@ -42,7 +42,7 @@ SQUAD.mode='move';
 SQUAD.target=null;
 SQUAD.pos.copy(pt);
 SQUAD.guardYaw=null;
-const m=squadSetMarker('攻','#ffd75a',true);
+const m=squadSetMarker('攻','#ffffff',true);
 m.position.set(pt.x,pt.y+2.1,pt.z);
 squadWake();
 showScorePop('小队: 进攻标记位置!');
@@ -83,6 +83,9 @@ best=s; bestAng=ang;
 }
 }
 if(best){
+// 中立地图: 玩家主动下令攻击 = 单方面宣战, 该 NPC 立刻与玩家及小队结仇
+best.aggroOn(player);
+for(const sm of SQUAD.members) sm.aggroOn(best);
 SQUAD.mode='attack';
 SQUAD.target=best;
 SQUAD.pos.copy(best.pos);
@@ -118,8 +121,118 @@ drawBigMap();
 function bigMapVisible(){ return bigMapOn; }
 const keys={};
 let pointerLocked=false;
+// ===================== 键位自定义 =====================
+// 每个「动作」绑定一个 KeyboardEvent.code。改动只影响输入层:
+//  · 动作键: keydown 里用 isKey(e,'xxx') 比对
+//  · 移动键: 物理键在 keydown 里翻译成固定规范码(见 MOVE_ALIAS), 消费者照旧读 keys.KeyW / keys.Space
+// 键位存 localStorage bf_keys_v1; 设置界面在 js/51_settings.js。
+const KEY_ACTIONS=[
+{a:'forward',    n:'前进',        d:'KeyW'},
+{a:'back',       n:'后退',        d:'KeyS'},
+{a:'left',       n:'左移',        d:'KeyA'},
+{a:'right',      n:'右移',        d:'KeyD'},
+{a:'sprint',     n:'疾跑',        d:'ShiftLeft'},
+{a:'jump',       n:'跳跃',        d:'Space'},
+{a:'leanL',      n:'左探头',      d:'KeyQ'},
+{a:'leanR',      n:'右探头',      d:'KeyE'},
+{a:'reload',     n:'换弹',        d:'KeyR'},
+{a:'crouch',     n:'蹲下',        d:'KeyC'},
+{a:'prone',      n:'趴下',        d:'KeyZ'},
+{a:'brace',      n:'架枪',        d:'KeyX'},
+{a:'slot1',      n:'主武器',      d:'Digit1'},
+{a:'slot2',      n:'副武器',      d:'Digit2'},
+{a:'melee',      n:'近战/垂直起降',d:'KeyV'},
+{a:'nade',       n:'手雷就位',    d:'Digit3'},
+{a:'flash',      n:'闪光弹',      d:'Digit4'},
+{a:'smoke',      n:'烟雾弹',      d:'Digit5'},
+{a:'build',      n:'选工事',      d:'Digit6'},
+{a:'heal',       n:'用药',        d:'KeyH'},
+{a:'eat',        n:'进食/喝水',   d:'KeyK'},
+{a:'food',       n:'切换食物',    d:'KeyJ'},
+{a:'skill',      n:'兵种技能',    d:'KeyO'},
+{a:'medwheel',   n:'药品轮盘',    d:'KeyB'},
+{a:'interact',   n:'互动/搜刮',   d:'KeyF'},
+{a:'bag',        n:'背包面板',    d:'Tab'},
+{a:'score',      n:'计分板',      d:'KeyP'},
+{a:'nvg',        n:'夜视仪',      d:'KeyN'},
+{a:'flashLight', n:'手电/激光指示器', d:'KeyG'},
+{a:'map',        n:'大地图',      d:'KeyM'},
+{a:'squadAttack',n:'小队·攻击',   d:'KeyT'},
+{a:'squadFollow',n:'小队·跟随',   d:'KeyY'},
+{a:'squadGuard', n:'小队·驻守',   d:'KeyU'},
+{a:'lootUp',     n:'战利品上选',  d:'ArrowUp'},
+{a:'lootDown',   n:'战利品下选',  d:'ArrowDown'},
+];
+const DEFAULT_KEYS=(()=>{ const o={}; for(const k of KEY_ACTIONS) o[k.a]=k.d; return o; })();
+let KEYMAP=(()=>{
+const o={};
+for(const k in DEFAULT_KEYS) o[k]=DEFAULT_KEYS[k];
+try{
+const raw=JSON.parse(localStorage.getItem('bf_keys_v1')||'{}');
+for(const k in o) if(typeof raw[k]==='string'&&raw[k]) o[k]=raw[k];
+}catch(e){}
+return o;
+})();
+function keyOf(a){ return KEYMAP[a]||DEFAULT_KEYS[a]; }
+function isKey(e,a){ return e.code===keyOf(a); }
+// 把动作的当前绑定键渲染成给人看的短标签 (KeyO → O, Digit6 → 6)。
+// 界面提示一律用它, 不要再硬编码字母 —— 改键或重新分配后硬编码的提示会骗人。
+function keyLabelOf(a){
+const c=keyOf(a);
+if(!c) return '—';
+if(c.indexOf('Key')===0) return c.slice(3);
+if(c.indexOf('Digit')===0) return c.slice(5);
+if(c==='ShiftLeft') return 'Shift';
+if(c==='Space') return '空格';
+if(c==='Tab') return 'Tab';
+if(c.indexOf('Arrow')===0) return {ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→'}[c]||c;
+return c;
+}
+// 界面里的按键提示**不要硬编码字母**: 给元素打 data-k="动作名"
+// (需要两个键拼一起时再加 data-k2, 渲染成 "1/2"), 由这里统一填当前绑定键。
+// 改键后调一次 refreshKeyLabels() 就会全量刷新。
+// 为什么: 2026-09-16 改键后发现「B 兵种技能」「Tab 记分板」「按 5 选工事」全是错的 —— 硬编码迟早骗人。
+function refreshKeyLabels(){
+for(const n of document.querySelectorAll('[data-k]')){
+const a=n.getAttribute('data-k');
+let t=keyLabelOf(a);
+const b=n.getAttribute('data-k2');
+if(b&&t!=='—') t+='/'+keyLabelOf(b);
+if(t&&t!=='—'&&n.textContent!==t) n.textContent=t;
+}
+}
+refreshKeyLabels();
+function saveKeys(){ try{ localStorage.setItem('bf_keys_v1',JSON.stringify(KEYMAP)); }catch(e){} }
+// 改键: 目标键若已被别的动作占用 → 与该动作交换, 保证一键只对应一个动作
+function setKey(a,code){
+if(!code||DEFAULT_KEYS[a]===undefined) return;
+for(const k in KEYMAP){
+if(k!==a&&KEYMAP[k]===code){ KEYMAP[k]=keyOf(a); break; }
+}
+KEYMAP[a]=code; saveKeys(); rebuildMoveAlias();
+refreshKeyLabels();   // 界面上的按键提示跟着一起刷, 别留着旧字母骗人
+}
+function resetKeys(){
+for(const k in DEFAULT_KEYS) KEYMAP[k]=DEFAULT_KEYS[k];
+saveKeys(); rebuildMoveAlias();
+refreshKeyLabels();
+}
+// 移动类动作: 物理键 → 规范码。没绑到的**默认移动键要作废**, 否则改键后老键仍然生效。
+const MOVE_ACTIONS=['forward','back','left','right','sprint','jump','leanL','leanR'];
+const DEFAULT_MOVE_CODES=new Set(MOVE_ACTIONS.map(a=>DEFAULT_KEYS[a]));
+let MOVE_ALIAS={};
+function rebuildMoveAlias(){
+MOVE_ALIAS={};
+for(const a of MOVE_ACTIONS) MOVE_ALIAS[keyOf(a)]=DEFAULT_KEYS[a];
+}
+rebuildMoveAlias();
+// 返回该物理键应写入 keys[] 的规范码; null = 这个键不参与移动(可能是作废的默认移动键)
+function canonKey(code){
+if(MOVE_ALIAS[code]) return MOVE_ALIAS[code];
+return DEFAULT_MOVE_CODES.has(code)?null:code;
+}
 // 徒手可用判定: 步行状态 或 运兵车乘客(车斗内可用手中武器)
-function handsFreeVeh(){ return !player.onVehicle||(typeof isApcPassenger==='function'&&isApcPassenger()); }
+function handsFreeVeh(){ return !player.onVehicle; }
 // 高低姿态持枪: 绝对设置 'high' | 'low'。
 // 注意: 必须是文件级独立函数(而非 InputActions 的方法), 因为滚轮处理器与触屏按钮
 //       都直接调用裸名 setCarryStance(...); 之前它被误写成对象方法, 导致 typeof 守卫
@@ -270,53 +383,70 @@ if(player.cls!==4) return;
 player.buildSel=((player.buildSel||0)+1)%BUILD_MENU.length;
 const bt=BUILD_MENU[player.buildSel];
 const bn=bt==='mg'?mgDefOfTeam(player.team).name:BUILD_NAMES[bt];
-showScorePop('建造选择: '+bn+' (消耗'+BUILD_COST[bt]+'点'+(MOBILE?'':' · 按B放置')+')');
+showScorePop('建造选择: '+bn+' (消耗'+BUILD_COST[bt]+'点'+(TOUCHUI?'':' · 按B放置')+')');
 },
 };
 addEventListener('keydown',e=>{
-if(e.code==='Tab'){ e.preventDefault(); if(typeof toggleBagPanel==='function') toggleBagPanel(); }
-if(e.code==='KeyP'){ document.getElementById('scoreboard').style.display='block'; updateScoreboard(); }
+if(isKey(e,'bag')){ e.preventDefault(); if(typeof toggleBagPanel==='function') toggleBagPanel(); }
+if(isKey(e,'score')){ document.getElementById('scoreboard').style.display='block'; updateScoreboard(); }
+// 药品轮盘: 和背包一样放在 pointerLocked 检查之前 —— 退出指针锁定(暂停菜单)时也得能按开
+if(e.code==='Escape'&&typeof medWheelIsOpen==='function'&&medWheelIsOpen()){ e.preventDefault(); closeMedWheel(); return; }
+if(isKey(e,'medwheel')){ e.preventDefault(); if(typeof toggleMedWheel==='function') toggleMedWheel(); }
 if(e.repeat) return;
-keys[e.code]=true;
+{ const c=canonKey(e.code); if(c) keys[c]=true; }
 if(!player.alive||!pointerLocked) return;
 // 背包面板打开时优先消费方向键/G/Q/Esc, 避免与游戏操作冲突
 if(typeof bagPanelKey==='function'&&bagPanelKey(e.code,e.shiftKey)) return;
-if(e.code==='KeyN'&&typeof NVG!=='undefined') NVG.toggle();
-if(e.code==='KeyG'&&typeof flashToggle==='function') flashToggle();
-if(e.code==='KeyR') tryReload();
-if(e.code==='KeyC') InputActions.toggleCrouch();
-if(e.code==='KeyZ') InputActions.toggleProne();
-if(e.code==='KeyX') InputActions.toggleBrace();
-if(e.code==='Digit1') switchSlot(0);
-if(e.code==='Digit2') switchSlot(1);
- if(e.code==='KeyV'){
+if(isKey(e,'nvg')&&typeof NVG!=='undefined') NVG.toggle();
+if(isKey(e,'flashLight')&&typeof flashToggle==='function') flashToggle();
+if(isKey(e,'reload')) tryReload();
+if(isKey(e,'crouch')) InputActions.toggleCrouch();
+if(isKey(e,'prone')) InputActions.toggleProne();
+if(isKey(e,'brace')) InputActions.toggleBrace();
+if(isKey(e,'slot1')) switchSlot(0);
+if(isKey(e,'slot2')) switchSlot(1);
+ if(isKey(e,'melee')){
  if(player.onVehicle&&player.onVehicle.kind==='plane'&&player.onVehicle.def.vtol&&player.onVehicle.playerDriven) InputActions.vtolToggle();
  else InputActions.melee();
  }
-if(e.code==='Digit3') InputActions.nadeEquip();
-if(e.code==='Digit4') InputActions.throwFlash();
-if(e.code==='Digit5') InputActions.throwSmoke();
-if(e.code==='KeyH') InputActions.bandage();
-if(e.code==='KeyK') InputActions.eatFood();
-if(e.code==='KeyJ') InputActions.cycleFoodSel();
-if(e.code==='KeyB') InputActions.classSkill();
-// 6: 工程兵选工事 (5 已让给烟雾弹; AT 雷整体移除)
-if(e.code==='Digit6'){ if(player.cls===4) InputActions.buildNext(); }
-if(e.code==='KeyF') tryInteract();
-if(e.code==='ArrowUp'&&typeof lootSelMove==='function'){ lootSelMove(-1); }
-if(e.code==='ArrowDown'&&typeof lootSelMove==='function'){ lootSelMove(1); }
-if(e.code==='KeyT') squadOrderAttack();
-if(e.code==='KeyY') squadOrderFollow();
-if(e.code==='KeyU') squadOrderGuard();
-if(e.code==='KeyM') toggleBigMap(true);
+if(isKey(e,'nade')) InputActions.nadeEquip();
+if(isKey(e,'flash')) InputActions.throwFlash();
+if(isKey(e,'smoke')) InputActions.throwSmoke();
+if(isKey(e,'heal')) InputActions.bandage();
+if(isKey(e,'eat')) InputActions.eatFood();
+if(isKey(e,'food')) InputActions.cycleFoodSel();
+if(isKey(e,'skill')) InputActions.classSkill();
+// 选工事: 只有工程兵可用 (AT 雷整体移除)
+if(isKey(e,'build')){ if(player.cls===4) InputActions.buildNext(); }
+if(isKey(e,'interact')) tryInteract();
+if(isKey(e,'lootUp')&&typeof lootSelMove==='function'){ lootSelMove(-1); }
+if(isKey(e,'lootDown')&&typeof lootSelMove==='function'){ lootSelMove(1); }
+if(isKey(e,'squadAttack')) squadOrderAttack();
+if(isKey(e,'squadFollow')) squadOrderFollow();
+if(isKey(e,'squadGuard')) squadOrderGuard();
+if(isKey(e,'map')) toggleBigMap(true);
 });
 addEventListener('keyup',e=>{
-keys[e.code]=false;
-if(e.code==='KeyP') document.getElementById('scoreboard').style.display='none';
-if(e.code==='KeyM') toggleBigMap(false);
+{ const c=canonKey(e.code); if(c) keys[c]=false; }
+if(isKey(e,'score')) document.getElementById('scoreboard').style.display='none';
+if(isKey(e,'map')) toggleBigMap(false);
 });
 let mouseDown=false, mouse2Down=false;
 addEventListener('mousedown',e=>{
+// 药品轮盘优先于指针锁定判断: 轮盘开着时即使丢了锁定也得能确认/取消, 否则会卡死。
+// 手机端点格子走 DOM click, 这里必须让开 —— 否则会用到"当前选中"而不是被点的那一格。
+if(typeof medWheelIsOpen==='function'&&medWheelIsOpen()){
+const t=e.target;
+// 只有"点格子"和"点空白背景"要让给 DOM click(前者选那一格, 后者关闭);
+// 其余(桌面端指针锁定下 target 就是 canvas)一律走确认/取消。
+const onItem=!!(t&&t.closest&&t.closest('.mwItem'));
+const onBackdrop=!!(t&&t.id==='medWheel');
+if(!onItem&&!onBackdrop){
+e.preventDefault();
+if(e.button===0) medWheelConfirm(); else if(e.button===2) closeMedWheel();
+}
+return;
+}
 if(!pointerLocked){ return; }
 if(e.button===0) mouseDown=true;
 if(e.button===2){
@@ -361,6 +491,12 @@ if(player.carry!==dir&&typeof setCarryStance==='function') setCarryStance(dir);
 },{passive:false});
 let lockGraceUntil=0; // 修复: 指针锁定切换后浏览器可能给出一次异常巨大的 movementX 导致视角瞬移
 addEventListener('mousemove',e=>{
+// 药品轮盘优先: 打开时鼠标方向用来选格, 不再转视角
+// (桌面端指针锁定没有光标, 只能靠方向选; 这里放在锁定判断之前, 丢锁定时也还能选)
+if(typeof medWheelIsOpen==='function'&&medWheelIsOpen()){
+medWheelAim(e.movementX,e.movementY);
+return;
+}
 if(!pointerLocked||!player.alive) return;
 if(performance.now()<lockGraceUntil) return;
  let mx=e.movementX, my=e.movementY;
@@ -377,7 +513,7 @@ player.pitch=clamp(player.pitch,-1.45,1.45);
 player.mouseDX=mx; player.mouseDY=my;
 });
 document.addEventListener('pointerlockchange',()=>{
-if(MOBILE) return;
+if(TOUCHUI) return;
 pointerLocked=document.pointerLockElement===renderer.domElement;
 lockGraceUntil=performance.now()+120;
 toggleBigMap(false);
@@ -386,7 +522,7 @@ showDeploy(false);
 }
 });
 function lockPointer(){
-if(MOBILE){ pointerLocked=true; return; }
+if(TOUCHUI){ pointerLocked=true; return; }
 try{ const r=renderer.domElement.requestPointerLock(); if(r&&r.catch) r.catch(()=>{}); }catch(e){}
 }
 function tryReload(){
@@ -404,30 +540,3 @@ player.curSlot=i;
 player.curW=player.slots[i];
 vmEquip(player.curW.key,player.team);
 }
-// ===== 降落伞模型 (玩家跳伞 / Bot 空降) =====
-let playerChuteMesh=null;
-function chuteLine(g,from,to,mat){
-const d=V3(to.x-from.x,to.y-from.y,to.z-from.z);
-const len=d.length();
-if(len<0.01) return;
-const m=new THREE.Mesh(new THREE.CylinderGeometry(0.013,0.013,len,3),mat);
-m.position.set(from.x+d.x*0.5,from.y+d.y*0.5,from.z+d.z*0.5);
-m.quaternion.setFromUnitVectors(V3(0,1,0),d.normalize());
-g.add(m);
-}
-function mkChute(scale=1){
-const g=new THREE.Group();
-const mat=new THREE.MeshLambertMaterial({color:0x9aa08c,side:THREE.DoubleSide});
-const canopy=new THREE.Mesh(new THREE.SphereGeometry(2.3,12,7,0,TAU,0,1.05),mat);
-canopy.scale.set(1,0.75,1);
-canopy.castShadow=true;
-g.add(canopy);
-const lm=new THREE.MeshBasicMaterial({color:0x33352c});
-const rim=2.3*Math.sin(1.05), rimY=2.3*Math.cos(1.05)*0.75;
-for(const a of [0.4,1.97,3.54,5.11]){
-chuteLine(g,V3(Math.sin(a)*rim,rimY-0.1,Math.cos(a)*rim),V3(0,-3.3,0),lm);
-}
-g.scale.setScalar(scale);
-return g;
-}
-function mkChuteForBot(){ return mkChute(0.78); }

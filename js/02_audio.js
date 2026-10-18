@@ -2,6 +2,12 @@
 const AudioSys = (() => {
 let ctx=null, master=null, comp=null, noiseBuf=null;
 let inited=false;
+let ambBus=null;   // 环境音总线: 耳机降噪作用在这里 (风/雨/鸟/远处机枪)
+// 听力档案 (由 29_menus 部署时按耳机写入, 见 HEADSET_DEFS)
+//   range   脚步可听距离(米); 0 = 默认 40m
+//   amp     脚步 / 开火声放大倍数
+//   ambient 环境音保留比例, 越小越安静
+let HEAR={ range:0, amp:1, ambient:1 };
 function init(){
 if(inited) return; inited=true;
 ctx = new (window.AudioContext||window.webkitAudioContext)();
@@ -9,6 +15,7 @@ comp = ctx.createDynamicsCompressor();
 comp.threshold.value=-18; comp.ratio.value=6; comp.attack.value=0.002; comp.release.value=0.2;
 master = ctx.createGain(); master.gain.value = SETTINGS.vol;
 comp.connect(master); master.connect(ctx.destination);
+ambBus = ctx.createGain(); ambBus.gain.value = HEAR.ambient; ambBus.connect(comp);
 const len = ctx.sampleRate*2;
 noiseBuf = ctx.createBuffer(1,len,ctx.sampleRate);
 const d = noiseBuf.getChannelData(0);
@@ -36,7 +43,9 @@ if(dist>70){
 if(t0-farWinT>0.1){ farWinT=t0; farWinN=0; }
 if(++farWinN>4) return;
 }
-const sp = spatial(dist, type==='sniper'?290:230, 3);
+// 耳机: 远处枪声听得更远也更清楚
+const _gmul=HEAR.range>0?1.25:1;
+const sp = spatial(dist, (type==='sniper'?290:230)*_gmul, 3);
 if(sp.gain<0.025) return;
 // 玩家自己开枪音量增强
 const selfB=dist<1.5?1.4:1;
@@ -57,7 +66,7 @@ const n=noiseSrc();
 const bp=ctx.createBiquadFilter(); bp.type='bandpass'; bp.frequency.value=P.crack*rand(0.92,1.1); bp.Q.value=0.45;
 const ng=ctx.createGain();
 ng.gain.setValueAtTime(0.0001,t0);
-ng.gain.linearRampToValueAtTime(P.v*sp.gain*selfB,t0+0.0015);
+ng.gain.linearRampToValueAtTime(P.v*sp.gain*selfB*HEAR.amp,t0+0.0015);
 ng.gain.exponentialRampToValueAtTime(0.0001,t0+0.022);
 n.connect(bp); bp.connect(ng); ng.connect(out); n.start(t0); n.stop(t0+0.05);
 // 1b) 高频瞬态"啪"层: 让近处枪声清脆不发闷
@@ -105,11 +114,11 @@ if(!inited) return;
 const t0=ctx.currentTime; const sp=spatial(dist,400); if(sp.gain<0.02) return;
 const o=ctx.createOscillator(); o.type='sine';
 o.frequency.setValueAtTime(70,t0); o.frequency.exponentialRampToValueAtTime(24,t0+1.1);
-const og=ctx.createGain(); env(og,t0,1.5*sp.gain,1.1);
+const og=ctx.createGain(); env(og,t0,1.5*sp.gain*HEAR.ambient,1.1);
 o.connect(og); og.connect(comp); o.start(t0); o.stop(t0+1.2);
 const n=noiseSrc(); const lp=ctx.createBiquadFilter(); lp.type='lowpass';
 lp.frequency.setValueAtTime(Math.min(sp.lp,5000),t0); lp.frequency.exponentialRampToValueAtTime(120,t0+1.3);
-const ng=ctx.createGain(); env(ng,t0,1.3*sp.gain,1.3);
+const ng=ctx.createGain(); env(ng,t0,1.3*sp.gain*HEAR.ambient,1.3);
 n.connect(lp); lp.connect(ng); ng.connect(comp); n.start(t0); n.stop(t0+1.4);
 }
 function click(freq=2200, vol=0.25, dur=0.03){
@@ -140,10 +149,13 @@ o.connect(g); g.connect(comp); o.start(t0); o.stop(t0+0.55);
 }
 function footstep(run=false, dist=0){
 if(!inited) return;
-const sp=spatial(dist,40); if(sp.gain<0.03) return;
+// 戴耳机时: 可听距离拉到耳机标称值, 且用线性衰减 —— 让标称范围真的能用满
+const maxD=HEAR.range>0?HEAR.range:40;
+const sp=HEAR.range>0?spatial(dist,maxD,1):spatial(dist,maxD);
+if(sp.gain<0.03) return;
 const t0=ctx.currentTime;
 const n=noiseSrc(); const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=run?500:380;
-const g=ctx.createGain(); env(g,t0,(run?0.2:0.11)*sp.gain, 0.07);
+const g=ctx.createGain(); env(g,t0,(run?0.2:0.11)*sp.gain*HEAR.amp, 0.07);
 n.connect(lp); lp.connect(g); g.connect(comp); n.start(t0); n.stop(t0+0.12);
 }
 function whizz(){
@@ -163,7 +175,7 @@ const t0=ctx.currentTime;
 const o=ctx.createOscillator(); o.type='sine';
 o.frequency.setValueAtTime(rand(2400,3600),t0);
 o.frequency.exponentialRampToValueAtTime(rand(700,1100),t0+0.22);
-const g=ctx.createGain(); env(g,t0,0.1*sp.gain,0.22);
+const g=ctx.createGain(); env(g,t0,0.1*sp.gain*HEAR.ambient,0.22);
 o.connect(g); g.connect(comp); o.start(t0); o.stop(t0+0.25);
 }
 function hurt(){
@@ -223,11 +235,11 @@ const t0=ctx.currentTime;
 const sp=spatial(dist,500); if(sp.gain<0.02) return;
 const o=ctx.createOscillator(); o.type='sine';
 o.frequency.setValueAtTime(85,t0); o.frequency.exponentialRampToValueAtTime(26,t0+0.7);
-const og=ctx.createGain(); env(og,t0,1.6*sp.gain,0.7);
+const og=ctx.createGain(); env(og,t0,1.6*sp.gain*HEAR.ambient,0.7);
 o.connect(og); og.connect(comp); o.start(t0); o.stop(t0+0.8);
 const n=noiseSrc(); const lp=ctx.createBiquadFilter(); lp.type='lowpass';
 lp.frequency.setValueAtTime(Math.min(sp.lp,3800),t0); lp.frequency.exponentialRampToValueAtTime(160,t0+0.9);
-const ng=ctx.createGain(); env(ng,t0,1.2*sp.gain,0.9);
+const ng=ctx.createGain(); env(ng,t0,1.2*sp.gain*HEAR.ambient,0.9);
 n.connect(lp); lp.connect(ng); ng.connect(comp); n.start(t0); n.stop(t0+1);
 }
 function flakPop(dist=0){
@@ -235,7 +247,7 @@ if(!inited) return;
 const t0=ctx.currentTime;
 const sp=spatial(dist,300); if(sp.gain<0.02) return;
 const n=noiseSrc(); const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=Math.min(sp.lp,1500);
-const g=ctx.createGain(); env(g,t0,0.55*sp.gain,0.35);
+const g=ctx.createGain(); env(g,t0,0.55*sp.gain*HEAR.ambient,0.35);
 n.connect(lp); lp.connect(g); g.connect(comp); n.start(t0); n.stop(t0+0.4);
 }
 function createEngine(kind){
@@ -267,13 +279,13 @@ const g=ctx.createGain(); g.gain.value=0.052;
 const lfo=ctx.createOscillator(); lfo.frequency.value=0.13;
 const lg=ctx.createGain(); lg.gain.value=90;
 lfo.connect(lg); lg.connect(lp.frequency);
-n.connect(lp); lp.connect(g); g.connect(comp); n.start(); lfo.start();
+n.connect(lp); lp.connect(g); g.connect(ambBus); n.start(); lfo.start();
 // 雨声环境层
 if(WEATHER==='rain'||WEATHER==='storm'){
 const rn=noiseSrc();
 const rl=ctx.createBiquadFilter(); rl.type='bandpass'; rl.frequency.value=1500; rl.Q.value=0.35;
 const rg=ctx.createGain(); rg.gain.value=WEATHER==='storm'?0.08:0.055;
-rn.connect(rl); rl.connect(rg); rg.connect(comp); rn.start();
+rn.connect(rl); rl.connect(rg); rg.connect(ambBus); rn.start();
 }
 // 远处机枪对射: 断续的闷响连射
 setInterval(()=>{ if(Math.random()<0.45) distantMG(); }, 4600);
@@ -292,7 +304,7 @@ const panN=ctx.createStereoPanner?ctx.createStereoPanner():null;
 const bus=ctx.createGain(); bus.gain.value=1;
 const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900;
 bus.connect(lp);
-if(panN){ panN.pan.value=panV; lp.connect(panN); panN.connect(comp); } else lp.connect(comp);
+if(panN){ panN.pan.value=panV; lp.connect(panN); panN.connect(ambBus); } else lp.connect(ambBus);
 for(let i=0;i<nCnt;i++){
 const t=t0+i*gap*rand(0.9,1.1);
 const o=ctx.createOscillator(); o.type='triangle'; o.frequency.value=f*rand(0.9,1.1);
@@ -312,8 +324,8 @@ let out=g;
 if(ctx.createStereoPanner){
 const pan=ctx.createStereoPanner();
 pan.pan.value=rand(-0.85,0.85);
-g.connect(pan); pan.connect(comp);
-} else g.connect(comp);
+g.connect(pan); pan.connect(ambBus);
+} else g.connect(ambBus);
 o.connect(g);
 const nCh=randi(2,5);
 const dist=rand(0.4,1);
@@ -330,5 +342,10 @@ t+=rand(0.11,0.28);
 }
 o.start(t0); o.stop(t+0.3);
 }
-return { init, gunshot, explosion, click, metalSlide, ping, footstep, whizz, ricochet, hurt, hitmarkSnd, nadeBounce, cannon, flakPop, createEngine, setVol, resume, mortarThunk };
+// 耳机: 写入听力档案 (传 null / 空对象 = 摘掉耳机, 恢复默认)
+function setHearing(p){
+HEAR={ range:(p&&p.range)||0, amp:(p&&p.amp)||1, ambient:(p&&p.ambient)||1 };
+if(ambBus) ambBus.gain.value = HEAR.ambient;
+}
+return { init, gunshot, explosion, click, metalSlide, ping, footstep, whizz, ricochet, hurt, hitmarkSnd, nadeBounce, cannon, flakPop, createEngine, setVol, resume, mortarThunk, setHearing };
 })();

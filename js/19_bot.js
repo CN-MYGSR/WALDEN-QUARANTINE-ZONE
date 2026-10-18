@@ -30,7 +30,8 @@ this.kills=0; this.deaths=0; this.score=0;
 this.respawnT=0; this.deathAnimT=0;
 this.stuckT=0; this.lastPos=V3(); this.moveIntent=false;
 this.unstickT=0; this.unstickDir=1;
-this.empUse=null; this.empT=0;
+this.empT=0;
+this.stunT=0;   // 被爆闪晃到后的失能计时 (见 15c_flashlight)
 this.lastFiredT=-99; this.animT=rand(0,9);
 this.mgUse=null; this.mgT=0;
 this.mortUse=null; this.mortT=0;
@@ -38,6 +39,7 @@ this.meleeT=0;
 this.onVehicle=null; this.targetVeh=null; this.chuting=false;
 this.pilotOf=null;
 this.inSquad=false; this.squadGroup=0;
+this.aggro=[];                     // 中立模式记仇名单: [{e:单位, t:结仇时刻}]
 this.bandageT=0; this.medkitT=0;
 this.speedMul=rand(0.92,1.08);
 // ---- 搜刮 / 跳跃 / 侧身 / 低姿态持枪 ----
@@ -106,8 +108,8 @@ this.pos.y=standHeight(this.pos.x,this.pos.z,10);
 this.hp=Math.max(1,Math.round(100*(this.hpMul||1))); this.limbs={head:100,arms:100,torso:100,legs:100}; this.alive=true; this.crouch=false; this.prone=false;
 this.ragdolled=false;
 this.mag=this.def.mag; this.reloadT=0; this.suppression=0;
-this.target=null; this.lastSeenT=-99; this.path=null;
-this.state='idle'; this.mgUse=null; this.empUse=null; this.mortUse=null; this.unstickT=0;
+this.target=null; this.lastSeenT=-99; this.path=null; this.aggro=[];
+this.state='idle'; this.mgUse=null; this.mortUse=null; this.unstickT=0;
 this.onVehicle=null; this.targetVeh=null; this.chuting=false;
 this.bandageT=0;
 this.lootRef=null; this.lootT=0; this.lootCd=rand(0.5,3); this.stash={};
@@ -120,66 +122,13 @@ this.mesh.root.rotation.set(0,0,0);
 this.mesh.pelvis.position.y=0.94;
 this.pickObjective();
 }
-spawnInVehicle(v){
-// 布娃娃系统会接管尸体模型, 复活进载具时同样需要重建模型
-if(!this.mesh){
-this.mesh=buildSoldierMesh(this.team,this.name);
-if(this.inSquad||this.squadGroup) this.mesh.tag.material.color.set(0x86ffa6);
-this.setClass(this.cls);
-}
-this.hp=Math.max(1,Math.round(100*(this.hpMul||1))); this.limbs={head:100,arms:100,torso:100,legs:100}; this.alive=true; this.crouch=false; this.prone=false;
-this.ragdolled=false;
-this.mag=this.def.mag; this.reloadT=0; this.suppression=0;
-this.target=null; this.lastSeenT=-99; this.path=null;
-this.state='idle'; this.mgUse=null; this.empUse=null; this.mortUse=null; this.unstickT=0;
-this.chuting=false; this.bandageT=0; this.deathDir=0;
-this.lootRef=null; this.lootT=0; this.lootCd=rand(0.5,3); this.jumpVy=0; this.jumpCd=0;
-this.stillT=0; this.stillWin=1; this.stillX=this.pos.x; this.stillZ=this.pos.z; this.softStill=rand(8,15);
-this.respawnT=0;
-if(this.mesh){
-this.mesh.root.visible=false;
-this.mesh.root.rotation.set(0,0,0);
-this.mesh.pelvis.position.y=0.94;
-}
-this.onVehicle=v; v.crewBot=this;
-this.pos.copy(v.pos);
-}
-enterVehicle(v){
-if(v.crewBot||v.playerDriven) return;
-v.crewBot=this; v.claimBot=null;
-this.onVehicle=v;
-this.targetVeh=null; this.path=null;
-this.state='idle';
-this.crouch=false; this.prone=false; this.bandageT=0;
-if(this.mgUse){ this.mgUse.user=null; this.mgUse=null; }
-if(this.empUse){ this.empUse.user=null; this.empUse=null; }
-if(this.mortUse){ this.mortUse.user=null; this.mortUse=null; }
-if(this.mesh) this.mesh.root.visible=false;
-}
-dismountVehicle(bailing){
-const v=this.onVehicle;
-this.onVehicle=null; this.chuting=false;
-if(v){
-if(v.crewBot===this) v.crewBot=null;
-v.noEnterT=nowT+(bailing?12:6);
-let px=v.pos.x+3.2, pz=v.pos.z;
-for(const off of [[3.2,0],[-3.2,0],[0,4],[0,-4],[4,4]]){
-const qx=v.pos.x+off[0], qz=v.pos.z+off[1];
-if(!occBlocked(qx,qz)){ px=qx; pz=qz; break; }
-}
-this.pos.set(px,0,pz);
-this.pos.y=standHeight(px,pz,v.pos.y+2);
-}
-if(this.mesh) this.mesh.root.visible=true;
-this.path=null; this.state='idle'; this.decisionT=0; this.targetVeh=null;
-if(bailing){ this.suppression=0.9; }
-}
 eyePos(){
 const off=(this.leanT||0)*0.32;
 return V3(this.pos.x+Math.cos(this.yaw)*off,this.pos.y+(this.prone?0.5:this.crouch?1.15:1.62),this.pos.z-Math.sin(this.yaw)*off);
 }
 noticeThreat(enemy){
 if(!enemy||!enemy.alive) return;
+if(NPC_NEUTRAL&&!this.aggroOk(enemy)) return;   // 中立: 不对未结仇的目标产生警觉
 if(!this.target||nowT-this.lastSeenT>2.5){
 this.lastSeenPos.copy(enemy.pos);
 if(nowT-this.lastSeenT>4) this.lastSeenT=nowT-2.8;
@@ -201,8 +150,10 @@ this.suppression=Math.min(1.6,this.suppression+0.45);
 this.aimSettle=Math.max(0.1,this.aimSettle-0.4);
 // 同单位误伤不成立: 既不反制也不锁定对方 (同队之外再加一道单位闸)
 if(attacker&&attacker.team!==this.team&&!(typeof unitBlocks==='function'&&unitBlocks(attacker,this))){
+// 中立模式: 被谁打就只记谁的仇 (含同小队 30m 内的队友), 且必定立刻还击
+if(NPC_NEUTRAL) this.aggroOn(attacker,30);
 this.noticeThreat(attacker);
-if(!this.target&&!attacker.isCrew&&!attacker.onVehicle&&Math.random()<0.8){
+if(!this.target&&!attacker.isCrew&&!attacker.onVehicle&&(NPC_NEUTRAL||Math.random()<0.8)){
 this.target=attacker;
 this.lastSeenPos.copy(attacker.pos);
 this.lastSeenT=nowT-1.2;
@@ -235,7 +186,7 @@ this.mesh=null;
 if(this.targetVeh){ if(this.targetVeh.claimBot===this) this.targetVeh.claimBot=null; this.targetVeh=null; }
 if(this.onVehicle){ if(this.onVehicle.crewBot===this) this.onVehicle.crewBot=null; this.onVehicle=null; }
 if(this.mgUse){ this.mgUse.user=null; this.mgUse=null; }
-if(this.empUse){ this.empUse.user=null; this.empUse=null; }
+
 if(this.mortUse){ this.mortUse.user=null; this.mortUse=null; }
 tickets[this.team]=Math.max(0,tickets[this.team]-1);
 if(attacker){
@@ -417,6 +368,33 @@ this.objective=best;
 this.defendPt=null;
 this.repathT=0;
 }
+// ---------- 中立 NPC (街区) ----------
+// 战役标记 npcNeutral 时, NPC 不主动交火, 只有"结过仇"的目标才能被锁定。
+// 结仇途径: ① 被该单位打伤 (damage) ② 玩家用 T 下令集火 (24_input.squadOrderAttack)。
+// 注意 aggroOk 是 perceive 的候选过滤器 —— 中立模式下它是唯一的目标来源,
+// 任何新增的"锁定敌人"路径都必须同步加上这道闸, 否则会静默变成主动攻击。
+aggroOn(e,radius){
+if(!NPC_NEUTRAL||!e||e===this) return;
+if(e.team===this.team) return;
+for(const a of this.aggro){ if(a.e===e){ a.t=nowT; } }
+if(!this.aggro.some(a=>a.e===e)){
+this.aggro.push({e:e,t:nowT});
+if(this.aggro.length>6) this.aggro.shift();
+}
+// 同小队连坐: 队友被打, 附近队友一起还击
+if(radius>0&&this.squadGroup){
+for(const s of soldiers){
+if(s===this||!s.alive||s.team!==this.team||s.squadGroup!==this.squadGroup) continue;
+if(Math.hypot(s.pos.x-this.pos.x,s.pos.z-this.pos.z)<radius) s.aggroOn(e,0);
+}
+}
+}
+aggroOk(e){
+if(!NPC_NEUTRAL) return true;
+if(!e) return false;
+for(const a of this.aggro){ if(a.e===e) return true; }
+return false;
+}
 perceive(){
 const diff=EFF_DIFF;
 // 视距 = 基准 70m × 难度档 visMul × 实例倍率(ELO/地图/难度) × 天气视距。
@@ -431,7 +409,8 @@ let best=null,bestD=1e9;
 const eye=this.eyePos();
 for(const e of combatants){
 // 同队 或 同单位 一律不可锁定 (单位由 47_units 维护; 未加载时该判定自动退化为只按队伍)
-if(!e.alive||e.team===this.team||(typeof unitBlocks==='function'&&unitBlocks(this,e))) continue;
+// ⚠️ 跳过已倒地目标 (倒地 = 退出战斗, 不该继续被点名; 想处决得手动打)
+if(!e.alive||e.downed||e.team===this.team||!this.aggroOk(e)||(typeof unitBlocks==='function'&&unitBlocks(this,e))) continue;
 // 载具内目标: 运兵车车斗乘员是暴露的可以被看到; 封闭车厢(canvas)只在尾部扇区可见
 if(e.onVehicle){
 if(e.onVehicle.kind!=='apc') continue;
@@ -462,26 +441,6 @@ if(blockHit&&blockHit.dist<dist-0.6) continue;
 if(SMOKES.length&&smokeBlocksLOS(eye.x,eye.y,eye.z,tp.x,tp.y,tp.z)) continue;
 if(d<bestD){ best=e; bestD=d; }
 }
-// 命中暴露乘员(敞篷全员/探头车长): 一旦被瞄准就暴露目标感知
-if(typeof TANK_CREW_PROXIES!=='undefined'){
-for(const e of TANK_CREW_PROXIES){
-if(!e.alive||e.team===this.team||(typeof unitBlocks==='function'&&unitBlocks(this,e))) continue;
-const dx=e.pos.x-this.pos.x, dz=e.pos.z-this.pos.z;
-const d=Math.hypot(dx,dz);
-if(d>viewD) continue;
-const ang=Math.atan2(dx,dz);
-const isCur=(e===this.target&&nowT-this.lastSeenT<3);
-if(!isCur&&Math.abs(angDiff(this.yaw,ang))>1.15) continue;
-const tp=V3(e.pos.x,e.pos.y+1.3,e.pos.z);
-const dir=tp.clone().sub(eye); const dist=dir.length(); dir.normalize();
-const blockHit=raycastWorld(eye,dir,dist);
-if(blockHit&&blockHit.dist<dist-0.6) continue;
-if(SMOKES.length&&smokeBlocksLOS(eye.x,eye.y,eye.z,tp.x,tp.y,tp.z)) continue;
-// 稍微优先打乘员(压制载具)
-const dEff=d*0.85;
-if(dEff<bestD){ best=e; bestD=dEff; }
-}
-}
 if(best){
 if(this.target!==best||nowT-this.lastSeenT>2){
 if(this.target!==best){
@@ -499,7 +458,7 @@ if(nowT-this.lastShotT>0.5) this.aimSettle=Math.min(1,this.aimSettle+0.10); // �
 this.aimSettle=Math.max(0.15,this.aimSettle-0.12);
 if(this.target&&(!this.target.alive||nowT-this.lastSeenT>8)) this.target=null;
 }
-if(!this.target){
+if(!this.target&&!NPC_NEUTRAL){
 for(const ev of gunEvents){
 if(ev.team===this.team) continue;
 const d=Math.hypot(ev.x-this.pos.x,ev.z-this.pos.z);
@@ -583,15 +542,6 @@ this.stillT=0; this.softStill=rand(8,15);
 decide(){
 const engaged=this.target&&nowT-this.lastSeenT<4;
 const distT=engaged?Math.hypot(this.target.pos.x-this.pos.x,this.target.pos.z-this.pos.z):0;
-if(this.empUse){
-const g=this.empUse;
-let done=false;
-if(g.kind==='at'){ const t=enemyTankNear(this,150); if(!t) done=true; }
-else { if(!enemyPlaneAlive(this.team)) done=true; }
-this.empT-=0.5;
-if(done||this.empT<=0||(engaged&&distT<8)){ g.user=null; this.empUse=null; }
-else return;
-}
 if(this.mgUse){
 this.mgT-=0.5;
 const stillThreat=engaged&&distT>6&&Math.abs(angDiff(this.mgUse.face+Math.PI,Math.atan2(this.target.pos.x-this.pos.x,this.target.pos.z-this.pos.z)))<1.0;
@@ -720,87 +670,10 @@ if(Math.random()<0.10) this.setPathTo(sg.target.x+ox,sg.target.z+oz);
 return;
 }
 }
+// 救援倒地队友 —— 优先级: 战斗 > 救援 > 搜索 (由 57_downed 提供)
+if(this.tryStartRescue(engaged,distT)) return;
 // 翻找容器 / 尸体 (非交战或敌人尚远时)
 if(this.tryStartLoot(engaged,distT)) return;
-const eTank=enemyTankNear(this,120);
-// 筒子自动打坦克
-if(this.cls===3&&eTank&&eTank.alive&&this.slots&&this.slots[0]&&this.slots[0].def.rocket){
-const w2=this.slots[0];
-if(w2.mag>0&&this.fireT<=0&&this.reloadT<=0&&Math.hypot(eTank.pos.x-this.pos.x,eTank.pos.z-this.pos.z)<65){
-const eye2=this.eyePos();
-const dir2=V3(eTank.pos.x-eye2.x,eTank.pos.y+1.2-eye2.y,eTank.pos.z-eye2.z).normalize();
-const chk=raycastWorld(eye2,dir2,65);
-if(!chk||chk.dist>50){
-this.lastFiredT=nowT;
-fireRocket(this,eye2,dir2,w2.def,V3(eTank.pos.x,eTank.pos.y,eTank.pos.z));
-w2.mag=0; this.mag=0; this.fireT=3.6;
-}}}
-// 反坦克枪手打坦克 (PTRD/博伊斯反坦克枪)
-if(this.cls===3&&eTank&&eTank.alive&&this.def.atRifle&&this.mag>0&&this.fireT<=0&&this.reloadT<=0&&this.boltT<=0){
-const dTk=Math.hypot(eTank.pos.x-this.pos.x,eTank.pos.z-this.pos.z);
-if(dTk<95){
-const eye2=this.eyePos();
-const dir2=V3(eTank.pos.x-eye2.x,eTank.pos.y+1.3-eye2.y,eTank.pos.z-eye2.z).normalize();
-const chk=raycastWorld(eye2,dir2,dTk);
-if(!chk||chk.dist>dTk-3){
-this.yaw=Math.atan2(eTank.pos.x-this.pos.x,eTank.pos.z-this.pos.z);
-const er2=0.012*EFF_DIFF.spreadMul*(this.sprMul||1);
-dir2.x+=rand(-er2,er2); dir2.y+=rand(-er2,er2)*0.5; dir2.z+=rand(-er2,er2); dir2.normalize();
-const muzz=eye2.clone().addScaledVector(dir2,0.9);
-fireBullet(this,eye2,dir2,this.def,muzz);
-this.mag--;
-if(this.mesh) this.mesh.armR.sh.userData.swing=0.15;
-this.fireT=60/this.def.rpm*rand(1.2,1.8);
-if(this.def.type==='bolt') this.boltT=this.def.boltT||1.2;
-if(this.mag<=0) this.reloadT=this.def.reload;
-this.prone=dTk>30;
-}
-}
-}
-
-if(eTank){
-const dTank=Math.hypot(eTank.pos.x-this.pos.x,eTank.pos.z-this.pos.z);
-// AT 雷已移除: 不再有反坦克手雷投掷(2026-09-13)
-if(dTank<130){
-for(const g of ATGUNS){
-if(g.user) continue;
-if(Math.hypot(g.x-this.pos.x,g.z-this.pos.z)<16){
-const angToTank=Math.atan2(eTank.pos.x-g.x,eTank.pos.z-g.z);
-if(Math.abs(angDiff(g.face,angToTank))<1.05){
-this.empUse=g; g.user=this; this.empT=rand(18,30);
-this.pos.x=g.x-Math.sin(g.face)*1.2;
-this.pos.z=g.z-Math.cos(g.face)*1.2;
-this.path=null;
-return;
-}
-}
-}
-}
-if(this.cls===3&&dTank<55&&!engaged){
-this.state='hunt';
-if(!this.path||this.repathT<=0){
-this.setPathTo(eTank.pos.x+rand(-8,8),eTank.pos.z+rand(-8,8));
-this.repathT=2.5;
-}
-return;
-}
-if(dTank<32&&this.cls!==3&&this.state!=='cover'&&Math.random()<0.5){
-const cp=this.findCoverFrom(eTank.pos);
-if(cp){ this.state='cover'; this.coverPt=cp; this.coverT=rand(2.5,5); this.setPathTo(cp.x,cp.z); return; }
-}
-}
-const ePlane=enemyPlaneAlive(this.team);
-if(ePlane&&!engaged&&!this.inSquad&&Math.random()<0.4){
-for(const g of AAGUNS){
-if(g.user) continue;
-if(Math.hypot(g.x-this.pos.x,g.z-this.pos.z)<15){
-this.empUse=g; g.user=this; this.empT=rand(14,24);
-this.pos.x=g.x; this.pos.z=g.z-0.9;
-this.path=null;
-return;
-}
-}
-}
 if(engaged){
 if(distT<2.6){ this.state='melee'; return; }
 // 被压制时先丢烟雾掩护
@@ -857,56 +730,6 @@ return;
 }
 }
 }
-// 附近有空载具时上车 (专属飞行员除外, 小队成员只上玩家的车)
-// 规则1: 玩家所在运兵车有空位且距离较近时, 小队成员优先上车, 其余步兵就近搭车
-if(!this.pilotOf&&player.alive&&player.onVehicle&&player.onVehicle.kind==='apc'&&this.team===player.team){
-const pv=player.onVehicle;
-const dv=Math.hypot(pv.pos.x-this.pos.x,pv.pos.z-this.pos.z);
-const near=this.inSquad?40:16;
-if(pv.alive&&pv.freeSeat()>=0&&dv<near&&Math.abs(pv.vel)<3){
-this.targetVeh=pv;
-this.state='toVehicle';
-if(!this.path||this.repathT<=0){ this.setPathTo(pv.pos.x,pv.pos.z); this.repathT=1.6; }
-return;
-}
-}
-if(!this.pilotOf&&!this.inSquad){
-for(const tv of tanks){
-if(!tv.alive||tv.team!==this.team||tv.crewBot||tv.playerDriven) continue;
-if((tv.noEnterT||0)>nowT) continue;
-if(tv.hp<tv.maxHp*0.4) continue;
-if(tv.claimBot&&tv.claimBot.alive&&tv.claimBot!==this&&tv.claimBot.targetVeh===tv&&nowT-(tv.claimT||0)<8) continue;
-const dv=Math.hypot(tv.pos.x-this.pos.x,tv.pos.z-this.pos.z);
-if(dv<85){
-tv.claimBot=this;
-tv.claimT=nowT;
-this.targetVeh=tv;
-this.state='toVehicle';
-if(!this.path||this.repathT<=0){ this.setPathTo(tv.pos.x,tv.pos.z); this.repathT=2.2; }
-return;
-}
-}
-// 规则2: 无司机的运兵车, 谁来开? 有司机有空位且目标很近时, 顺路搭车
-for(const av of apcs){
-if(!av.alive||av.team!==this.team||av.playerDriven) continue;
-if((av.noEnterT||0)>nowT) continue;
-const dv=Math.hypot(av.pos.x-this.pos.x,av.pos.z-this.pos.z);
-if(dv>60) continue;
-if(!av.crewBot){
-if(av.claimBot&&av.claimBot.alive&&av.claimBot!==this&&nowT-(av.claimT||0)<8) continue;
-av.claimBot=this; av.claimT=nowT;
-this.targetVeh=av;
-this.state='toVehicle';
-if(!this.path||this.repathT<=0){ this.setPathTo(av.pos.x,av.pos.z); this.repathT=2.2; }
-return;
-} else if(av.freeSeat()>=0&&((av.mission==='pickup'&&Math.abs(av.vel)<1.5&&dv<42&&this.objective&&Math.hypot(this.objective.x-this.pos.x,this.objective.z-this.pos.z)>50)||(this.objective&&Math.hypot(this.objective.x-this.pos.x,this.objective.z-this.pos.z)>80&&dv<22&&Math.abs(av.vel)<3))){
-this.targetVeh=av;
-this.state='toVehicle';
-if(!this.path||this.repathT<=0){ this.setPathTo(av.pos.x,av.pos.z); this.repathT=1.6; }
-return;
-}
-}
-}
 // 医护兵放置医疗箱
 if(this.cls===2&&(this.medkitT||0)<=nowT){
 let allies=0;
@@ -930,7 +753,7 @@ const dObj=Math.hypot(this.pos.x-f.x,this.pos.z-f.z);
 if(dObj<f.r*0.85){
 this.state='defend';
 // 空闲迫击炮, 防守Bot就近上炮 (工程兵优先)
-if(!this.mortUse&&!this.mgUse&&!this.empUse&&Math.random()<0.12){
+if(!this.mortUse&&!this.mgUse&&Math.random()<0.12){
 for(const mo of MORTARS){
 if(!mo.alive||mo.user) continue;
 if(Math.hypot(mo.x-this.pos.x,mo.z-this.pos.z)<11){
@@ -1011,6 +834,16 @@ this.pathPartial=Math.hypot(end[0]-x,end[1]-z)>2.5;
 }
 }
 update(dt){
+// 爆闪失能: 站着不动, 不感知也不行动 (但仍会随物理/重力贴地)
+if(this.stunT>0&&this.alive){
+ this.stunT=Math.max(0,this.stunT-dt);
+ this.vel.set(0,0,0);
+ this.target=null; this.path=null; this.fireT=Math.max(this.fireT,0.2);
+ this.settleAir(dt);
+ this.pos.y=standHeight(this.pos.x,this.pos.z,this.pos.y+1);
+ this.updateMesh(dt,0);
+ return;
+}
 if(!this.alive){
 this.deathAnimT-=dt;
 if(!this.ragdolled&&this.mesh){
@@ -1033,8 +866,7 @@ return;
 }
 if(this.respawnT<2.5&&this.mesh&&this.mesh.root.visible) this.mesh.root.visible=false;
 if(this.respawnT<=0&&!matchOver){
-if(this.pilotOf){ /* 专属飞行员: 等待战机复活后随机载人 */ }
-else { this.deathDir=0; this.spawn(this.scatterSpawn); }
+this.deathDir=0; this.spawn(this.scatterSpawn);
 }
 return;
 }
@@ -1092,7 +924,7 @@ this.updateMesh(dt,0);
 return;
 }
 // 脱战打绷带
-if(this.bandageT>0&&!this.mgUse&&!this.empUse){
+if(this.bandageT>0&&!this.mgUse){
 this.bandageT-=dt;
 this.vel.set(0,0,0);
 this.crouch=true;
@@ -1138,7 +970,6 @@ const engaged=this.target&&this.target.alive&&nowT-this.lastSeenT<4;
 this.updateActivity(dt,engaged);
 // 低姿态持枪: 行军/搜刮途中压低枪口换取移速, 一接敌立刻据枪
 this.carry=(engaged||this.prone||this.state==='combat'||this.state==='cover'||this.state==='defend'||this.state==='loot')?'high':'low';
-if(this.empUse){ this.updateEmplacement(dt); return; }
 if(this.mgUse){
 const mg=this.mgUse;
 this.crouch=false; this.prone=false;
@@ -1289,7 +1120,28 @@ let speed=0, moveYaw=this.yaw;
 let wantMove=false;
 const legLimb=this.limbs?this.limbs.legs:100;
 if(legLimb<25) speed=0.6; // 腿部重伤: 几乎无法移动
-if(this.state==='loot'){
+// 救援倒地队友 (由 57_downed 提供 tryStartRescue / canBeRescued / reviveUnit)
+// 优先级: 战斗 > 救援 > 搜索 —— 决策处已在 tryStartLoot 之前拦了一道
+if(this.state==='rescue'){
+const rt=this.rescueMate;
+if(!rt||!canBeRescued(rt)){ this.state='idle'; this.rescueMate=null; this.rescueProg=0; }
+else {
+const rd=Math.hypot(rt.pos.x-this.pos.x,rt.pos.z-this.pos.z);
+if(rd>DOWN_RESCUE_R){
+this.crouch=false;
+const rmy=this.followPath(dt);
+if(rmy===null&&this.repathT<=0){ this.setPathTo(rt.pos.x,rt.pos.z); this.repathT=1.0; }
+if(rmy!==null){ moveYaw=rmy; wantMove=true; speed=3.4; }
+} else {
+this.crouch=true;
+this.faceTo(V3(rt.pos.x,this.pos.y,rt.pos.z),dt,5);
+this.rescueProg=(this.rescueProg||0)+dt;
+if(this.mesh&&Math.random()<dt*6) this.mesh.armR.sh.userData.swing=0.3;
+if(this.rescueProg>=DOWN_RESCUE_T){ this.rescueProg=0; this.rescueMate=null; this.state='idle'; reviveUnit(rt,this); }
+}
+}
+}
+else if(this.state==='loot'){
 const r=this.lootRef;
 if(!r||r.searched||!Object.keys(r.loot||{}).length){
 this.state='idle'; this.lootT=0; this.lootRef=null; this.lootCd=rand(1.2,3);
@@ -1464,68 +1316,6 @@ if(this.def.type==='bolt') this.boltT=this.def.boltT||1.0;
 if(this.mag<=0&&this.reloadT<=0){ this.reloadT=this.def.reload*rand(1,1.25); }
 this.updateMesh(dt,Math.hypot(this.vel.x,this.vel.z));
 }
-updateEmplacement(dt){
-const g=this.empUse;
-this.crouch=false; this.prone=false;
-this.vel.set(0,0,0);
-this.pos.y=standHeight(this.pos.x,this.pos.z,this.pos.y+1);
-g.cd-=dt;
-if(g.kind==='at'){
-this.pos.x=g.x-Math.sin(g.face)*1.2;
-this.pos.z=g.z-Math.cos(g.face)*1.2;
-const tk=enemyTankNear(this,160);
-if(tk){
-const wantYaw=Math.atan2(tk.pos.x-g.x,tk.pos.z-g.z);
-const rel=clamp(angDiff(g.face,wantYaw),-1.0,1.0);
-g.yaw.rotation.y=dampF(g.yaw.rotation.y,rel,4,dt);
-this.yaw=g.face+g.yaw.rotation.y;
-const dh=Math.hypot(tk.pos.x-g.x,tk.pos.z-g.z);
-const pit=clamp(Math.atan2((tk.pos.y+1.2)-g.y,dh),-0.1,0.25);
-g.pitch.rotation.x=dampF(g.pitch.rotation.x,-pit,4,dt);
-if(Math.abs(angDiff(g.face+g.yaw.rotation.y,wantYaw))<0.05&&g.cd<=0&&this.reactT<=0){
-g.cd=5.2+rand(0,1.4);
-const dir=V3(Math.sin(this.yaw)*Math.cos(pit),Math.sin(pit),Math.cos(this.yaw)*Math.cos(pit));
-const er=0.02*EFF_DIFF.spreadMul*(this.sprMul||1);
-dir.x+=rand(-er,er); dir.y+=rand(-er,er)*0.6; dir.z+=rand(-er,er); dir.normalize();
-const o=V3(g.x,g.y+0.25,g.z).addScaledVector(dir,2.6);
-const chk=raycastWorld(o,dir,dh);
-if(!chk||chk.dist>dh-4){
-AudioSys.cannon(o.distanceTo(camera.position)*1.3);
-spawnP(PT.flash,o.x,o.y,o.z,dir.x*3,dir.y*3,dir.z*3,0.8,8,0.1,1,0,true);
-spawnP(PT.dark,o.x,o.y,o.z,dir.x*2,1,dir.z*2,0.8,2.5,0.8,0.7,0.5);
-shells.push({pos:o.clone(),vel:dir.clone().multiplyScalar(150),team:this.team,owner:this,life:3,kind:'at',trail:0});
-this.lastFiredT=nowT;
-} else g.cd=0.8;
-}
-}
-} else {
-this.pos.x=g.x; this.pos.z=g.z-0.9;
-const pl=enemyPlaneAlive(this.team);
-if(pl){
-const lead=pl.pos.clone();
-const dist=lead.distanceTo(V3(g.x,g.y,g.z));
-const tof=dist/150;
-lead.x+=Math.sin(pl.yaw)*Math.cos(pl.pitch)*pl.speed*tof*0.5+rand(-25,25);
-lead.z+=Math.cos(pl.yaw)*Math.cos(pl.pitch)*pl.speed*tof*0.5+rand(-25,25);
-lead.y+=Math.sin(pl.pitch)*pl.speed*tof*0.5+rand(-8,8);
-const wantYaw=Math.atan2(lead.x-g.x,lead.z-g.z);
-g.yaw.rotation.y=angleLerpTo(g.yaw.rotation.y,wantYaw,3*dt);
-this.yaw=g.yaw.rotation.y;
-const dh=Math.hypot(lead.x-g.x,lead.z-g.z);
-const pit=clamp(Math.atan2(lead.y-g.y,Math.max(dh,3)),0.05,1.35);
-g.pitch.rotation.x=dampF(g.pitch.rotation.x,-pit,5,dt);
-if(g.cd<=0&&dist<220){
-g.cd=0.62;
-const dir=V3(Math.sin(wantYaw)*Math.cos(pit),Math.sin(pit),Math.cos(wantYaw)*Math.cos(pit));
-const er=0.05*EFF_DIFF.spreadMul*(this.sprMul||1);
-dir.x+=rand(-er,er); dir.y+=rand(-er,er)*0.7; dir.z+=rand(-er,er); dir.normalize();
-fireFlak(g,this,dir);
-this.lastFiredT=nowT;
-}
-}
-}
-this.updateMesh(dt,0);
-}
 // 侧身探头: 掩体后周期性探身射击 / 交火中横向机动侧倾 / 警戒时随机歪头看角落
 updateLean(dt,engaged,wantMove){
 let want=0;
@@ -1691,9 +1481,19 @@ if(m.face) m.face.set(aim?'aim':'normal');
 updateMesh(dt,speed){
 const m=this.mesh;
 if(!m) return;
+// 敌人脚步: 原先只有玩家自己有脚步声, 敌兵完全是静音的 (2026-09-19 加)。
+// 距离由 02_audio 的 spatial 按听力范围衰减 —— 戴耳机能听到更远。
+if(this.alive&&speed>0.9&&!this.netRemote&&this.team!==player.team){
+ this.stepT=(this.stepT||0)-dt;
+ if(this.stepT<=0){
+  const run=speed>4.4;
+  this.stepT=run?0.42:0.6;
+  AudioSys.footstep(run, this.pos.distanceTo(camera.position));
+ }
+}
 m.root.position.copy(this.pos);
 m.root.rotation.set(0,this.yaw,0);
-const engaged=(this.target&&nowT-this.lastSeenT<4.5)||this.mgUse||this.empUse;
+const engaged=(this.target&&nowT-this.lastSeenT<4.5)||this.mgUse;
 const prone=this.prone, crouch=this.crouch&&!prone;
 const air=this.jumpVy!==0;
 const sprint=speed>4.4&&!engaged&&!prone;
@@ -1801,7 +1601,7 @@ m.gunG.rotation.y=dampF(m.gunG.rotation.y,-m.pelvis.rotation.y+(sprint?0.92:0),9
 m.gunG.rotation.z=dampF(m.gunG.rotation.z,sprint?0.22:0,8,dt);
 this.gun.rotation.y=Math.PI;
 // 匍匐时枪身反向补偿躯干俯仰, 保持枪口朝前
-const gunPitch=(engaged||this.mgUse||this.empUse)?-clamp(this.pitch,-0.7,0.7):(sprint?0.35:(this.carry==='low'?0.44:0.25));
+const gunPitch=(engaged||this.mgUse)?-clamp(this.pitch,-0.7,0.7):(sprint?0.35:(this.carry==='low'?0.44:0.25));
 m.gunG.rotation.x=prone?gunPitch-pp+0.1:gunPitch;
 const headTgt=(engaged?-clamp(this.pitch,-0.6,0.6)*0.7:0)+(prone?-0.08-pp:-torsoX*0.5);
 m.headG.rotation.x=dampF(m.headG.rotation.x,headTgt,9,dt);

@@ -30,6 +30,8 @@ renderer.domElement.style.filter=q===2?'saturate(1.1) contrast(1.06) brightness(
 scene.fog.far = (NIGHT?(q===0?150:(q===1?210:260)):(q===0?240:(q===1?340:420)))*WFX.fogFar;
 }
 addEventListener('resize',()=>{
+// 显示比例(letterbox)由 51_settings 的 applyAspect 统一处理; 它还没加载时退回原始行为
+if(typeof applyAspect==='function'){ applyAspect(); return; }
 camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix();
 vmCamera.aspect=camera.aspect; vmCamera.updateProjectionMatrix();
 renderer.setSize(innerWidth,innerHeight);
@@ -50,9 +52,10 @@ SKY=new THREE.Mesh(new THREE.SphereGeometry(760,24,16), new THREE.MeshBasicMater
 SKY.frustumCulled=false;
 scene.add(SKY);
 }
-const hemi = new THREE.HemisphereLight(NIGHT?NIGHT_HEMI[0]:THEME.hemi[0], NIGHT?NIGHT_HEMI[1]:THEME.hemi[1], (NIGHT?NIGHT_HEMI[2]:THEME.hemi[2])*WFX.hemi);
+// 地图级微光: 秘密实验室在任何天气下都压到微光 (见 01_data 的 MAP_DIM)
+const hemi = new THREE.HemisphereLight(NIGHT?NIGHT_HEMI[0]:THEME.hemi[0], NIGHT?NIGHT_HEMI[1]:THEME.hemi[1], (NIGHT?NIGHT_HEMI[2]:THEME.hemi[2])*WFX.hemi*(NIGHT?1:MAP_DIM));
 scene.add(hemi);
-const sun = new THREE.DirectionalLight(NIGHT?NIGHT_SUN:THEME.sun, KEY_BASE*WFX.sun);
+const sun = new THREE.DirectionalLight(NIGHT?NIGHT_SUN:THEME.sun, KEY_BASE*WFX.sun*(NIGHT?1:MAP_DIM));
 sun.position.set(-90, 120, 40);
 sun.castShadow = true;
 sun.shadow.camera.left=-60; sun.shadow.camera.right=60;

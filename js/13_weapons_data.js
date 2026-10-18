@@ -66,6 +66,15 @@ p320:    { name:'SIG P320', mode:'半自动', type:'semi', snd:'pistol', dmg:26,
  pp19:    { name:'PP-19 勇士', mode:'全自动', type:'auto', snd:'smg', dmg:21, headMul:1.8, rpm:750, mag:30, reserve:180, reload:2.3, spreadHip:2.7, spreadAds:0.5, recoil:0.42, recSide:0.32, adsFov:56, kick:0.04, tracer:4 },
  // 已移除: rpg7(RPG-7 火箭筒)
   pyat:    { name:'MP-443 乌鸦', mode:'半自动', type:'semi', snd:'pistol', dmg:25, headMul:2.0, rpm:440, mag:18, reserve:72, reload:2.0, spreadHip:2.7, spreadAds:0.5, recoil:0.76, recSide:0.4, adsFov:60, kick:0.05, pistol:true, tracer:2 },
+ // ============ 现代 · 新增 6 把 ============
+ // 定位差异: 三把步枪都是 30 发全自动的"平级侧移"而非数值碾压 ——
+ //   HK416 后坐最低最稳 / QBZ-191 开镜最准射速更快 / QBZ-95 无托腰射稍好但换弹偏慢。
+ deagle:  { name:'沙漠之鹰', mode:'半自动', type:'semi', snd:'pistol', dmg:48, headMul:2.2, rpm:240, mag:7, reserve:35, reload:2.2, spreadHip:3.2, spreadAds:0.75, recoil:1.9, recSide:0.65, adsFov:60, kick:0.12, pistol:true, tracer:2 },
+ glock18: { name:'格洛克 18', mode:'全自动', type:'auto', snd:'smg', dmg:22, headMul:1.8, rpm:1100, mag:17, reserve:102, reload:2.0, spreadHip:3.6, spreadAds:1.05, recoil:0.5, recSide:0.5, adsFov:58, kick:0.045, pistol:true, tracer:3 },
+ awm:     { name:'AWM', mode:'栓动 · 高倍', type:'bolt', snd:'sniper', dmg:108, headMul:2.6, rpm:42, mag:5, reserve:40, reload:3.6, spreadHip:5.5, spreadAds:0.02, recoil:3.0, recSide:0.55, adsFov:16, kick:0.14, scoped:true, boltT:1.25, tracer:1 },
+ qbz95:   { name:'QBZ-95', mode:'全自动', type:'auto', snd:'rifle', dmg:26, headMul:1.9, rpm:650, mag:30, reserve:150, reload:2.6, spreadHip:2.9, spreadAds:0.33, recoil:0.72, recSide:0.44, adsFov:54, kick:0.05, tracer:3 },
+ qbz191:  { name:'QBZ-191', mode:'全自动', type:'auto', snd:'rifle', dmg:27, headMul:1.9, rpm:750, mag:30, reserve:150, reload:2.4, spreadHip:2.7, spreadAds:0.30, recoil:0.68, recSide:0.41, adsFov:54, kick:0.048, tracer:3 },
+ hk416:   { name:'HK416', mode:'全自动', type:'auto', snd:'rifle', dmg:27, headMul:1.9, rpm:700, mag:30, reserve:150, reload:2.4, spreadHip:2.8, spreadAds:0.31, recoil:0.66, recSide:0.40, adsFov:54, kick:0.05, tracer:3 },
 };
 // ---------- BF7 / BF8 武器库：轻量聚合入口 ----------
 const ARSENAL_ERA={
@@ -78,7 +87,8 @@ const ARSENAL_ERA={
  m38carb:'ww2', finmosin:'ww2', finmosins:'ww2', suomi:'ww2', ls26:'ww2',
  l35:'ww2', type38c:'ww2', laotao:'ww2',
  m4:'modern', g36c:'modern', m24:'modern', g28:'modern', mp5:'modern',
- p320:'modern', g17:'modern', ak74m:'modern', svd:'modern', pp19:'modern', pyat:'modern'
+ p320:'modern', g17:'modern', ak74m:'modern', svd:'modern', pp19:'modern', pyat:'modern',
+ deagle:'modern', glock18:'modern', awm:'modern', qbz95:'modern', qbz191:'modern', hk416:'modern'
 };
 // 过滤 &&WPN_DEFS[k]: 已移除的武器(火箭筒/反坦克枪)若仍残留在 ARSENAL_ERA 里,
 // 下游 initMenuUI 直接读 d.name 会整页崩溃 —— 这里兜底剔除不存在的武器
@@ -86,6 +96,17 @@ const ARSENAL_SETS=[
  { id:'ww2', name:'BF7 · 二战兵器', keys:Object.keys(ARSENAL_ERA).filter(k=>ARSENAL_ERA[k]==='ww2'&&WPN_DEFS[k]) },
  { id:'modern', name:'BF8 · 现代兵器', keys:Object.keys(ARSENAL_ERA).filter(k=>ARSENAL_ERA[k]==='modern'&&WPN_DEFS[k]) }
 ];
+// ===== SCAV 拾荒者随机武器池 (二战兵器) =====
+// 拾荒者没有制式装备: 每次出击的主武器从二战兵器里随机抽一把。
+// 排除手枪(主武器位不该是手枪)与迫击炮(曲射支援, 不该当主武器发)。
+const SCAV_WPN_POOL=(()=>{
+const ww2=(ARSENAL_SETS.find(s=>s.id==='ww2')||{keys:[]}).keys;
+return ww2.filter(k=>{ const d=WPN_DEFS[k]; return !!d&&!d.pistol&&!d.mortar; });
+})();
+function rollScavWeapon(){
+if(!SCAV_WPN_POOL.length) return 'm1911';
+return SCAV_WPN_POOL[randi(0,SCAV_WPN_POOL.length-1)];
+}
 let PLAYER_ARSENAL_KEY=(()=>{
  try {
    const k=localStorage.getItem('bf_arsenal_key')||'m4';

@@ -12,7 +12,7 @@ setTimeout(()=>{ div.style.opacity=0; setTimeout(()=>div.remove(),1000); },5200)
 function addKillMsg(txt,team){
 const m=el('msgC');
 m.textContent=txt;
-m.style.color=team===player.team?'#ffe08a':'#ff8a7a';
+m.style.color=team===player.team?'#ffffff':'#ff8a7a';
 m.style.opacity=1;
 clearTimeout(m._t);
 m._t=setTimeout(()=>m.style.opacity=0,2400);
@@ -69,7 +69,7 @@ const S=190, half=S/2, range=90;
 mmC.clearRect(0,0,S,S);
 mmC.save();
 mmC.beginPath(); mmC.arc(half,half,half-2,0,TAU); mmC.clip();
-mmC.fillStyle='rgba(24,32,18,.9)'; mmC.fillRect(0,0,S,S);
+mmC.fillStyle='rgba(32,32,32,.9)'; mmC.fillRect(0,0,S,S);
 const cx=player.alive?player.pos.x:0, cz=player.alive?player.pos.z:0;
 const rot=player.alive?player.yaw:0;
 const toMap=(x,z)=>{
@@ -78,7 +78,7 @@ const c=Math.cos(rot), s=Math.sin(rot);
 const rx=dx*c-dz*s, rz=dx*s+dz*c;
 return [half+rx/range*half, half+rz/range*half];
 };
-mmC.strokeStyle='rgba(150,130,90,.4)'; mmC.lineWidth=5;
+mmC.strokeStyle='rgba(150,150,150,.4)'; mmC.lineWidth=5;
 if(CAMPAIGN.sineRoad){
 mmC.beginPath();
 for(let x=-155;x<=155;x+=10){
@@ -96,7 +96,7 @@ mmC.stroke();
 for(const f of FLAGS){
 const [px,py]=toMap(f.x,f.z);
 mmC.beginPath(); mmC.arc(px,py,10,0,TAU);
-mmC.fillStyle=f.owner===0?'rgba(90,140,220,.75)':f.owner===1?'rgba(220,110,90,.75)':'rgba(160,160,150,.6)';
+mmC.fillStyle=f.owner===0?'rgba(90,140,220,.75)':f.owner===1?'rgba(220,110,90,.75)':'rgba(160,160,160,.6)';
 mmC.fill();
 if(f.capTeam!==-1&&f.cap>0.03){
 mmC.beginPath(); mmC.arc(px,py,12,-HPI,-HPI+f.cap*TAU);
@@ -110,14 +110,14 @@ for(const ex of EXTRACT_POINTS){
 const [px,py]=toMap(ex.x,ex.z);
 mmC.fillStyle='#35e0a0';
 mmC.beginPath(); mmC.moveTo(px,py-7); mmC.lineTo(px+7,py); mmC.lineTo(px,py+7); mmC.lineTo(px-7,py); mmC.closePath(); mmC.fill();
-mmC.fillStyle='#082d20'; mmC.font='bold 8px sans-serif'; mmC.fillText('撤',px,py+3);
+mmC.fillStyle='#2d2d2d'; mmC.font='bold 8px sans-serif'; mmC.fillText('撤',px,py+3);
 }
 }
 if(typeof LOOT_CRATES!=='undefined'){
 for(const lc of LOOT_CRATES){
 if(lc.searched) continue;
 const [px,py]=toMap(lc.x,lc.z);
-mmC.fillStyle='#d8b04a'; mmC.fillRect(px-2.5,py-2.5,5,5);
+mmC.fillStyle='#d8d8d8'; mmC.fillRect(px-2.5,py-2.5,5,5);
 }
 }
 for(const s of soldiers){
@@ -134,12 +134,12 @@ mmC.beginPath(); mmC.arc(px,py,3,0,TAU); mmC.fill();
 }
 for(const n of nades){
 const [px,py]=toMap(n.pos.x,n.pos.z);
-mmC.fillStyle='#ffd050'; mmC.fillRect(px-1.5,py-1.5,3,3);
+mmC.fillStyle='#ffffff'; mmC.fillRect(px-1.5,py-1.5,3,3);
 }
 // 小队标记
 if((SQUAD.mode==='move'||SQUAD.mode==='guard')&&SQUAD.members.length){
 const [px,py]=toMap(SQUAD.pos.x,SQUAD.pos.z);
-mmC.fillStyle=SQUAD.mode==='guard'?'#7dd87d':'#ffd75a';
+mmC.fillStyle=SQUAD.mode==='guard'?'#7dd87d':'#ffd77a';
 mmC.beginPath(); mmC.moveTo(px,py+5); mmC.lineTo(px-4,py-3); mmC.lineTo(px+4,py-3); mmC.closePath(); mmC.fill();
 }
 if(SQUAD.mode==='attack'&&SQUAD.target&&SQUAD.target.alive){
@@ -147,25 +147,6 @@ const [px,py]=toMap(SQUAD.target.pos.x,SQUAD.target.pos.z);
 mmC.strokeStyle='#ff5040'; mmC.lineWidth=2;
 mmC.beginPath(); mmC.arc(px,py,5,0,TAU); mmC.stroke();
 mmC.beginPath(); mmC.moveTo(px-8,py); mmC.lineTo(px+8,py); mmC.moveTo(px,py-8); mmC.lineTo(px,py+8); mmC.stroke();
-}
-for(const t of tanks){
-if(!t.alive) continue;
-const [px,py]=toMap(t.pos.x,t.pos.z);
-if(px<-8||py<-8||px>S+8||py>S+8) continue;
-mmC.fillStyle=t.team===0?'#6da5e8':'#e87a68';
-mmC.fillRect(px-4,py-4,8,8);
-mmC.strokeStyle='#fff'; mmC.lineWidth=1; mmC.strokeRect(px-4,py-4,8,8);
-}
-for(const pl of planes){
-if(!pl.alive) continue;
-const [px,py]=toMap(pl.pos.x,pl.pos.z);
-if(px<-8||py<-8||px>S+8||py>S+8) continue;
-mmC.save();
-mmC.translate(px,py);
-mmC.rotate(-(pl.yaw)+(player.alive?player.yaw:0)+Math.PI);
-mmC.fillStyle=pl.team===0?'#9dc5f8':'#f8a898';
-mmC.beginPath(); mmC.moveTo(0,-5); mmC.lineTo(4,4); mmC.lineTo(0,2); mmC.lineTo(-4,4); mmC.closePath(); mmC.fill();
-mmC.restore();
 }
 if(player.alive){
 mmC.save();
@@ -175,7 +156,7 @@ mmC.beginPath(); mmC.moveTo(0,-6); mmC.lineTo(4,5); mmC.lineTo(-4,5); mmC.closeP
 mmC.restore();
 }
 mmC.restore();
-mmC.strokeStyle='rgba(210,200,160,.4)'; mmC.lineWidth=1.5;
+mmC.strokeStyle='rgba(210,210,210,.4)'; mmC.lineWidth=1.5;
 mmC.beginPath(); mmC.arc(half,half,half-2,0,TAU); mmC.stroke();
 }
 const cpC=el('compass').getContext('2d');
@@ -223,9 +204,9 @@ function drawBigMap(){
 const S=780, half=S/2;
 const toM=(x,z)=>[half+x/(MAP_SIZE/2+10)*half, half+z/(MAP_SIZE/2+10)*half];
 bmC.clearRect(0,0,S,S);
-bmC.fillStyle='rgba(14,20,12,.97)'; bmC.fillRect(0,0,S,S);
+bmC.fillStyle='rgba(20,20,20,.97)'; bmC.fillRect(0,0,S,S);
 // 网格
-bmC.strokeStyle='rgba(140,130,100,.12)'; bmC.lineWidth=1;
+bmC.strokeStyle='rgba(140,140,140,.12)'; bmC.lineWidth=1;
 for(let g=-MAP_HALF;g<=MAP_HALF;g+=50){
 const [gx,gy]=toM(g,0);
 bmC.beginPath(); bmC.moveTo(gx,0); bmC.lineTo(gx,S); bmC.stroke();
@@ -243,7 +224,7 @@ i===0?bmC.moveTo(px,py):bmC.lineTo(px,py);
 bmC.stroke();
 }
 // 道路
-bmC.strokeStyle='rgba(160,140,100,.5)'; bmC.lineWidth=5;
+bmC.strokeStyle='rgba(160,160,160,.5)'; bmC.lineWidth=5;
 if(CAMPAIGN.sineRoad){
 bmC.beginPath();
 for(let x=-155;x<=155;x+=10){
@@ -259,7 +240,7 @@ bmC.moveTo(ax,ay); bmC.lineTo(bx2,by2);
 bmC.stroke();
 }
 // 战壕线
-bmC.strokeStyle='rgba(150,120,80,.25)'; bmC.lineWidth=3;
+bmC.strokeStyle='rgba(150,150,150,.25)'; bmC.lineWidth=3;
 for(const t of (CAMPAIGN.trench||[])){
 bmC.beginPath();
 const [ax,ay]=toM(t[0],t[1]), [bx2,by2]=toM(t[2],t[3]);
@@ -278,7 +259,7 @@ bmC.fillText(TEAM_NAME[t][0],px,py+4);
 for(const f of FLAGS){
 const [px,py]=toM(f.x,f.z);
 bmC.beginPath(); bmC.arc(px,py,15,0,TAU);
-bmC.fillStyle=f.owner===0?'rgba(90,140,220,.85)':f.owner===1?'rgba(220,110,90,.85)':'rgba(150,150,140,.7)';
+bmC.fillStyle=f.owner===0?'rgba(90,140,220,.85)':f.owner===1?'rgba(220,110,90,.85)':'rgba(150,150,150,.7)';
 bmC.fill();
 if(f.capTeam!==-1&&f.cap>0.03){
 bmC.beginPath(); bmC.arc(px,py,18,-HPI,-HPI+f.cap*TAU);
@@ -291,14 +272,14 @@ if(typeof EXTRACT_POINTS!=='undefined'){
 for(const ex of EXTRACT_POINTS){
 const [px,py]=toM(ex.x,ex.z);
 bmC.fillStyle='#35e0a0'; bmC.beginPath(); bmC.arc(px,py,16,0,TAU); bmC.fill();
-bmC.fillStyle='#082d20'; bmC.font='bold 15px sans-serif'; bmC.fillText('撤',px,py+5);
+bmC.fillStyle='#2d2d2d'; bmC.font='bold 15px sans-serif'; bmC.fillText('撤',px,py+5);
 }
 }
 if(typeof LOOT_CRATES!=='undefined'){
 for(const lc of LOOT_CRATES){
 if(lc.searched) continue;
 const [px,py]=toM(lc.x,lc.z);
-bmC.fillStyle='#d8b04a'; bmC.fillRect(px-5,py-5,10,10);
+bmC.fillStyle='#d8d8d8'; bmC.fillRect(px-5,py-5,10,10);
 }
 }
 // 士兵
@@ -316,12 +297,12 @@ bmC.beginPath(); bmC.arc(px,py,4,0,TAU); bmC.fill();
 // 手雷/爆点
 for(const n of nades){
 const [px,py]=toM(n.pos.x,n.pos.z);
-bmC.fillStyle='#ffd050'; bmC.fillRect(px-2,py-2,4,4);
+bmC.fillStyle='#ffffff'; bmC.fillRect(px-2,py-2,4,4);
 }
 // 小队标记
 if((SQUAD.mode==='move'||SQUAD.mode==='guard')&&SQUAD.members.length){
 const [px,py]=toM(SQUAD.pos.x,SQUAD.pos.z);
-bmC.fillStyle=SQUAD.mode==='guard'?'#7dd87d':'#ffd75a';
+bmC.fillStyle=SQUAD.mode==='guard'?'#7dd87d':'#ffd77a';
 bmC.beginPath(); bmC.moveTo(px,py+9); bmC.lineTo(px-7,py-5); bmC.lineTo(px+7,py-5); bmC.closePath(); bmC.fill();
 }
 if(SQUAD.mode==='attack'&&SQUAD.target&&SQUAD.target.alive){
@@ -329,25 +310,6 @@ const [px,py]=toM(SQUAD.target.pos.x,SQUAD.target.pos.z);
 bmC.strokeStyle='#ff5040'; bmC.lineWidth=3;
 bmC.beginPath(); bmC.arc(px,py,9,0,TAU); bmC.stroke();
 bmC.beginPath(); bmC.moveTo(px-13,py); bmC.lineTo(px+13,py); bmC.moveTo(px,py-13); bmC.lineTo(px,py+13); bmC.stroke();
-}
-// 坦克
-for(const t of tanks){
-if(!t.alive) continue;
-const [px,py]=toM(t.pos.x,t.pos.z);
-bmC.fillStyle=t.team===0?'#6da5e8':'#e87a68';
-bmC.fillRect(px-5,py-5,10,10);
-bmC.strokeStyle='#fff'; bmC.lineWidth=1.5; bmC.strokeRect(px-5,py-5,10,10);
-}
-// 飞机
-for(const pl of planes){
-if(!pl.alive) continue;
-const [px,py]=toM(pl.pos.x,pl.pos.z);
-bmC.save();
-bmC.translate(px,py);
-bmC.rotate(-(pl.yaw)+Math.PI);
-bmC.fillStyle=pl.team===0?'#9dc5f8':'#f8a898';
-bmC.beginPath(); bmC.moveTo(0,-7); bmC.lineTo(5,5); bmC.lineTo(0,3); bmC.lineTo(-5,5); bmC.closePath(); bmC.fill();
-bmC.restore();
 }
 // 玩家
 if(player.alive){
@@ -367,13 +329,13 @@ bmC.textAlign='center'; bmC.font='bold 15px sans-serif';
 bmC.fillStyle='#8fc1ff'; bmC.fillText(TEAM_NAME[0]+' '+t0s, half-140, S-22);
 bmC.fillStyle='#ff9c8a'; bmC.fillText(t1s+' '+TEAM_NAME[1], half+140, S-22);
 const mm=Math.floor(Math.max(0,matchTime)/60), ss2=Math.floor(Math.max(0,matchTime)%60);
-bmC.fillStyle='#e8dcb0'; bmC.fillText(`${mm}:${ss2<10?'0':''}${ss2}`, half, S-22);
+bmC.fillStyle='#e8e8e8'; bmC.fillText(`${mm}:${ss2<10?'0':''}${ss2}`, half, S-22);
 let modeLine='';
 if(GAMEMODE==='assault') modeLine='攻防战 · 目标 '+FLAGS[Math.min(assaultIdx,FLAGS.length-1)].id+' 点';
 else if(GAMEMODE==='demolition') modeLine='破袭战 · 补给库 '+DEPOTS.filter(d=>!d.destroyed).length+'/'+DEPOTS.length;
 else if(GAMEMODE==='extract') modeLine='撤离行动 · 搜刮并抵达南侧撤离灯塔';
 else modeLine='征服战 · 抢占全部旗点';
-bmC.fillStyle='#b8ae88'; bmC.font='13px sans-serif';
+bmC.fillStyle='#b8b8b8'; bmC.font='13px sans-serif';
 bmC.fillText(modeLine+' · '+CAMPAIGN.title, half, S-36);
 const sm=SQUAD.members.length?SQUAD.members.filter(s=>s.alive).length:0;
 const stxt=SQUAD.mode==='move'?'进攻标记':SQUAD.mode==='guard'?'驻守标记':SQUAD.mode==='attack'?'攻击指定目标':'跟随';
@@ -387,7 +349,7 @@ const t=player.onVehicle;
  const stallW=(!t.def.chopper&&!t.vtolOn&&t.speed<t.def.spd[0]*0.85)?' · <span style="color:#ff7a5a">失速!</span>':'';
 el('wmode').innerHTML='机体 '+Math.max(0,Math.round(t.hp/t.maxHp*100))+'% · 速度 '+Math.round(t.speed*4)+' · 油门 '+Math.round((t.throttle??0.8)*100)+'%'+stallW;
 el('magN').textContent=Math.round(t.speed*3.6)+'km/h';
-el('magN').style.color='#eee';
+el('magN').style.color='#ffd77a';
 el('resN').textContent='高度 '+Math.round(t.pos.y)+'m';
  const bombTxt=t.def.bombs>0?' · 炸弹 ×'+t.bombs+' [右键/B]':'';
  const vtolTxt=t.def.vtol?(t.vtolOn?' · <span style="color:#7ad8ff">VTOL 悬停</span> [V 退出]':' · [V] 垂直起降'):'';
@@ -409,7 +371,7 @@ const t=player.onVehicle;
 el('wname').textContent=t.name;
 el('wmode').textContent='车况 '+Math.max(0,Math.round(t.hp/t.maxHp*100))+'%';
 el('magN').textContent=Math.round(Math.abs(t.vel)*3.6*2.4)+'km/h';
-el('magN').style.color='#eee';
+el('magN').style.color='#ffd77a';
 el('resN').textContent='载员 '+(t.passengers.length+(t.playerSeat>=0?1:0))+'/'+(t.def.seats||6);
 el('nadeN').textContent='WASD 驾驶 · 附近步兵自动上车 · F 下车';
 } else if(player.onVehicle){
@@ -417,20 +379,20 @@ const t=player.onVehicle;
 el('wname').textContent=t.name;
 el('wmode').textContent='装甲 '+Math.max(0,Math.round(t.hp/t.maxHp*100))+'%';
 el('magN').textContent=t.cannonCd<=0?'就绪':t.cannonCd.toFixed(1);
-el('magN').style.color=t.cannonCd<=0?'#9fd89f':'#e0c080';
+el('magN').style.color=t.cannonCd<=0?'#d8d8d8':'#e0e0e0';
 el('resN').textContent='';
 el('nadeN').textContent='主炮[左键] · 机枪[右键] · 视角[F]';
 } else if(player.onAT){
 el('wname').textContent='57mm 反坦克炮';
 el('wmode').textContent='穿甲弹';
 el('magN').textContent=player.onAT.cd<=0?'就绪':player.onAT.cd.toFixed(1);
-el('magN').style.color=player.onAT.cd<=0?'#9fd89f':'#e0c080';
+el('magN').style.color=player.onAT.cd<=0?'#d8d8d8':'#e0e0e0';
 el('resN').textContent=''; el('nadeN').textContent='';
 } else if(player.onAA){
 el('wname').textContent='防空炮';
 el('wmode').textContent='高爆弹';
 el('magN').textContent='∞';
-el('magN').style.color='#eee';
+el('magN').style.color='#ffd77a';
 el('resN').textContent=''; el('nadeN').textContent='';
 } else if(w){
 el('wname').textContent=player.onMG?'MG42 通用机枪':w.def.name;
@@ -439,11 +401,11 @@ el('magN').textContent=player.onMG?'∞':w.mag;
 el('resN').textContent=player.onMG?'':'/ '+w.reserve;
 el('magN').style.color=(!player.onMG&&w.mag<=Math.max(2,w.def.mag*0.25))?'#ff7060':'#eee';
 // 投掷物自费: 直接显示带入的余量, 与兵种无关
-el('nadeN').textContent='手雷[3] ×'+player.nadeCount+' · 闪光[4] ×'+(player.flashCount||0)+' · 烟雾[5] ×'+player.smokeCount+(player.cls===2?' · 医疗箱[B] ×'+(player.medkitUsed?'0':'1'):'');
+el('nadeN').textContent='手雷[3] ×'+player.nadeCount+' · 闪光[4] ×'+(player.flashCount||0)+' · 烟雾[5] ×'+player.smokeCount+(player.cls===2?' · 医疗箱['+keyLabelOf('skill')+'] ×'+(player.medkitUsed?'0':'1'):'');
 }
 // 血条已移除: 血量完全由左下角人体状态图表达(白/黄/红/黑), 不再显示任何 hp 数字与进度条
 el('stamBar').style.width=(player.stamina*100)+'%';
-if(el('armorHud')) el('armorHud').textContent=player.armorDef?`防弹衣 ${player.armorDef.name} · 减伤 ${Math.round(player.armorResist*100)}%`:'未装备防弹衣';
+if(el('armorHud')) el('armorHud').textContent=player.armorDef?`护甲 ${player.armorDef.name} · 减伤 ${Math.round(player.armorResist*100)}%`+(player.armorMax?` · 耐久 ${Math.round(player.armorDur||0)}/${Math.round(player.armorMax)}`:''):'未装备护甲';
 if(el('lootHud')) el('lootHud').textContent=`战利品 ${runLootTotal()} 件 · 撤离点 ${typeof EXTRACT_POINTS!=='undefined'&&EXTRACT_POINTS.length?Math.round(Math.min(...EXTRACT_POINTS.map(p=>Math.hypot(player.pos.x-p.x,player.pos.z-p.z))))+'m':''}`;
 // 人体状态图: 七部位按血量比例着色(白/黄/红/黑), 取代旧的四肢血条
 if(typeof renderBodyFigure==='function') renderBodyFigure(!player.alive||!player.body);
@@ -499,9 +461,6 @@ el('lowOv').style.opacity=lowA;
 el('supOv').style.opacity=player.suppressV*0.7;
 nadeWarnT-=dt;
 el('nadeWarn').style.display=nadeWarnT>0?'block':'none';
-if(!player.onAA) el('leadPip').style.display='none';
- if(!(player.onVehicle&&player.onVehicle.kind==='tank')){ el('tankPip').style.display='none'; el('mgPip').style.display='none'; el('tankSight').style.display='none'; }
- if(!(player.onVehicle&&player.onVehicle.kind==='plane'&&player.planeView)) el('planeSight').style.display='none';
 // 架枪状态指示
 const bi=el('braceInd');
 if(player.alive&&player.braced){ bi.style.display='block'; bi.className='on'; bi.textContent='▙ 已架枪'; }
@@ -517,7 +476,8 @@ else { ci.style.display='block'; ci.className=''; ci.textContent='滚轮↓ 低�
 const fi=el('flashInd');
 if(fi){
 if(player.alive&&!player.onVehicle&&typeof FLASH!=='undefined'&&FLASH.hasMod){
-fi.style.display='block'; fi.className=FLASH.on?'on':''; fi.textContent=FLASH.on?'✦ 手电 · 开 [G]':'[G] 战术手电';
+const _nm=(typeof FLASH.isLaser!=='undefined'&&FLASH.isLaser)?'激光指示器':'战术手电';
+fi.style.display='block'; fi.className=FLASH.on?'on':''; fi.textContent=FLASH.on?('✦ '+_nm+' · 开 [G]'):('[G] '+_nm);
 } else fi.style.display='none';
 }
 // 手雷蓄力条 (状态由 24_input 的 nadeEquip/nadeCharge* 维护)

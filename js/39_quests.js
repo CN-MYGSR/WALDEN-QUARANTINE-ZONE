@@ -124,9 +124,13 @@ function buyGateMsg(key){
 // 「撤离通行证」本质是一张**船票**: 只有从瓦尔登港登船出海才算离开隔离禁区。
 // 所以在其他地图上持证没有任何作用 —— 不消耗、不解锁结局、也不给重生机会。
 const PASS_MAP='port';
+// 仓库里有没有证 (菜单/市集 UI 用)
 function hasPass(){ return ownedCount(PASS_KEY)>0; }
-// 通行证在当前地图是否真的有效
-function passUsable(){ return CAMPAIGN.id===PASS_MAP && hasPass(); }
+// 本局有没有把证带在身上 —— 通行证是装备槽里的随身物品, 光放仓库不算
+// (META.loadout.pass → 38_tarkov.applyDeployLoadout 写 RUN.passBrought)
+function carryingPass(){ return typeof RUN!=='undefined'&&!!RUN.passBrought; }
+// 通行证在当前地图是否真的有效: 既要在港口, 也要真的带在身上
+function passUsable(){ return CAMPAIGN.id===PASS_MAP && carryingPass(); }
 function consumeExtractionPass(){
  if(META.owned[PASS_KEY]>0){ META.owned[PASS_KEY]--; if(META.owned[PASS_KEY]<=0) delete META.owned[PASS_KEY]; saveMeta(); }
 }
@@ -136,7 +140,8 @@ function extractionBlockedMsg(){ return ''; }
 function extractionPassNotice(){
  if(CAMPAIGN.id!==PASS_MAP)
   return hasPass()?'本图不适用通行证 · 请到「港口」登船':'普通撤离 · 通行证只在「港口」可用';
- if(hasPass()) return '持证 · 登船离开禁区';
+ if(carryingPass()) return '持证 · 登船离开禁区';
+ if(hasPass()) return '证在仓库 · 出击时要在「撤离通行证」槽带上';
  return `普通撤离 · 持证登船离开禁区 (任务 ${questsDoneCount()}/${QUEST_DEFS.length})`;
 }
 
@@ -158,13 +163,13 @@ function addRebirthButton(){
  const P=META.prestige||0;
  const info=document.createElement('div');
  info.id='rebirthInfo';
- info.style.cssText='margin:14px 0 2px;color:#9fb8d0;font-size:13px;text-align:center;line-height:1.6';
- info.innerHTML=`已持「撤离通行证」从港口登船离开禁区 · 当前重生次数 <b style="color:#c9a6ff">NG+${P}</b><br>重生将从零开始：任务重置且目标提高、敌方 NPC 更强、己方 NPC 更弱`;
+ info.style.cssText='margin:14px 0 2px;color:#d0d0d0;font-size:13px;text-align:center;line-height:1.6';
+ info.innerHTML=`已持「撤离通行证」从港口登船离开禁区 · 当前重生次数 <b style="color:#ffffff">NG+${P}</b><br>重生将从零开始：任务重置且目标提高、敌方 NPC 更强、己方 NPC 更弱`;
  const btn=document.createElement('button');
  btn.id='rebirthBtn';
  btn.className='bigBtn';
  btn.textContent=`重 生（NG+${P+1}）`;
- btn.style.cssText='background:#4a3470;border-color:#8a6adf;margin-left:8px';
+ btn.style.cssText='background:#707070;border-color:#dfdfdf;margin-left:8px';
  btn.onclick=()=>{ if(confirm('确定重生？货币、仓库、等级、任务将全部清零！')) doRebirth(); };
  ctr.parentNode.insertBefore(info,ctr);
  ctr.appendChild(btn);
@@ -181,7 +186,8 @@ updateExtraction=function(dt){
   if(nowT-_passWarnT>12){
    _passWarnT=nowT;
    const msg=(CAMPAIGN.id===PASS_MAP)
-    ? '未持「撤离通行证」· 本次为普通撤离，不解锁结局'
+    ? (hasPass()?'未携带「撤离通行证」· 出击前请在装备槽里带上，本次为普通撤离'
+                :'未持「撤离通行证」· 本次为普通撤离，不解锁结局')
     : '本地图不适用「撤离通行证」· 它是瓦尔登港的船票，请到「港口」登船';
    if(typeof showScorePop==='function') showScorePop(msg);
   }
@@ -193,7 +199,7 @@ updateExtraction=function(dt){
 function renderQuestRows(){
  const P=META.prestige||0, done=questsDoneCount();
  const xp=Math.floor(META.xp||0);
- let h=`<div class="arRow"><div class="arBody"><div class="arName">等级 Lv.${META.level||1} · 经验 ${xp} / ${XP_PER_LEVEL}${P?` · <span style="color:#c9a6ff">重生 NG+${P}</span>`:''}</div>`
+ let h=`<div class="arRow"><div class="arBody"><div class="arName">等级 Lv.${META.level||1} · 经验 ${xp} / ${XP_PER_LEVEL}${P?` · <span style="color:#ffffff">重生 NG+${P}</span>`:''}</div>`
   +`<div class="arDesc">任务提供经验与货币 · 每 ${XP_PER_LEVEL} 经验升 1 级（经验归零）· 等级解锁市集商品 · 击杀 +${KILL_XP} 经验</div>`
   +`<div class="qXpBar"><i style="width:${Math.min(100,xp/XP_PER_LEVEL*100)}%"></i></div>`
   +`<div class="arOwned">任务进度 ${done} / ${QUEST_DEFS.length} · ${questsAllDone()?'✅ 撤离通行证已解锁（市集购买）· 到「港口」登船离开禁区':'全部完成后解锁「撤离通行证」'}</div></div></div>`;
@@ -226,8 +232,8 @@ function updateQuestHud(){
  hud.innerHTML=`<div class="qhHead">Lv.${META.level||1}<span class="qhXp"><i style="width:${Math.min(100,xp/XP_PER_LEVEL*100)}%"></i></span>${questsDoneCount()}/${QUEST_DEFS.length}</div>`
   +(act.length?act.map(a=>`<div class="qhRow">${a.q.name}<b>${a.cur}/${a.tgt}</b></div>`).join(''):'<div class="qhRow qhDoneAll">任务全部完成</div>')
   +(hasPass()?(CAMPAIGN.id===PASS_MAP
-     ?'<div class="qhRow" style="color:#ffe08a">已持通行证 · 在「港口」撤离点登船离开禁区</div>'
-     :'<div class="qhRow" style="color:#ffd9a0">已持通行证 · 本地图无效，请到「港口」使用</div>'):'');
+     ?'<div class="qhRow" style="color:#ffffff">已持通行证 · 在「港口」撤离点登船离开禁区</div>'
+     :'<div class="qhRow" style="color:#ffffff">已持通行证 · 本地图无效，请到「港口」使用</div>'):'');
 }
 
 // ---------- 包装: 击杀 (28_hud) ----------
@@ -275,24 +281,21 @@ if(typeof updateRaidHUDBars==='function'){
  updateRaidHUDBars=function(idle){ _qUpdHUD(idle); updateQuestHud(); };
 }
 
-// ---------- 重生难度: 敌方更强 / 己方更弱 (19_bot 乘数) ----------
+// ---------- 重生难度: 只增强敌方 (19_bot 乘数) ----------
+// ⚠️ 2026-09-17: 原先还有一支「己方 NPC 减弱」(血量 -12%/次、反应更慢、散布更大),
+//    用户要求「我方 NPC 和敌方一样强, 套用同一套强度代码」→ 己方削弱整支删掉。
+//    重生难度现在只靠"敌方更强"体现, 不再靠削弱队友。
 function applyPrestigeBot(bot){
  const P=(META&&META.prestige)||0;
  let hm=1,rm=1,sm=1;
- if(P>0){
-  if(bot.team===player.team){
-   // 己方 NPC 减弱: 血量 -12%/次, 反应更慢, 散布更大
-   hm=Math.max(0.5,1-0.12*P); rm=1+0.2*P; sm=1+0.2*P;
-  }else{
-   // 敌方 NPC 增强: 血量 +30%/次, 反应更快, 散布更小
-   hm=1+0.3*P; rm=Math.max(0.55,1-0.12*P); sm=Math.max(0.6,1-0.12*P);
-  }
+ if(P>0&&bot.team!==player.team){
+  // 敌方 NPC 增强: 血量 +30%/次, 反应更快, 散布更小
+  hm=1+0.3*P; rm=Math.max(0.55,1-0.12*P); sm=Math.max(0.6,1-0.12*P);
  }
  bot.hpMul=hm; bot.reactMul=rm; bot.sprMul=sm;
 }
 (function wrapBotSpawn(){
  if(typeof Bot==='undefined'||!Bot.prototype) return;
- const os=Bot.prototype.spawn, ov=Bot.prototype.spawnInVehicle;
+ const os=Bot.prototype.spawn;
  if(os) Bot.prototype.spawn=function(){ applyPrestigeBot(this); return os.apply(this,arguments); };
- if(ov) Bot.prototype.spawnInVehicle=function(){ applyPrestigeBot(this); return ov.apply(this,arguments); };
 })();

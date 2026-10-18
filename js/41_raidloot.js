@@ -8,12 +8,16 @@
 // =====================================================================
 
 // ============================ 配置区 ============================
-// ---- 友方(玩家同阵营) NPC 基础削弱 ----
-// 说明: 与 prestige 削弱叠加(39_quests 的 applyPrestigeBot 先算 prestige, 本文件再乘基础值)
+// ---- 友方(玩家同阵营) NPC 基础系数 ----
+// ⚠️ 2026-09-17 用户要求「我方 NPC 和敌方一样强」→ 三个系数全部改成 1.0（不再削弱）。
+//    原来默认是 hp 0.75 / react 1.30 / spread 1.40 —— 一层**常驻**的削弱:
+//    队友开局就比敌人少 25% 血、反应慢 30%、散布大 40%, 再叠加 ELO/地图系数只给敌方,
+//    结果就是「玩家和敌人都在变强, 我方 NPC 一直很弱」。
+//    这个配置项保留着(方便回退或做难度选项), 但默认值 = 不削弱。
 const FRIENDLY_BOT_CFG = {
-  hp:     0.75,   // 血量倍率, 默认 0.75, 取值范围 0.3 ~ 1.0  (越小越脆)
-  react:  1.30,   // 反应时间倍率, 默认 1.30, 取值范围 1.0 ~ 3.0 (越大越迟钝)
-  spread: 1.40,   // 弹道散布倍率, 默认 1.40, 取值范围 1.0 ~ 3.0 (越大越不准)
+  hp:     1.00,   // 血量倍率, 默认 1.00 = 与敌方同档, 取值范围 0.3 ~ 1.0  (越小越脆)
+  react:  1.00,   // 反应时间倍率, 默认 1.00 = 与敌方同档, 取值范围 1.0 ~ 3.0 (越大越迟钝)
+  spread: 1.00,   // 弹道散布倍率, 默认 1.00 = 与敌方同档, 取值范围 1.0 ~ 3.0 (越大越不准)
   modes:  null    // null = 全部模式生效; 例: ['extract'] 表示仅撤离模式削弱
 };
 
@@ -31,8 +35,8 @@ const AMMO_LOOT_CFG = {
   crateStackMax: 2,     // 单种弹药最多几盒, 默认 2, 范围 1 ~ 5
   corpseChance:  0.80,  // 敌方尸体掉弹药的概率, 默认 0.80, 范围 0 ~ 1
   friendlyCorpseChance: 1.00, // 队友遗体掉弹药的概率, 默认 1.00, 范围 0 ~ 1
-  friendlyWeaponKeep: 0.85,   // 队友遗体保留其武器的概率, 默认 0.85, 范围 0 ~ 1
-  enemyWeaponKeep:    0.45    // 敌方尸体保留其武器的概率, 默认 0.45, 范围 0 ~ 1
+  friendlyWeaponKeep: 1.00,   // 队友遗体保留其武器的概率, 默认 1.00, 范围 0 ~ 1
+  enemyWeaponKeep:    1.00    // 敌方尸体保留其武器的概率, 默认 1.00, 范围 0 ~ 1
 };
 
 // ---------- 弹药类物品 (可拾取 / 可装填 / 可售卖) ----------
@@ -206,7 +210,7 @@ renderLootPanel = function(){
 };
 
 // ==================== GameMode: 削弱玩家方 NPC ====================
-// 模块: GameMode · 调用入口: Bot.prototype.spawn / spawnInVehicle → applyPrestigeBot
+// 模块: GameMode · 调用入口: Bot.prototype.spawn → applyPrestigeBot
 // 39_quests 已经把 applyPrestigeBot 挂到生成流程上; 这里在其结果之上再乘基础削弱系数,
 // 因此 prestige 削弱(己方每级 -12% 血等)与基础削弱自然叠加, 不改动 39 的任何代码。
 const _origApplyPrestigeBot = applyPrestigeBot;
@@ -219,5 +223,6 @@ applyPrestigeBot = function(bot){
   bot.hpMul    = (bot.hpMul    || 1) * FRIENDLY_BOT_CFG.hp;
   bot.reactMul = (bot.reactMul || 1) * FRIENDLY_BOT_CFG.react;
   bot.sprMul   = (bot.sprMul   || 1) * FRIENDLY_BOT_CFG.spread;
-  bot.friendlyNerf = true;
+  // 只有真的削弱了才打标记 —— 默认值全是 1.0 时置位会误导排查
+  if(FRIENDLY_BOT_CFG.hp!==1||FRIENDLY_BOT_CFG.react!==1||FRIENDLY_BOT_CFG.spread!==1) bot.friendlyNerf = true;
 };

@@ -319,7 +319,10 @@ if(!s.alive||s===shooter) continue;
 // 载具乘员: 运兵车车斗乘客暴露可被命中, 其余载具乘员受装甲保护
 if(s.onVehicle&&s.onVehicle.kind!=='apc') continue;
 // 同队 或 同单位 都不吃这颗子弹 (单位见 47_units; 未加载时退化为只按队伍)
-if(shooter&&(s.team===shooter.team||(typeof unitBlocks==='function'&&unitBlocks(shooter,s)))) continue;
+// ⚠️ 友伤例外(2026-09-18 联机需求): 双方都是真人玩家时, 同阵营也吃子弹。
+//    只放行"真人↔真人", AI 队友之间保持原有免疫手感。
+const _ffPair=(s.netRemote||s.isPlayer)&&(shooter.netRemote||shooter.isPlayer);
+if(shooter&&!_ffPair&&(s.team===shooter.team||(typeof unitBlocks==='function'&&unitBlocks(shooter,s)))) continue;
 const seated=s.onVehicle&&s.onVehicle.kind==='apc';
 const eyeY=s.pos.y+(seated?1.35:(s.prone?0.5:s.crouch?1.15:1.62));
 const hx=s.pos.x-o.x, hy=eyeY+0.06-o.y, hz=s.pos.z-o.z;
@@ -333,13 +336,4 @@ const r=rayCyl(o,dir,c,bestT);
 if(r){ const relH=r.t?o.y+dir.y*r.t-s.pos.y:s.pos.y; best={sol:s,t:r.t,head:false,part:limbOf(relH)}; bestT=r.t; }
 }
 return best;
-}
-const rockets=[];
-function fireRocket(shooter,origin,dir,def,vis){
-const vel=dir.clone().multiplyScalar(85);
-shells.push({pos:origin.clone(),vel,team:shooter.team,owner:shooter,life:3.6,kind:'at',dmgV:def.atDmg||320,pen:(def.atDmg||320)>360?170:150,trail:0,rocket:true});
-spawnP(PT.flash,origin.x,origin.y,origin.z, dir.x*2,dir.y*2,dir.z*2, 0.6,6,0.1,1,0,true);
-spawnP(PT.dark,origin.x,origin.y,origin.z, dir.x*2+rand(-1,1),1.5,dir.z*2+rand(-1,1), 0.9,2.5,0.8,0.7,0.5);
-AudioSys.cannon(origin.distanceTo(camera.position));
-shooter.lastFiredT=nowT;
 }

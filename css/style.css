@@ -1,4 +1,6 @@
 * { margin:0; padding:0; box-sizing:border-box; }
+/* 表单控件统一中性色: 浏览器默认的 accent-color 是蓝色, 与「深灰+白」的配色不搭 */
+input[type="range"],input[type="checkbox"],progress { accent-color:#d8d8d8; }
 html,body { width:100%; height:100%; overflow:hidden; background:#000; font-family:"Segoe UI","Microsoft YaHei",sans-serif; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
 canvas.game { display:block; }
 .hidden { display:none !important; }
@@ -7,6 +9,9 @@ canvas.game { display:block; }
 #touchUI { display:none; position:fixed; inset:0; z-index:40; pointer-events:none;
 --sa-l:env(safe-area-inset-left,0px); --sa-r:env(safe-area-inset-right,0px); --sa-b:env(safe-area-inset-bottom,0px); --sa-t:env(safe-area-inset-top,0px); }
 body.mobile #touchUI { display:block; }
+/* 菜单/部署/结算面板打开时隐藏触控层 —— 否则 #tLook 会吃掉原生按钮的触摸 (见 31_touch.js)。
+   注意: 这条必须排在 body.layoutEdit 之前, 否则从设置页进「布局编辑」时触控层显示不出来。 */
+body.uiOpen #touchUI { display:none !important; }
 /* 视角层: 全屏最底层, 未命中按钮/摇杆的触摸都由它转动视角 */
 #tLook { position:absolute; inset:0; pointer-events:auto; }
 /* 浮动摇杆区: 左下 42% x 60% 区域, 落指即为摇杆原点 */
@@ -17,64 +22,98 @@ body.mobile #touchUI { display:block; }
 #tKnob { position:absolute; left:50%; top:50%; width:54px; height:54px; margin:-27px; border-radius:50%; background:rgba(255,255,255,.28); border:1px solid rgba(255,255,255,.4); box-shadow:0 2px 8px rgba(0,0,0,.4); }
 #tStick.sprint #tKnob { background:rgba(140,220,120,.5); border-color:rgba(160,255,140,.8); }
 .tbtn { position:fixed; pointer-events:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:1px;
-color:rgba(255,255,255,.88); background:rgba(10,14,10,.42); border:1.5px solid rgba(255,255,255,.28); border-radius:50%;
+color:rgba(255,255,255,.88); background:rgba(14,14,14,.42); border:1.5px solid rgba(255,255,255,.28); border-radius:50%;
 text-shadow:0 1px 2px #000; -webkit-tap-highlight-color:transparent; }
 .tbtn .tIco { font-size:20px; line-height:1; pointer-events:none; }
 .tbtn .tLbl { font-size:10px; letter-spacing:1px; opacity:.85; pointer-events:none; }
 .tbtn.sm .tIco { font-size:15px; }
 .tbtn.sm .tLbl { font-size:9px; }
-.tbtn.press,.tbtn.on { background:rgba(255,215,110,.32); border-color:rgba(255,220,140,.85); }
+.tbtn.press,.tbtn.on { background:rgba(255,255,255,.32); border-color:rgba(255,255,255,.85); }
 #touchUI .hiddenT { display:none !important; }
+/* ===== 按钮布局编辑模式 (51_settings.js) ===== */
+/* 编辑时强制显示触控层(桌面也能预览), 按钮加虚线框; 摇杆区隐藏, 免得抢走拖动 */
+body.layoutEdit #touchUI { display:block !important; }
+body.layoutEdit #tStickZone { display:none !important; }
+body.layoutEdit .tbtn { outline:1px dashed rgba(255,255,255,.85); opacity:.94; }
+/* ===== 开发者控制台 (52_devconsole.js) ===== */
+#devCon { position:fixed; left:0; right:0; bottom:0; max-height:62%; z-index:120; display:flex; flex-direction:column;
+ background:rgba(10,10,10,.92); border-top:1px solid rgba(120,220,160,.45); color:#f0f0f0;
+ font-family:Consolas,"Cascadia Mono",Menlo,monospace; font-size:13px; }
+#devCon.hidden { display:none !important; }
+#devConLog { flex:1 1 auto; overflow-y:auto; padding:8px 12px; line-height:1.5; white-space:pre-wrap; word-break:break-all; }
+#devConLog .devLine.err { color:#ff9c8a; }
+#devConLog .devLine.ok { color:#9fe8a8; }
+#devConLog .devLine.echo { color:#8fc1ff; }
+#devConRow { flex:0 0 auto; display:flex; align-items:center; gap:8px; padding:6px 12px; border-top:1px solid rgba(120,220,160,.25); background:rgba(0,0,0,.35); }
+#devConPrompt { color:#7dd87d; font-weight:bold; }
+#devConInput { flex:1 1 auto; background:transparent; border:0; outline:0; color:#ffffff; font-family:inherit; font-size:13px; }
+#devConHint { flex:0 0 auto; padding:4px 12px 8px; color:#8f8f8f; font-size:11px; letter-spacing:.5px; }
+body.mobile #devCon { font-size:12px; }
+#layoutBar { position:fixed; left:50%; top:10px; transform:translateX(-50%); z-index:80;
+ display:flex; align-items:center; gap:8px; padding:6px 12px; border-radius:8px;
+ background:rgba(14,14,14,.92); border:1px solid rgba(216,216,216,.5); color:#e8e8e8; font-size:12px; }
 /* —— 右手主簇 —— */
 #tFire   { right:calc(30px + var(--sa-r)); bottom:calc(84px + var(--sa-b)); width:104px; height:104px; background:rgba(150,42,22,.4); }
 #tFire .tIco { font-size:34px; }
-#tFireL  { left:calc(210px + var(--sa-l)); bottom:calc(196px + var(--sa-b)); width:64px; height:64px; background:rgba(150,42,22,.32); }
 #tAds    { right:calc(152px + var(--sa-r)); bottom:calc(64px + var(--sa-b)); width:66px; height:66px; }
 #tJump   { right:calc(22px + var(--sa-r)); bottom:calc(206px + var(--sa-b)); width:60px; height:60px; }
-#tCrouch { right:calc(98px + var(--sa-r)); bottom:calc(198px + var(--sa-b)); width:52px; height:52px; }
-#tReload { right:calc(160px + var(--sa-r)); bottom:calc(148px + var(--sa-b)); width:52px; height:52px; }
-#tSwap   { right:calc(216px + var(--sa-r)); bottom:calc(84px + var(--sa-b)); width:48px; height:48px; }
-#tMelee  { right:calc(56px + var(--sa-r)); bottom:calc(282px + var(--sa-b)); width:48px; height:48px; }
-/* —— 投掷物 —— */
-#tNade     { right:calc(148px + var(--sa-r)); bottom:calc(238px + var(--sa-b)); width:56px; height:56px; background:rgba(120,110,40,.35); }
-#tNadeType { right:calc(154px + var(--sa-r)); bottom:calc(300px + var(--sa-b)); width:44px; height:44px; border-radius:10px; }
-/* —— 左手簇 —— */
-#tHeal   { left:calc(24px + var(--sa-l)); top:38%; width:50px; height:50px; background:rgba(50,110,60,.4); }
-#tSkill  { left:calc(24px + var(--sa-l)); top:calc(38% + 58px); width:50px; height:50px; background:rgba(60,90,140,.35); }
-#tBuildSel { left:calc(82px + var(--sa-l)); top:calc(38% + 64px); width:44px; height:44px; border-radius:10px; }
-#tBrace  { left:calc(24px + var(--sa-l)); top:calc(38% - 58px); width:48px; height:48px; }
+#tCrouch { right:calc(176px + var(--sa-r)); bottom:calc(146px + var(--sa-b)); width:52px; height:52px; }
+#tReload { right:calc(220px + var(--sa-r)); bottom:calc(60px + var(--sa-b)); width:52px; height:52px; }
+#tSwap   { right:calc(276px + var(--sa-r)); bottom:calc(74px + var(--sa-b)); width:48px; height:48px; }
+#tMelee  { right:calc(56px + var(--sa-r)); bottom:calc(268px + var(--sa-b)); width:48px; height:48px; }
+#tNade     { right:calc(126px + var(--sa-r)); bottom:calc(210px + var(--sa-b)); width:56px; height:56px; background:rgba(120,120,120,.35); }
+#tNadeType { right:calc(186px + var(--sa-r)); bottom:calc(240px + var(--sa-b)); width:44px; height:44px; border-radius:10px; }
+/* —— 左手工具簇: 两列三行, 都在摇杆区上方, 不挡小地图 —— */
+#tBrace    { left:calc(24px + var(--sa-l)); top:calc(38% - 58px); width:48px; height:48px; }
+#tSkill    { left:calc(82px + var(--sa-l)); top:calc(38% - 58px); width:48px; height:48px; background:rgba(60,90,140,.35); }
+#tHeal     { left:calc(24px + var(--sa-l)); top:38%; width:50px; height:50px; background:rgba(50,110,60,.4); }
+#tNvg      { left:calc(82px + var(--sa-l)); top:38%; width:48px; height:48px; background:rgba(70,120,90,.36); }
+#tEat      { left:calc(24px + var(--sa-l)); top:calc(38% + 58px); width:50px; height:50px; background:rgba(120,120,120,.36); }
+/* 药品轮盘: 左手工具簇 2x3 已满(tBrace/tSkill, tHeal/tNvg, tEat/tBuildSel), 放中排第三列。
+   不能放 (82, 38%+58) —— 那是 tBuildSel, 会 48x48 完全重叠导致按不动(布局检查器抓到的)。 */
+#tMedWheel { left:calc(140px + var(--sa-l)); top:38%; width:48px; height:48px; background:rgba(130,105,55,.4); }
+#tBuildSel { left:calc(82px + var(--sa-l)); top:calc(38% + 58px); width:48px; height:48px; border-radius:10px; }
+/* 侧身探头 / 手电 / 背包: 右手拇指可及, 避开小地图(18..208)与摇杆区 */
+#tLeanL  { right:calc(284px + var(--sa-r)); bottom:calc(206px + var(--sa-b)); width:48px; height:48px; }
+#tLeanR  { right:calc(232px + var(--sa-r)); bottom:calc(206px + var(--sa-b)); width:48px; height:48px; }
+#tFlash  { right:calc(284px + var(--sa-r)); bottom:calc(148px + var(--sa-b)); width:46px; height:46px; background:rgba(140,140,140,.34); }
+#tBag    { right:calc(232px + var(--sa-r)); bottom:calc(148px + var(--sa-b)); width:46px; height:46px; background:rgba(70,92,124,.38); }
 /* —— 情境交互键: 屏幕右中, 醒目 —— */
-#tInteract { right:calc(120px + var(--sa-r)); top:34%; min-width:96px; height:52px; border-radius:26px; padding:0 18px;
-background:rgba(220,180,60,.34); border-color:rgba(255,225,140,.9); }
+#tInteract { right:calc(120px + var(--sa-r)); top:calc(46px + var(--sa-t)); min-width:96px; height:46px; border-radius:23px; padding:0 18px;
+background:rgba(220,220,220,.34); border-color:rgba(255,255,255,.9); }
 #tInteract .tLbl { font-size:14px; letter-spacing:2px; }
+/* —— 搜刮面板: 只在面板打开时浮出, 放屏幕下方中间, 左手拇指可及 —— */
+#tSelUp   { left:calc(50% - 150px + var(--sa-l)); bottom:calc(26px + var(--sa-b)); width:54px; height:46px; border-radius:10px; }
+#tSelDown { left:calc(50% - 88px + var(--sa-l)); bottom:calc(26px + var(--sa-b)); width:54px; height:46px; border-radius:10px; }
+#tTake    { left:calc(50% - 22px + var(--sa-l)); bottom:calc(22px + var(--sa-b)); width:62px; height:52px; border-radius:10px; background:rgba(220,220,220,.34); border-color:rgba(255,255,255,.85); }
 /* —— 小队/系统 —— */
-#tSquad  { left:calc(120px + var(--sa-l)); top:calc(8px + var(--sa-t)); width:46px; height:34px; border-radius:8px; }
+#tAttack { left:calc(120px + var(--sa-l)); top:calc(8px + var(--sa-t)); width:46px; height:34px; border-radius:8px; }
 #tGuard  { left:calc(172px + var(--sa-l)); top:calc(8px + var(--sa-t)); width:46px; height:34px; border-radius:8px; }
 #tFollow { left:calc(224px + var(--sa-l)); top:calc(8px + var(--sa-t)); width:46px; height:34px; border-radius:8px; }
 #tMap    { left:calc(276px + var(--sa-l)); top:calc(8px + var(--sa-t)); width:46px; height:34px; border-radius:8px; }
 #tScore  { right:calc(64px + var(--sa-r)); top:calc(8px + var(--sa-t)); width:44px; height:34px; border-radius:8px; }
 #tMenu   { right:calc(12px + var(--sa-r)); top:calc(8px + var(--sa-t)); width:44px; height:34px; border-radius:8px; }
-#tMenu .tLbl,#tScore .tLbl,#tSquad .tLbl,#tGuard .tLbl,#tFollow .tLbl,#tMap .tLbl { font-size:12px; }
+#tMenu .tLbl,#tScore .tLbl,#tAttack .tLbl,#tGuard .tLbl,#tFollow .tLbl,#tMap .tLbl { font-size:12px; }
 body.mobile #hint { display:none; }
 body.mobile #ctrlHelp { display:none; }
 body.mobile #interact { display:none !important; }
 body.mobile #clsTip { display:none !important; }
 body.mobile #braceInd { display:none !important; }
 /* ===== 主菜单 ===== */
-.menuMain { background:rgba(8,12,6,.78) !important; backdrop-filter:blur(3px); }
-.gameLogo { text-align:center; font-size:52px; font-weight:800; letter-spacing:14px; color:#e8dcb0; text-shadow:0 2px 0 #4a3f22, 0 6px 22px rgba(0,0,0,.8); margin-top:10px; }
-.gameLogoSub { text-align:center; font-size:13px; letter-spacing:6px; color:rgba(220,210,170,.55); margin:4px 0 14px; }
+.menuMain { background:rgba(12,12,12,.78) !important; backdrop-filter:blur(3px); }
+.gameLogo { text-align:center; font-size:52px; font-weight:800; letter-spacing:14px; color:#e8e8e8; text-shadow:0 2px 0 #4a4a4a, 0 6px 22px rgba(0,0,0,.8); margin-top:10px; }
+.gameLogoSub { text-align:center; font-size:13px; letter-spacing:6px; color:rgba(220,220,220,.55); margin:4px 0 14px; }
 /* 主页广告语: 上下细线夹一句 slogan, 暗金色 + 斜体, 与暗绿/暗金主题一致 */
 .gameTagline{
 text-align:center; margin:2px auto 14px; padding:9px 0; max-width:560px;
 font-size:16px; letter-spacing:4px; font-style:italic; font-weight:600;
-color:#d8b56a; text-shadow:0 2px 12px rgba(0,0,0,.85);
-border-top:1px solid rgba(216,181,106,.22);
-border-bottom:1px solid rgba(216,181,106,.22);
+color:#d8d8d8; text-shadow:0 2px 12px rgba(0,0,0,.85);
+border-top:1px solid rgba(216,216,216,.22);
+border-bottom:1px solid rgba(216,216,216,.22);
 }
 .menuNav { display:flex; flex-direction:column; align-items:center; gap:12px; margin:30px 0 26px; }
 .navBtn { width:320px; font-size:19px; letter-spacing:8px; padding:14px 0; }
-.mSubTitle { text-align:center; letter-spacing:8px; color:#d8c894; font-weight:600; margin-bottom:12px; }
+.mSubTitle { text-align:center; letter-spacing:8px; color:#d8d8d8; font-weight:600; margin-bottom:12px; }
 .backBtn { opacity:.8; }
 #mHome { text-align:center; }
 #crosshair { position:absolute; left:50%; top:50%; width:0; height:0; --gap:8px; }
@@ -92,17 +131,17 @@ border-bottom:1px solid rgba(216,181,106,.22);
 #hitmark span:nth-child(4){ transform:translate(6px,4px) rotate(45deg); }
 #hitmark.kill span { background:#ff5343; }
 #ammoPanel { position:absolute; right:26px; bottom:24px; color:#eee; text-align:right; text-shadow:0 1px 3px rgba(0,0,0,.9); }
-#ammoPanel #wname { font-size:15px; letter-spacing:2px; color:#d8c894; }
-#ammoPanel #wmode { font-size:11px; color:#9aa; letter-spacing:1px; margin-left:8px; }
+#ammoPanel #wname { font-size:15px; letter-spacing:2px; color:#d8d8d8; }
+#ammoPanel #wmode { font-size:11px; color:#aaa; letter-spacing:1px; margin-left:8px; }
 #ammoPanel .ammoRow { font-size:40px; font-weight:700; line-height:1; margin-top:2px; }
-#ammoPanel #resN { font-size:20px; color:#9a9a8a; font-weight:400; }
-#ammoPanel #nadeN { font-size:14px; color:#bba; margin-top:3px; }
+#ammoPanel #resN { font-size:20px; color:#9a9a9a; font-weight:400; }
+#ammoPanel #nadeN { font-size:14px; color:#bbb; margin-top:3px; }
 #healthPanel { position:absolute; left:26px; bottom:24px; display:flex; align-items:flex-end; gap:8px; }
 /* 左下角人体状态图: 白=满血 黄=轻~中伤 红=重伤 黑=严重重伤/已报废 (取代旧血条 + 四肢血条) */
 #bodyWrap { flex:0 0 56px; display:flex; flex-direction:column; align-items:center; gap:3px; }
 /* 总血量读数: 全身总血量上限 440 (头35 胸85 胃70 左臂60 右臂60 左腿65 右腿65) */
-#hpTotal { font-size:12px; letter-spacing:1px; color:#e8e2d0; text-shadow:0 1px 2px rgba(0,0,0,.9); white-space:nowrap; }
-#hpTotal.hurt { color:#e8c94a; }
+#hpTotal { font-size:12px; letter-spacing:1px; color:#e8e8e8; text-shadow:0 1px 2px rgba(0,0,0,.9); white-space:nowrap; }
+#hpTotal.hurt { color:#e8e8e8; }
 #hpTotal.bad { color:#e0705c; }
 #bodyFig { flex:0 0 56px; width:56px; height:96px; filter:drop-shadow(0 1px 2px rgba(0,0,0,.9)); }
 #bodyFig svg { display:block; width:56px; height:96px; }
@@ -112,13 +151,13 @@ border-bottom:1px solid rgba(216,181,106,.22);
 #bodyFig .bp { fill:#f2f2f2; stroke:rgba(0,0,0,.65); stroke-width:1.4; transition:fill .18s; }
 #vitalsCol { flex:1 1 auto; padding-bottom:2px; }
 #stamBarWrap { margin-top:5px; width:160px; height:4px; background:rgba(0,0,0,.5); }
-#stamBar { height:100%; width:100%; background:rgba(220,220,190,.65); }
-#minimapWrap { position:absolute; left:18px; top:18px; width:190px; height:190px; border:2px solid rgba(210,200,160,.35); border-radius:4px; background:rgba(10,14,8,.72); overflow:hidden; }
-#mmHint { position:absolute; left:50%; bottom:2px; transform:translateX(-50%); color:rgba(255,235,170,.6); font-size:10px; letter-spacing:1px; text-shadow:0 1px 3px #000; pointer-events:none; }
+#stamBar { height:100%; width:100%; background:rgba(220,220,220,.65); }
+#minimapWrap { position:absolute; left:18px; top:18px; width:190px; height:190px; border:2px solid rgba(210,210,210,.35); border-radius:4px; background:rgba(14,14,14,.72); overflow:hidden; }
+#mmHint { position:absolute; left:50%; bottom:2px; transform:translateX(-50%); color:rgba(255,255,255,.6); font-size:10px; letter-spacing:1px; text-shadow:0 1px 3px #000; pointer-events:none; }
 #bigmapWrap { position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:12; pointer-events:none; text-align:center; }
-#bigmap { width:min(92vmin,780px); height:min(92vmin,780px); border:2px solid rgba(210,200,160,.5); border-radius:6px; background:#0e140c; box-shadow:0 0 60px rgba(0,0,0,.85); }
-#bigmapTitle { color:#e8dcb0; font-size:17px; letter-spacing:6px; margin-bottom:6px; text-shadow:0 2px 8px #000; }
-#bigmapHint { color:rgba(230,225,200,.75); font-size:12px; letter-spacing:1px; margin-top:6px; text-shadow:0 2px 6px #000; }
+#bigmap { width:min(92vmin,780px); height:min(92vmin,780px); border:2px solid rgba(210,210,210,.5); border-radius:6px; background:#141414; box-shadow:0 0 60px rgba(0,0,0,.85); }
+#bigmapTitle { color:#e8e8e8; font-size:17px; letter-spacing:6px; margin-bottom:6px; text-shadow:0 2px 8px #000; }
+#bigmapHint { color:rgba(230,230,230,.75); font-size:12px; letter-spacing:1px; margin-top:6px; text-shadow:0 2px 6px #000; }
 #minimap { width:100%; height:100%; }
 #topBar { position:absolute; top:14px; left:50%; transform:translateX(-50%); text-align:center; color:#ddd; text-shadow:0 1px 3px #000; }
 #tickets { font-size:17px; font-weight:600; letter-spacing:1px; }
@@ -134,45 +173,51 @@ border-bottom:1px solid rgba(216,181,106,.22);
 #killfeed { position:absolute; right:22px; top:18px; text-align:right; font-size:13px; color:#ddd; text-shadow:0 1px 2px #000; }
 #killfeed div { margin-bottom:4px; background:rgba(0,0,0,.4); padding:3px 9px; border-radius:3px; opacity:1; transition:opacity 1s; }
 #killfeed .kf0 { color:#9cc4f7; } #killfeed .kf1 { color:#f7a99c; }
-#killfeed .me { color:#ffd77a; font-weight:700; }
-#xrayCv { position:absolute; right:18px; top:118px; display:none; pointer-events:none; z-index:60; border-radius:6px; box-shadow:0 0 14px rgba(60,150,255,.28); }
-#msgC { position:absolute; left:50%; top:26%; transform:translateX(-50%); font-size:24px; letter-spacing:3px; color:#f0e6c8; text-shadow:0 2px 8px #000; opacity:0; transition:opacity .4s; text-align:center; }
-#scorePop { position:absolute; left:50%; top:58%; transform:translateX(-50%); font-size:17px; color:#ffd77a; text-shadow:0 1px 4px #000; opacity:0; }
+#killfeed .me { color:#ffffff; font-weight:700; }
+/* #xrayCv 已删除 (2026-09-18): X光击杀回放只被载具炮弹触发, 载具删除后一并移除 */
+#msgC { position:absolute; left:50%; top:26%; transform:translateX(-50%); font-size:24px; letter-spacing:3px; color:#f0f0f0; text-shadow:0 2px 8px #000; opacity:0; transition:opacity .4s; text-align:center; }
+#scorePop { position:absolute; left:50%; top:58%; transform:translateX(-50%); font-size:17px; color:#ffffff; text-shadow:0 1px 4px #000; opacity:0; }
 #capPanel { position:absolute; left:50%; bottom:110px; transform:translateX(-50%); width:240px; text-align:center; color:#eee; text-shadow:0 1px 3px #000; display:none; }
 #capLetter { font-size:26px; font-weight:700; }
 #capBarWrap { width:100%; height:7px; background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.3); margin-top:4px; }
 #capBarFill { height:100%; width:0; background:#8fc1ff; transition:width .2s linear; }
 #capTxt { font-size:12px; color:#ccc; margin-top:3px; }
 #interact { position:absolute; left:50%; top:60%; transform:translateX(-50%); color:#fff; font-size:16px; text-shadow:0 1px 4px #000; background:rgba(0,0,0,.45); padding:6px 16px; border-radius:4px; display:none; }
-#interact b { color:#ffd77a; }
-#braceInd { position:absolute; left:50%; top:56%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,232,160,.92); text-shadow:0 1px 3px #000; display:none; pointer-events:none; }
-#braceInd.on { color:#ffe8a0; background:rgba(0,0,0,.4); padding:3px 10px; border-radius:3px; border:1px solid rgba(255,220,140,.35); }
+#interact b { color:#ffffff; }
+#braceInd { position:absolute; left:50%; top:56%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.92); text-shadow:0 1px 3px #000; display:none; pointer-events:none; }
+#braceInd.on { color:#ffffff; background:rgba(0,0,0,.4); padding:3px 10px; border-radius:3px; border:1px solid rgba(255,255,255,.35); }
 /* 高低姿态提示: 从 top:63%(正好压在武器模型上) 下移到 84%, 落在武器下方的空白区 */
 #carryInd { position:absolute; left:50%; top:84%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(190,220,255,.9); text-shadow:0 1px 3px #000; display:none; pointer-events:none; white-space:nowrap; }
-#carryInd.low { color:#7fe0c0; background:rgba(0,10,8,.45); padding:3px 10px; border-radius:3px; border:1px solid rgba(120,230,190,.4); }
-#flashInd { position:absolute; left:50%; top:78%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,236,180,.85); text-shadow:0 1px 3px #000; display:none; pointer-events:none; white-space:nowrap; }
-#flashInd.on { color:#fff2c8; background:rgba(40,30,0,.45); padding:3px 10px; border-radius:3px; border:1px solid rgba(255,225,150,.45); }
+#carryInd.low { color:#7fe0c0; background:rgba(10,10,10,.45); padding:3px 10px; border-radius:3px; border:1px solid rgba(120,230,190,.4); }
+#flashInd { position:absolute; left:50%; top:78%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.85); text-shadow:0 1px 3px #000; display:none; pointer-events:none; white-space:nowrap; }
+#flashInd.on { color:#ffffff; background:rgba(40,40,40,.45); padding:3px 10px; border-radius:3px; border:1px solid rgba(255,255,255,.45); }
 body.mobile #flashInd { display:none !important; }
-#nadeInd { position:absolute; left:50%; top:70%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,220,180,.9); text-shadow:0 1px 3px #000; display:none; pointer-events:none; white-space:nowrap; text-align:center; }
-#nadeInd.on { color:#ffd9a0; }
-#nadeIndBarWrap { display:block; width:150px; height:5px; margin:5px auto 0; background:rgba(0,0,0,.55); border:1px solid rgba(255,220,160,.45); border-radius:3px; overflow:hidden; }
-#nadeIndBar { display:block; width:0%; height:100%; background:linear-gradient(90deg,#e0a24a,#ffd9a0); }
+#nadeInd { position:absolute; left:50%; top:70%; transform:translateX(-50%); font-size:12px; letter-spacing:2px; color:rgba(255,255,255,.9); text-shadow:0 1px 3px #000; display:none; pointer-events:none; white-space:nowrap; text-align:center; }
+#nadeInd.on { color:#ffffff; }
+#nadeIndBarWrap { display:block; width:150px; height:5px; margin:5px auto 0; background:rgba(0,0,0,.55); border:1px solid rgba(255,255,255,.45); border-radius:3px; overflow:hidden; }
+#nadeIndBar { display:block; width:0%; height:100%; background:linear-gradient(90deg,#e0e0e0,#ffffff); }
 body.mobile #carryInd { display:none !important; }
-#squadHUD { position:absolute; left:18px; top:214px; color:#cfe8cf; font-size:12px; line-height:1.5; text-shadow:0 1px 2px #000; background:rgba(10,14,8,.55); padding:5px 9px; border-radius:3px; border:1px solid rgba(140,200,140,.25); display:none; }
+/* 快捷提示是 "[H] 无药品 · [K] 无食物" 这类键盘说明, 触屏上没有意义, 且会挡住底部中间的搜刮按键 */
+body.mobile #quickHud { display:none !important; }
+/* 任务追踪面板 (right:14 top:118 w:212) 正好压住右侧战斗簇, 手机端隐藏; 任务进度可在军械库查看 */
+body.mobile #questHud { display:none !important; }
+/* 战利品/撤离点距离条 (right:14 top:92) 压住右上的近战键; 撤离点在小地图有标记, 战利品数在背包里能看 */
+body.mobile #lootHud { display:none !important; }
+#squadHUD { position:absolute; left:18px; top:214px; color:#e8e8e8; font-size:12px; line-height:1.5; text-shadow:0 1px 2px #000; background:rgba(14,14,14,.55); padding:5px 9px; border-radius:3px; border:1px solid rgba(200,200,200,.25); display:none; }
 #squadHUD b { color:#8dffa8; }
 #nadeWarn { position:absolute; left:50%; top:42%; transform:translateX(-50%); color:#ff4a3a; font-size:22px; font-weight:700; text-shadow:0 0 8px rgba(255,0,0,.6); display:none; animation:flagBlink .35s infinite; }
-#leadPip { position:absolute; width:20px; height:20px; box-sizing:border-box; border:2px solid rgba(255,220,120,.95); border-radius:50%; margin:-10px 0 0 -10px; display:none; box-shadow:0 0 6px rgba(0,0,0,.7); }
-#leadPip::after { content:""; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; background:rgba(255,220,120,.95); border-radius:50%; }
+#leadPip { position:absolute; width:20px; height:20px; box-sizing:border-box; border:2px solid rgba(255,255,255,.95); border-radius:50%; margin:-10px 0 0 -10px; display:none; box-shadow:0 0 6px rgba(0,0,0,.7); }
+#leadPip::after { content:""; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; background:rgba(255,255,255,.95); border-radius:50%; }
 #heatWrap { position:absolute; left:50%; bottom:80px; transform:translateX(-50%); width:200px; height:6px; background:rgba(0,0,0,.6); border:1px solid rgba(255,255,255,.3); display:none; }
-#heatFill { height:100%; width:0; background:linear-gradient(90deg,#e8c56a,#e83a1a); }
+#heatFill { height:100%; width:0; background:linear-gradient(90deg,#e8e8e8,#e83a1a); }
 #tankPip { position:absolute; width:30px; height:30px; margin:-15px 0 0 -15px; display:none; }
-#tankPip::before { content:""; position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px; box-sizing:border-box; border:2px dashed rgba(255,200,90,.75); border-radius:50%; box-shadow:0 0 5px rgba(0,0,0,.8); }
-#tankPip::after { content:""; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; background:rgba(255,200,90,.9); border-radius:50%; }
+#tankPip::before { content:""; position:absolute; left:50%; top:50%; width:22px; height:22px; margin:-11px; box-sizing:border-box; border:2px dashed rgba(255,255,255,.75); border-radius:50%; box-shadow:0 0 5px rgba(0,0,0,.8); }
+#tankPip::after { content:""; position:absolute; left:50%; top:50%; width:3px; height:3px; margin:-1.5px; background:rgba(255,255,255,.9); border-radius:50%; }
 /* 坦克主炮分划瞄准具: 战雷式 chevron + 测距刻度, 与步兵准星/预测圈完全区分 */
 #tankSight { position:absolute; left:50%; top:50%; width:150px; height:150px; margin:-75px 0 0 -75px; display:none; pointer-events:none; opacity:.95;
 background-repeat:no-repeat; background-size:contain;
 background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 150 150'%3E%3Cg stroke='%23101010' stroke-width='2.4' fill='none' opacity='0.9'%3E%3Cpath d='M75 78 L69 90 M75 78 L81 90'/%3E%3Cpath d='M6 75 h34 M110 75 h34'/%3E%3Cpath d='M75 116 v28'/%3E%3Cpath d='M50 75 h8 M92 75 h8'/%3E%3Cpath d='M75 96 l-4 8 h8 z'/%3E%3C/g%3E%3Cg fill='%23101010' opacity='0.9'%3E%3Cpath d='M44 71 l8 4 -8 4 z'/%3E%3Cpath d='M106 71 l-8 4 8 4 z'/%3E%3C/g%3E%3Cg stroke='%23101010' stroke-width='1.4' opacity='0.75'%3E%3Cpath d='M58 60 v6 M75 56 v6 M92 60 v6'/%3E%3C/g%3E%3Ccircle cx='75' cy='75' r='1.8' fill='%23ffb02e'/%3E%3C/svg%3E");
-filter:drop-shadow(0 0 1.5px rgba(255,240,200,.35)); }
+filter:drop-shadow(0 0 1.5px rgba(255,255,255,.35)); }
  #mgPip { position:absolute; width:16px; height:16px; margin:-8px 0 0 -8px; display:none; }
  #mgPip::before { content:""; position:absolute; left:50%; top:50%; width:9px; height:9px; margin:-4.5px; box-sizing:border-box; border:1.5px solid rgba(150,215,255,.92); border-radius:50%; box-shadow:0 0 4px rgba(0,0,0,.8); }
  #mgPip::after { content:""; position:absolute; left:50%; top:50%; width:2px; height:2px; margin:-1px; background:rgba(150,215,255,.95); border-radius:50%; }
@@ -180,7 +225,7 @@ filter:drop-shadow(0 0 1.5px rgba(255,240,200,.35)); }
  #planeSight { position:absolute; left:50%; top:50%; width:220px; height:220px; margin:-110px 0 0 -110px; display:none; pointer-events:none; opacity:.95;
  background-repeat:no-repeat; background-size:contain;
  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 220 220'%3E%3Cg stroke='%23101010' stroke-width='2.6' fill='none' opacity='0.92'%3E%3Ccircle cx='110' cy='110' r='86'/%3E%3Cpath d='M110 4 v36 M110 180 v36'/%3E%3Cpath d='M4 110 h36 M180 110 h36'/%3E%3Ccircle cx='110' cy='110' r='42' stroke-dasharray='8 7'/%3E%3C/g%3E%3Cg stroke='%23ffe9a8' stroke-width='1.6' fill='none' opacity='0.85'%3E%3Ccircle cx='110' cy='110' r='86'/%3E%3Cpath d='M110 14 v22 M110 184 v22 M14 110 h22 M184 110 h22'/%3E%3C/g%3E%3Ccircle cx='110' cy='110' r='2.6' fill='%23ffb02e'/%3E%3C/svg%3E");
- filter:drop-shadow(0 0 1.5px rgba(255,240,200,.35)); }
+ filter:drop-shadow(0 0 1.5px rgba(255,255,255,.35)); }
 #dirHits { position:absolute; left:50%; top:50%; }
 .dirHit { position:absolute; left:-90px; top:-90px; width:180px; height:180px; opacity:.85; pointer-events:none; }
 .dirHit::before { content:""; position:absolute; left:50%; top:-6px; transform:translateX(-50%); border-left:16px solid transparent; border-right:16px solid transparent; border-bottom:22px solid rgba(255,40,20,.75); filter:blur(1px); }
@@ -190,7 +235,7 @@ filter:drop-shadow(0 0 1.5px rgba(255,240,200,.35)); }
 #vig { position:absolute; inset:0; background:radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,var(--vigA,.38)) 100%); }
 #blackOv { position:absolute; inset:0; background:#000; opacity:0; }
 #deathQuote { position:absolute; left:50%; top:44%; transform:translate(-50%,-50%); max-width:70vw; text-align:center;
-color:#e8e2d0; font-size:19px; line-height:1.7; letter-spacing:2px; opacity:0; pointer-events:none;
+color:#e8e8e8; font-size:19px; line-height:1.7; letter-spacing:2px; opacity:0; pointer-events:none;
 text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 30px rgba(0,0,0,.8); font-family:"Kaiti","STKaiti","Segoe UI",serif; }
 #scopeOv { position:absolute; inset:0; display:none; background:radial-gradient(circle at center, transparent 0, transparent 31vmin, rgba(0,0,0,.985) 33vmin); }
 #scopeOv::before { content:""; position:absolute; left:50%; top:0; width:1.5px; height:100%; background:rgba(0,0,0,.85); transform:translateX(-50%); }
@@ -198,220 +243,446 @@ text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 30px rgba(0,0,0,.8); font-family:"Ka
 #fps { position:absolute; right:8px; bottom:4px; color:rgba(255,255,255,.4); font-size:11px; }
 /* ===== 阵亡反馈: 击杀提示 / 击杀回放横幅 / 镜内枪支开关 ===== */
 #killInfo { position:absolute; left:50%; top:15%; transform:translate(-50%,-14px); min-width:330px; max-width:74vw;
-padding:13px 20px 11px; background:linear-gradient(180deg,rgba(28,14,12,.9),rgba(12,8,8,.86));
+padding:13px 20px 11px; background:linear-gradient(180deg,rgba(28,28,28,.9),rgba(12,12,12,.86));
 border:1px solid rgba(226,132,102,.42); border-left:3px solid #e0805c; border-radius:5px;
-color:#e6ded2; font-size:13px; line-height:1.6; opacity:0; pointer-events:none; z-index:72;
+color:#e6e6e6; font-size:13px; line-height:1.6; opacity:0; pointer-events:none; z-index:72;
 box-shadow:0 10px 34px rgba(0,0,0,.62); transition:opacity .28s, transform .28s; }
 #killInfo.show { opacity:1; transform:translate(-50%,0); }
 #killInfo .kiTitle { font-size:16px; letter-spacing:6px; color:#ff9d78; font-weight:700; text-align:center; margin-bottom:9px;
 text-shadow:0 2px 10px rgba(0,0,0,.9); }
 #killInfo .kiGrid { display:grid; grid-template-columns:auto 1fr; gap:3px 14px; }
-#killInfo .kiK { color:#9c9a92; letter-spacing:1px; }
-#killInfo .kiV { color:#f0e8dc; }
-#killInfo .kiDim { color:#a49c92; font-size:12px; }
+#killInfo .kiK { color:#9c9c9c; letter-spacing:1px; }
+#killInfo .kiV { color:#f0f0f0; }
+#killInfo .kiDim { color:#a4a4a4; font-size:12px; }
 #killInfo .kiPart { color:#ff9d78; font-size:15px; letter-spacing:1px; }
 #killInfo .kiHead { margin-left:7px; padding:1px 7px; border-radius:2px; font-size:11px;
 background:rgba(226,80,60,.22); border:1px solid rgba(226,120,90,.5); color:#ffb08c; }
 #killInfo .kiSum { margin-top:9px; padding-top:8px; border-top:1px solid rgba(255,255,255,.1);
-font-size:12px; color:#b9b2a6; line-height:1.55; }
+font-size:12px; color:#b9b9b9; line-height:1.55; }
 #kcBanner { position:absolute; left:50%; top:9%; transform:translate(-50%,-8px); padding:7px 20px;
-background:rgba(10,14,12,.78); border:1px solid rgba(140,200,180,.4); border-radius:4px;
-color:#cfe8dd; font-size:13px; letter-spacing:2px; opacity:0; pointer-events:none; z-index:71;
+background:rgba(14,14,14,.78); border:1px solid rgba(200,200,200,.4); border-radius:4px;
+color:#e8e8e8; font-size:13px; letter-spacing:2px; opacity:0; pointer-events:none; z-index:71;
 transition:opacity .3s; text-shadow:0 1px 6px #000; }
 #kcBanner.show { opacity:1; transform:translate(-50%,0); }
 #kcBanner b { color:#8fe0c0; letter-spacing:4px; }
-#kcBanner .kcbSub { margin-left:12px; font-size:12px; color:#a8b8b0; letter-spacing:1px; }
-#hideGunTip { position:absolute; left:50%; bottom:96px; transform:translateX(-50%); padding:5px 14px;
-background:rgba(0,0,0,.62); border:1px solid rgba(255,255,255,.2); border-radius:3px;
-color:#e0dcc8; font-size:12px; letter-spacing:1px; opacity:0; pointer-events:none; z-index:71;
-transition:opacity .35s; }
-#hideGunTip.show { opacity:1; }
+#kcBanner .kcbSub { margin-left:12px; font-size:12px; color:#b8b8b8; letter-spacing:1px; }
+/* #hideGunTip 已删除 (2026-09-17): 那是"按 L 隐藏镜内枪身"的临时补丁, Bug 修好后整套移除 */
 /* 结算界面的死亡分析块 */
 .deathBox { margin-top:11px; padding:10px 12px; background:rgba(150,60,45,.14);
 border:1px solid rgba(210,110,85,.35); border-left:3px solid #c8603f; border-radius:4px;
-color:#e2d8cc; font-size:13px; line-height:1.65; text-align:left; }
+color:#e2e2e2; font-size:13px; line-height:1.65; text-align:left; }
 .deathBox .dbTitle { color:#ff9d78; letter-spacing:4px; font-weight:700; margin-bottom:5px; }
 .deathBox b { color:#ffd7c0; }
 .deathBox .dbPart { color:#ff9d78; font-size:14px; }
-.deathBox .dbHit { margin-top:5px; color:#b9b2a6; font-size:12px; }
+.deathBox .dbHit { margin-top:5px; color:#b9b9b9; font-size:12px; }
 #hint { position:absolute; left:50%; bottom:4px; transform:translateX(-50%); color:rgba(255,255,255,.35); font-size:11px; letter-spacing:1px; }
-#scoreboard { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:760px; background:rgba(8,10,6,.88); border:1px solid rgba(210,200,160,.3); border-radius:6px; padding:18px 22px; color:#ddd; display:none; }
-#scoreboard h3 { text-align:center; letter-spacing:4px; color:#d8c894; font-weight:600; margin-bottom:10px; }
+#scoreboard { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:760px; background:rgba(10,10,10,.88); border:1px solid rgba(210,210,210,.3); border-radius:6px; padding:18px 22px; color:#ddd; display:none; }
+#scoreboard h3 { text-align:center; letter-spacing:4px; color:#d8d8d8; font-weight:600; margin-bottom:10px; }
 #sbCols { display:flex; gap:20px; }
 #sbCols > div { flex:1; }
 #scoreboard table { width:100%; border-collapse:collapse; font-size:13px; }
-#scoreboard th { text-align:left; color:#998; font-weight:500; border-bottom:1px solid #444; padding:3px 6px; }
+#scoreboard th { text-align:left; color:#999; font-weight:500; border-bottom:1px solid #444; padding:3px 6px; }
 #scoreboard td { padding:3px 6px; border-bottom:1px solid rgba(255,255,255,.06); }
-#scoreboard .meRow { color:#ffd77a; font-weight:700; }
+#scoreboard .meRow { color:#ffffff; font-weight:700; }
 #scoreboard .t0h { color:#8fc1ff; } #scoreboard .t1h { color:#ff9c8a; }
-.screen { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 30%, rgba(40,48,34,.94), rgba(8,10,6,.97)); color:#ddd; }
+.screen { position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; background:radial-gradient(ellipse at 50% 30%, rgba(48,48,48,.94), rgba(10,10,10,.97)); color:#ddd; }
 .panel { width:860px; max-width:94vw; max-height:92vh; overflow:auto; padding:30px 40px; }
-h1.title { font-size:52px; letter-spacing:10px; color:#e8dcb0; text-shadow:0 2px 12px #000, 0 0 40px rgba(200,170,90,.25); font-weight:800; text-align:center; }
-.subtitle { text-align:center; color:#9a9478; letter-spacing:5px; margin:6px 0 26px; font-size:15px; }
-.secLabel { color:#b8ae88; letter-spacing:3px; font-size:13px; margin:18px 0 8px; border-bottom:1px solid rgba(200,180,130,.2); padding-bottom:4px; }
+h1.title { font-size:52px; letter-spacing:10px; color:#e8e8e8; text-shadow:0 2px 12px #000, 0 0 40px rgba(200,200,200,.25); font-weight:800; text-align:center; }
+.subtitle { text-align:center; color:#9a9a9a; letter-spacing:5px; margin:6px 0 26px; font-size:15px; }
+.secLabel { color:#b8b8b8; letter-spacing:3px; font-size:13px; margin:18px 0 8px; border-bottom:1px solid rgba(200,200,200,.2); padding-bottom:4px; }
 .rowFlex { display:flex; gap:14px; flex-wrap:wrap; }
-.bigBtn { pointer-events:auto; cursor:pointer; background:linear-gradient(180deg,#5a5236,#3a3422); color:#f0e6c0; border:1px solid #8a7c50; padding:14px 42px; font-size:20px; letter-spacing:6px; border-radius:4px; transition:all .15s; font-family:inherit; }
-.bigBtn:hover { background:linear-gradient(180deg,#6e6544,#4a422c); box-shadow:0 0 18px rgba(220,190,110,.3); }
+.bigBtn { pointer-events:auto; cursor:pointer; background:linear-gradient(180deg,#5a5a5a,#3a3a3a); color:#f0f0f0; border:1px solid #8a8a8a; padding:14px 42px; font-size:20px; letter-spacing:6px; border-radius:4px; transition:all .15s; font-family:inherit; }
+.bigBtn:hover { background:linear-gradient(180deg,#6e6e6e,#4a4a4a); box-shadow:0 0 18px rgba(220,220,220,.3); }
 .bigBtn:disabled { opacity:.4; cursor:default; }
 .optBtn { pointer-events:auto; cursor:pointer; background:rgba(255,255,255,.06); color:#ccc; border:1px solid #555; padding:9px 20px; font-size:14px; border-radius:3px; transition:all .12s; font-family:inherit; }
-.optBtn:hover { border-color:#b8a86a; color:#fff; }
-.optBtn.sel { background:rgba(200,175,95,.22); border-color:#d8c080; color:#ffe9b0; }
+.optBtn:hover { border-color:#b8b8b8; color:#fff; }
+.optBtn.sel { background:rgba(200,200,200,.22); border-color:#d8d8d8; color:#ffffff; }
 .teamBtn { flex:1; padding:16px; font-size:18px; letter-spacing:3px; }
 .classCard { pointer-events:auto; cursor:pointer; flex:1; min-width:170px; background:rgba(255,255,255,.05); border:1px solid #555; border-radius:5px; padding:13px 15px; transition:all .12s; }
-.classCard:hover { border-color:#b8a86a; }
-.classCard.sel { background:rgba(200,175,95,.18); border-color:#e0ca8a; box-shadow:0 0 14px rgba(210,180,100,.25); }
-.classCard .cname { font-size:17px; color:#f0e2b0; letter-spacing:2px; }
+.classCard:hover { border-color:#b8b8b8; }
+.classCard.sel { background:rgba(200,200,200,.18); border-color:#e0e0e0; box-shadow:0 0 14px rgba(210,210,210,.25); }
+.classCard .cname { font-size:17px; color:#f0f0f0; letter-spacing:2px; }
 .classCard .cwpn { font-size:12px; color:#aaa; margin-top:5px; line-height:1.6; }
 .spawnBtn { pointer-events:auto; cursor:pointer; display:block; width:100%; text-align:left; background:rgba(255,255,255,.05); color:#ccc; border:1px solid #555; padding:9px 14px; margin-bottom:7px; font-size:14px; border-radius:3px; font-family:inherit; }
-.spawnBtn:hover { border-color:#b8a86a; }
-.spawnBtn.sel { background:rgba(200,175,95,.2); border-color:#e0ca8a; color:#ffe9b0; }
+.spawnBtn:hover { border-color:#b8b8b8; }
+.spawnBtn.sel { background:rgba(200,200,200,.2); border-color:#e0e0e0; color:#ffffff; }
 .sliderRow { display:flex; align-items:center; gap:12px; margin:6px 0; font-size:14px; color:#bbb; }
 .sliderRow input { pointer-events:auto; width:200px; }
-.sliderRow .val { color:#e8dcb0; min-width:36px; }
-#ctrlHelp { font-size:12.5px; color:#8a8878; line-height:1.9; column-count:2; margin-top:6px; }
-#ctrlHelp b { color:#c5ba90; font-weight:600; }
+.sliderRow .val { color:#e8e8e8; min-width:36px; }
+#ctrlHelp { font-size:12.5px; color:#8a8a8a; line-height:1.9; column-count:2; margin-top:6px; }
+#ctrlHelp b { color:#c5c5c5; font-weight:600; }
 #deployFlex { display:flex; gap:26px; }
 #deployLeft { flex:1.35; } #deployRight { flex:1; }
-#deployMap { width:100%; border:1px solid rgba(210,200,160,.3); border-radius:4px; background:#141a10; }
+#deployMap { width:100%; border:1px solid rgba(210,210,210,.3); border-radius:4px; background:#1a1a1a; }
 #deathInfo { text-align:center; color:#e88; font-size:16px; margin-bottom:14px; min-height:22px; }
-#respawnTxt { color:#d8c894; }
+#respawnTxt { color:#d8d8d8; }
 #endTitle { font-size:46px; text-align:center; letter-spacing:8px; margin-bottom:8px; }
-#endTitle.win { color:#ffe08a; text-shadow:0 0 30px rgba(255,210,110,.5); }
+#endTitle.win { color:#ffffff; text-shadow:0 0 30px rgba(255,255,255,.5); }
 #endTitle.lose { color:#e86a5a; }
 #endStats { text-align:center; font-size:16px; color:#bbb; line-height:2.1; margin:16px 0 26px; }
-#endStats b { color:#f0e2b0; font-size:20px; }
+#endStats b { color:#f0f0f0; font-size:20px; }
 .center { text-align:center; }
 #menuVer { text-align:center; color:#555; font-size:11px; margin-top:20px; letter-spacing:2px; }
-#clsTip { position:absolute; right:26px; bottom:110px; color:#d8d2b8; font-size:12px; letter-spacing:1px; text-shadow:0 1px 3px #000; background:rgba(10,14,8,.55); padding:4px 10px; border-radius:3px; border:1px solid rgba(200,180,130,.22); display:none; }
-#clsTip b { color:#ffd77a; }
+#clsTip { position:absolute; right:26px; bottom:110px; color:#d8d8d8; font-size:12px; letter-spacing:1px; text-shadow:0 1px 3px #000; background:rgba(14,14,14,.55); padding:4px 10px; border-radius:3px; border:1px solid rgba(200,200,200,.22); display:none; }
+#clsTip b { color:#ffffff; }
 /* ===== 过场动画 ===== */
 body.cutOn #ui, body.cutOn #touchUI { display:none !important; }
 #cutOv { position:fixed; inset:0; z-index:40; display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; pointer-events:none; }
-#cutTitle { font-size:52px; letter-spacing:12px; color:#f2e6c8; text-shadow:0 3px 16px rgba(0,0,0,.85), 0 0 40px rgba(220,190,110,.25); font-weight:800; opacity:0; }
-#cutSub { font-size:17px; letter-spacing:5px; color:#c8d8e0; text-shadow:0 2px 10px rgba(0,0,0,.8); margin-top:14px; opacity:0; }
-#cutSkip { position:fixed; bottom:5vh; left:0; right:0; text-align:center; color:rgba(255,240,200,.55); font-size:12px; letter-spacing:2px; opacity:0; }
+#cutTitle { font-size:52px; letter-spacing:12px; color:#f2f2f2; text-shadow:0 3px 16px rgba(0,0,0,.85), 0 0 40px rgba(220,220,220,.25); font-weight:800; opacity:0; }
+#cutSub { font-size:17px; letter-spacing:5px; color:#e0e0e0; text-shadow:0 2px 10px rgba(0,0,0,.8); margin-top:14px; opacity:0; }
+#cutSkip { position:fixed; bottom:5vh; left:0; right:0; text-align:center; color:rgba(255,255,255,.55); font-size:12px; letter-spacing:2px; opacity:0; }
 #lbTop, #lbBot { position:fixed; left:0; right:0; height:0; background:#000; z-index:39; pointer-events:none; }
 #lbTop { top:0; } #lbBot { bottom:0; }
 /* ===== 多人游戏 ===== */
 .multiNav { display:flex; flex-direction:column; align-items:center; gap:16px; margin:30px 0 8px; }
 .multiView { max-width:540px; margin:0 auto; text-align:center; }
 .multiField { margin:12px 0; text-align:left; }
-.multiField label { display:block; color:#b8ae88; letter-spacing:2px; font-size:13px; margin-bottom:6px; }
+.multiField label { display:block; color:#b8b8b8; letter-spacing:2px; font-size:13px; margin-bottom:6px; }
 .multiField input { pointer-events:auto; width:100%; padding:10px 12px; background:rgba(255,255,255,.07); border:1px solid #555; color:#eee; font-size:15px; border-radius:4px; font-family:inherit; outline:none; }
-.multiField input:focus { border-color:#d8c080; }
-.netStatus { min-height:22px; margin:10px 0; color:#9a9a8a; font-size:13px; letter-spacing:1px; }
+.multiField input:focus { border-color:#d8d8d8; }
+.netStatus { min-height:22px; margin:10px 0; color:#9a9a9a; font-size:13px; letter-spacing:1px; }
 .netStatus.err { color:#e86a5a; }
 .netStatus.ok { color:#8fd08a; }
 #mhPlayers, #mjPlayers { margin:10px 0 4px; text-align:left; }
 .mPlayer { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; margin-bottom:5px; background:rgba(255,255,255,.05); border:1px solid #444; border-radius:4px; font-size:14px; color:#ddd; }
-.mPlayer .pmName { color:#f0e2b0; }
-.mPlayer .pmHost { color:#ffd77a; font-size:11px; letter-spacing:2px; border:1px solid rgba(255,215,122,.4); padding:1px 6px; border-radius:3px; margin-left:8px; }
+.mPlayer .pmName { color:#f0f0f0; }
+.mPlayer .pmHost { color:#ffffff; font-size:11px; letter-spacing:2px; border:1px solid rgba(255,255,255,.4); padding:1px 6px; border-radius:3px; margin-left:8px; }
 .mPlayer .pmLat { color:#8fc1ff; font-size:12px; }
 #multiChatList, #multiChatList2 { max-height:140px; overflow-y:auto; text-align:left; font-size:13px; color:#ccc; background:rgba(0,0,0,.25); border:1px solid #444; border-radius:4px; padding:8px 10px; margin:8px 0; }
-#multiChatList .mcMe, #multiChatList2 .mcMe { color:#ffd77a; }
+#multiChatList .mcMe, #multiChatList2 .mcMe { color:#ffffff; }
 #multiChatList .mcSys, #multiChatList2 .mcSys { color:#8fd08a; }
 .multiChatRow { display:flex; gap:8px; margin-top:4px; }
 .multiChatRow input { pointer-events:auto; flex:1; padding:8px 10px; background:rgba(255,255,255,.07); border:1px solid #555; color:#eee; border-radius:4px; font-size:13px; font-family:inherit; outline:none; }
-.multiChatRow input:focus { border-color:#d8c080; }
+.multiChatRow input:focus { border-color:#d8d8d8; }
 .multiChatRow .optBtn { padding:8px 16px; }
-#nvgInd { position:absolute; top:62px; right:14px; font-size:12px; letter-spacing:2px; text-shadow:0 0 8px currentColor; background:rgba(0,10,5,.4); border:1px solid #9fe8a8; border-radius:4px; padding:3px 10px; }
+#nvgInd { position:absolute; top:62px; right:14px; font-size:12px; letter-spacing:2px; text-shadow:0 0 8px currentColor; background:rgba(10,10,10,.4); border:1px solid #9fe8a8; border-radius:4px; padding:3px 10px; }
 /* ===== 撤离突袭: 军械库 / 仓库 / 战利品 / 防弹衣 ===== */
 /* 人体图使 healthPanel 变高(96px), 防弹衣条要让到它上方 */
 /* 下方多了一行总血量读数(~17px), 防弹衣条相应上移 */
-#armorHud { position:absolute; left:24px; bottom:146px; color:#8fe0c0; background:rgba(8,18,12,.62); border:1px solid rgba(120,220,180,.3); border-radius:4px; padding:5px 10px; font-size:12px; letter-spacing:1px; }
+#armorHud { position:absolute; left:24px; bottom:146px; color:#8fe0c0; background:rgba(18,18,18,.62); border:1px solid rgba(120,220,180,.3); border-radius:4px; padding:5px 10px; font-size:12px; letter-spacing:1px; }
 /* 战利品/撤离点信息条: 从原左下角(与状态栏堆叠)移到右上角, 避开左下角血条与撤离点距离 */
-#lootHud { position:absolute; right:14px; top:92px; text-align:right; color:#e8d080; background:rgba(18,14,6,.62); border:1px solid rgba(220,190,120,.3); border-radius:4px; padding:5px 10px; font-size:12px; letter-spacing:1px; }
-#extractHud { position:absolute; left:50%; top:55%; transform:translate(-50%,-50%); width:330px; text-align:center; color:#c8f0dc; background:rgba(8,20,14,.78); border:1px solid #35e0a0; border-radius:6px; padding:14px 18px; box-shadow:0 0 26px rgba(40,220,150,.25); z-index:8; }
+#lootHud { position:absolute; right:14px; top:92px; text-align:right; color:#e8e8e8; background:rgba(18,18,18,.62); border:1px solid rgba(220,220,220,.3); border-radius:4px; padding:5px 10px; font-size:12px; letter-spacing:1px; }
+#extractHud { position:absolute; left:50%; top:55%; transform:translate(-50%,-50%); width:330px; text-align:center; color:#f0f0f0; background:rgba(20,20,20,.78); border:1px solid #35e0a0; border-radius:6px; padding:14px 18px; box-shadow:0 0 26px rgba(40,220,150,.25); z-index:8; }
 #extractBarWrap { height:8px; border:1px solid #35e0a0; border-radius:4px; overflow:hidden; margin:9px 0 4px; background:rgba(0,0,0,.45); }
 #extractBar { display:block; height:100%; width:0; background:linear-gradient(90deg,#1d7a58,#35e0a0); }
-#extractTxt { font-size:12px; color:#9fe0c0; letter-spacing:2px; }
-#mArmory .arWallet { color:#ffe08a; font-size:20px; letter-spacing:2px; text-align:center; margin:8px 0 4px; }
+#extractTxt { font-size:12px; color:#e0e0e0; letter-spacing:2px; }
+#mArmory .arWallet { color:#ffffff; font-size:20px; letter-spacing:2px; text-align:center; margin:8px 0 4px; }
 #mArmory .arTabs { justify-content:center; margin:10px 0; }
 #mArmory .arTab { min-width:110px; }
 #mArmory .arList { max-height:380px; overflow-y:auto; padding:4px; }
-#mArmory .arRow { display:flex; align-items:center; gap:12px; padding:10px 12px; margin:6px 0; background:rgba(255,255,255,.045); border:1px solid #475466; border-radius:5px; }
-#mArmory .arRow:hover { border-color:#b8a86a; }
+#mArmory .arRow { display:flex; align-items:center; gap:12px; padding:10px 12px; margin:6px 0; background:rgba(255,255,255,.045); border:1px solid #666666; border-radius:5px; }
+#mArmory .arRow:hover { border-color:#b8b8b8; }
 #mArmory .arIcon { font-size:26px; min-width:40px; text-align:center; }
 #mArmory .arBody { flex:1; min-width:0; }
-#mArmory .arName { color:#f0e2b0; font-size:15px; letter-spacing:1px; }
-#mArmory .arDesc { color:#9aa8b0; font-size:12px; margin-top:3px; }
-#mArmory .arPrice { color:#d8c080; font-size:13px; min-width:92px; text-align:right; }
+#mArmory .arName { color:#f0f0f0; font-size:15px; letter-spacing:1px; }
+#mArmory .arDesc { color:#aaa8b0; font-size:12px; margin-top:3px; }
+#mArmory .arPrice { color:#d8d8d8; font-size:13px; min-width:92px; text-align:right; }
 #mArmory .arOwned { color:#8fd08a; font-size:11px; margin-top:3px; }
 #mArmory .arBtn { padding:6px 10px; font-size:12px; }
 #mArmory .arLootActions { justify-content:flex-end; }
-#mArmory .arHint { margin-top:10px; text-align:center; color:#8a8878; font-size:12px; letter-spacing:1px; }
-#mArmory .arEmpty { padding:26px; text-align:center; color:#9aa8b0; line-height:1.8; }
+#mArmory .arHint { margin-top:10px; text-align:center; color:#8a8a8a; font-size:12px; letter-spacing:1px; }
+#mArmory .arEmpty { padding:26px; text-align:center; color:#aaa8b0; line-height:1.8; }
 
 /* ===== 塔科夫化: 搜尸面板 / 背包 / 快捷栏 / 水分保食度 ===== */
 #statBarWrap { margin-top:3px; height:7px; font-size:0; }
 .statBar { display:inline-block; width:56px; height:7px; margin-right:4px; border:1px solid rgba(255,255,255,.28); background:rgba(0,0,0,.5); position:relative; overflow:hidden; }
-.statBar i { display:block; height:100%; background:#7ac8d8; transition:width .2s; }
+.statBar i { display:block; height:100%; background:#d8d8d8; transition:width .2s; }
 .statBar::before { content:attr(data-tip); position:absolute; left:50%; top:-14px; transform:translateX(-50%); font-size:9px; color:rgba(230,230,230,.8); letter-spacing:0; }
-#quickHud { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); color:#d8e0c8; background:rgba(8,14,8,.55); border:1px solid rgba(150,200,140,.25); border-radius:4px; padding:4px 14px; font-size:12px; letter-spacing:1px; }
-#quickHud b { color:#ffd77a; }
-#lootPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:340px; background:rgba(10,14,10,.88); border:1px solid #b8a86a; border-radius:8px; padding:12px 14px; z-index:9; box-shadow:0 0 30px rgba(0,0,0,.6); pointer-events:none; }
+#quickHud { position:absolute; left:50%; bottom:64px; transform:translateX(-50%); color:#e0e0e0; background:rgba(14,14,14,.55); border:1px solid rgba(200,200,200,.25); border-radius:4px; padding:4px 14px; font-size:12px; letter-spacing:1px; }
+#quickHud b { color:#ffffff; }
+#lootPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:340px; background:rgba(14,14,14,.88); border:1px solid #b8b8b8; border-radius:8px; padding:12px 14px; z-index:9; box-shadow:0 0 30px rgba(0,0,0,.6); pointer-events:none; }
 #lootPanel.hidden { display:none; }
-#lootTitle { text-align:center; color:#f0e2b0; font-size:16px; letter-spacing:6px; margin-bottom:8px; }
+#lootTitle { text-align:center; color:#f0f0f0; font-size:16px; letter-spacing:6px; margin-bottom:8px; }
 #lootList { max-height:280px; overflow:hidden; }
-.lootRow { display:flex; align-items:center; gap:8px; padding:6px 8px; margin:3px 0; border-radius:4px; background:rgba(255,255,255,.04); font-size:13px; color:#c8d2b8; }
-.lootRow.sel { background:rgba(216,192,128,.18); border:1px solid #d8c080; color:#f0e2b0; }
+.lootRow { display:flex; align-items:center; gap:8px; padding:6px 8px; margin:3px 0; border-radius:4px; background:rgba(255,255,255,.04); font-size:13px; color:#d2d2d2; }
+.lootRow.sel { background:rgba(216,216,216,.18); border:1px solid #d8d8d8; color:#f0f0f0; }
 .lootRow.cant { opacity:.45; }
-.lootRow.empty { justify-content:center; color:#8a8878; }
-.lootRow .lrMark { width:12px; color:#ffd77a; }
+.lootRow.empty { justify-content:center; color:#8a8a8a; }
+.lootRow .lrMark { width:12px; color:#ffffff; }
 .lootRow .lrName { flex:1; }
-.lootRow .lrInfo { font-size:11px; color:#a8b0a0; }
-#lootHint { margin-top:8px; text-align:center; color:#9aa890; font-size:11px; letter-spacing:1px; }
-#lootHint b { color:#ffd77a; }
+.lootRow .lrInfo { font-size:11px; color:#b0b0b0; }
+#lootHint { margin-top:8px; text-align:center; color:#aaaaaa; font-size:11px; letter-spacing:1px; }
+#lootHint b { color:#ffffff; }
 /* ===== 背包面板 (Tab 打开) ===== */
 /* 定位在屏幕正中, 完全避开左下角状态栏(healthPanel), 防止遮挡 */
-#bagPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:420px; max-height:74vh; display:flex; flex-direction:column; background:rgba(10,14,10,.93); border:1px solid #b8a86a; border-radius:8px; padding:12px 14px; z-index:12; box-shadow:0 0 34px rgba(0,0,0,.7); }
+#bagPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:420px; max-height:74vh; display:flex; flex-direction:column; background:rgba(14,14,14,.93); border:1px solid #b8b8b8; border-radius:8px; padding:12px 14px; z-index:12; box-shadow:0 0 34px rgba(0,0,0,.7); }
 #bagPanel.hidden { display:none; }
-#bagPanelHead { display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid rgba(216,192,128,.3); padding-bottom:8px; margin-bottom:8px; }
-#bagPanelTitle { color:#f0e2b0; font-size:16px; letter-spacing:6px; }
-#bagPanelStat { color:#a8b0a0; font-size:11px; letter-spacing:1px; }
+#bagPanelHead { display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid rgba(216,216,216,.3); padding-bottom:8px; margin-bottom:8px; }
+#bagPanelTitle { color:#f0f0f0; font-size:16px; letter-spacing:6px; }
+#bagPanelStat { color:#b0b0b0; font-size:11px; letter-spacing:1px; }
 #bagPanelList { flex:1; overflow-y:auto; max-height:52vh; }
 #bagPanelList::-webkit-scrollbar { width:6px; }
-#bagPanelList::-webkit-scrollbar-thumb { background:rgba(216,192,128,.35); border-radius:3px; }
-#bagPanelHint { margin-top:9px; padding-top:7px; border-top:1px solid rgba(216,192,128,.22); text-align:center; color:#9aa890; font-size:11px; letter-spacing:1px; }
-#bagPanelHint b { color:#ffd77a; }
-.bagRow .lrQty { color:#ffd77a; font-size:12px; min-width:30px; text-align:right; }
+#bagPanelList::-webkit-scrollbar-thumb { background:rgba(216,216,216,.35); border-radius:3px; }
+#bagPanelHint { margin-top:9px; padding-top:7px; border-top:1px solid rgba(216,216,216,.22); text-align:center; color:#aaaaaa; font-size:11px; letter-spacing:1px; }
+#bagPanelHint b { color:#ffffff; }
+.bagRow .lrQty { color:#ffffff; font-size:12px; min-width:30px; text-align:right; }
 .bagRow.dim { opacity:.4; }
-.bagEmpty { text-align:center; color:#8a8878; padding:26px 0; font-size:13px; letter-spacing:1px; }
+.bagEmpty { text-align:center; color:#8a8a8a; padding:26px 0; font-size:13px; letter-spacing:1px; }
 #mArmory .wbPick select { margin-top:4px; }
 
 /* ===== 任务系统 (39_quests.js) ===== */
 /* 局内右上角任务追踪面板: 等级/经验条 + 最接近完成的 4 个任务 */
-#questHud { position:absolute; right:14px; top:118px; width:212px; background:rgba(10,14,10,.78); border:1px solid rgba(216,192,128,.4); border-radius:6px; padding:8px 10px; font-size:12px; color:#c8d0b8; z-index:11; pointer-events:none; letter-spacing:.5px; }
-#questHud .qhHead { display:flex; align-items:center; gap:6px; font-weight:700; color:#f0e2b0; margin-bottom:5px; }
-#questHud .qhXp { flex:1; height:6px; background:#22281e; border-radius:3px; overflow:hidden; display:inline-block; }
+#questHud { position:absolute; right:14px; top:118px; width:212px; background:rgba(14,14,14,.78); border:1px solid rgba(216,216,216,.4); border-radius:6px; padding:8px 10px; font-size:12px; color:#d0d0d0; z-index:11; pointer-events:none; letter-spacing:.5px; }
+#questHud .qhHead { display:flex; align-items:center; gap:6px; font-weight:700; color:#f0f0f0; margin-bottom:5px; }
+#questHud .qhXp { flex:1; height:6px; background:#282828; border-radius:3px; overflow:hidden; display:inline-block; }
 #questHud .qhXp i { display:block; height:100%; background:linear-gradient(90deg,#4a90d9,#7ad9ff); }
-#questHud .qhRow { padding:2px 0; border-top:1px dashed rgba(216,192,128,.18); overflow:hidden; }
-#questHud .qhRow b { float:right; color:#ffd77a; }
+#questHud .qhRow { padding:2px 0; border-top:1px dashed rgba(216,216,216,.18); overflow:hidden; }
+#questHud .qhRow b { float:right; color:#ffffff; }
 #questHud .qhDoneAll { color:#9fe6b4; }
 /* 军械库任务标签页: 经验条与任务进度条 */
-.qXpBar, .qProg { height:5px; background:#22281e; border-radius:3px; overflow:hidden; margin-top:4px; }
+.qXpBar, .qProg { height:5px; background:#282828; border-radius:3px; overflow:hidden; margin-top:4px; }
 .qXpBar i, .qProg i { display:block; height:100%; background:linear-gradient(90deg,#6aa84f,#9fe6b4); }
 .qXpBar i { background:linear-gradient(90deg,#4a90d9,#7ad9ff); }
 .qRow.qDone { opacity:.62; }
 .qRow.qDone .arName { color:#9fe6b4; }
 
 /* ===== 请求 I: 局内弹药商店 + 获得/消耗提示条 ===== */
-#ammoShopPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:460px; max-height:66vh; display:flex; flex-direction:column; background:rgba(10,14,10,.94); border:1px solid #b8a86a; border-radius:8px; padding:12px 14px; z-index:13; box-shadow:0 0 34px rgba(0,0,0,.7); }
+#ammoShopPanel { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%); width:460px; max-height:66vh; display:flex; flex-direction:column; background:rgba(14,14,14,.94); border:1px solid #b8b8b8; border-radius:8px; padding:12px 14px; z-index:13; box-shadow:0 0 34px rgba(0,0,0,.7); }
 #ammoShopPanel.hidden { display:none; }
-#ammoShopHead { display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid rgba(216,192,128,.3); padding-bottom:8px; margin-bottom:8px; }
-#ammoShopTitle { color:#f0e2b0; font-size:16px; letter-spacing:6px; }
-#ammoShopStat { color:#a8b0a0; font-size:11px; letter-spacing:0; }
+#ammoShopHead { display:flex; align-items:baseline; justify-content:space-between; border-bottom:1px solid rgba(216,216,216,.3); padding-bottom:8px; margin-bottom:8px; }
+#ammoShopTitle { color:#f0f0f0; font-size:16px; letter-spacing:6px; }
+#ammoShopStat { color:#b0b0b0; font-size:11px; letter-spacing:0; }
 #ammoShopList { flex:1; overflow-y:auto; max-height:44vh; }
 #ammoShopList::-webkit-scrollbar { width:6px; }
-#ammoShopList::-webkit-scrollbar-thumb { background:rgba(216,192,128,.35); border-radius:3px; }
-#ammoShopHint { margin-top:9px; padding-top:7px; border-top:1px solid rgba(216,192,128,.22); text-align:center; color:#9aa890; font-size:11px; letter-spacing:1px; }
-#ammoShopHint b { color:#ffd77a; }
+#ammoShopList::-webkit-scrollbar-thumb { background:rgba(216,216,216,.35); border-radius:3px; }
+#ammoShopHint { margin-top:9px; padding-top:7px; border-top:1px solid rgba(216,216,216,.22); text-align:center; color:#aaaaaa; font-size:11px; letter-spacing:1px; }
+#ammoShopHint b { color:#ffffff; }
 .ammoRow .lrInfo { flex:1; text-align:right; }
-button.apBuy { flex:none; background:rgba(216,192,128,.14); border:1px solid #b8a86a; color:#f0e2b0; border-radius:4px; padding:3px 9px; font-size:12px; cursor:pointer; letter-spacing:0; }
-button.apBuy:hover { background:rgba(216,192,128,.3); }
+button.apBuy { flex:none; background:rgba(216,216,216,.14); border:1px solid #b8b8b8; color:#f0f0f0; border-radius:4px; padding:3px 9px; font-size:12px; cursor:pointer; letter-spacing:0; }
+button.apBuy:hover { background:rgba(216,216,216,.3); }
 .lootRow.cant button.apBuy { opacity:.45; cursor:not-allowed; }
-button.apUse { flex:none; background:rgba(120,190,140,.14); border:1px solid #6a9a72; color:#cfe8d4; border-radius:4px; padding:2px 8px; font-size:11px; cursor:pointer; letter-spacing:0; }
+button.apUse { flex:none; background:rgba(120,190,140,.14); border:1px solid #6a9a72; color:#e8e8e8; border-radius:4px; padding:2px 8px; font-size:11px; cursor:pointer; letter-spacing:0; }
 button.apUse:hover { background:rgba(120,190,140,.32); }
 /* 获得/消耗提示条: 独立元素, 不被 showScorePop 覆盖 */
-#lootToast { position:absolute; left:50%; top:63%; transform:translateX(-50%); z-index:20; min-width:220px; max-width:70vw; text-align:center; padding:5px 14px; background:rgba(8,10,8,.72); border:1px solid rgba(216,192,128,.28); border-radius:14px; font-size:14px; color:#e8dcc0; text-shadow:0 1px 4px #000; opacity:0; transition:opacity .35s; pointer-events:none; }
-#lootToast b { color:#ffd77a; }
+#lootToast { position:absolute; left:50%; top:63%; transform:translateX(-50%); z-index:20; min-width:220px; max-width:70vw; text-align:center; padding:5px 14px; background:rgba(10,10,10,.72); border:1px solid rgba(216,216,216,.28); border-radius:14px; font-size:14px; color:#e8e8e8; text-shadow:0 1px 4px #000; opacity:0; transition:opacity .35s; pointer-events:none; }
+#lootToast b { color:#ffffff; }
+/* ===== 黄色强调层 (accent) ===== */
+/* 主题 = **深灰底 + 白字 + 黄色强调**。
+   纯灰白会显得像遗照, 所以关键元素统一走琥珀黄。
+   只用一套色阶, 避免回到原来「琥珀金 / 橄榄绿 / 米黄」混杂的状态:
+     #ffd77a  强调文字 / 图标 / 选中态
+     #e0b040  按钮渐变下沿
+     #8a6a28  暗边框 / 次级文字
+   本块在文件末尾, 靠源码顺序覆盖前面的中性化结果。 */
+:root { --acc:#ffd77a; --acc2:#e0b040; --acc3:#8a6a28; --accBg:rgba(255,215,122,.16); --accBd:rgba(255,215,122,.34); }
+
+/* —— 品牌 / 标题 —— */
+.gameLogo { color:var(--acc); text-shadow:0 2px 0 #6a5220, 0 6px 22px rgba(0,0,0,.8); }
+.gameLogoSub { color:rgba(255,215,122,.6); }
+.gameTagline { color:var(--acc); text-shadow:0 2px 12px rgba(0,0,0,.85); border-top:1px solid var(--accBd); border-bottom:1px solid var(--accBd); }
+h1.title, .mSubTitle { color:var(--acc); }
+#menuVer { color:var(--acc3); }
+
+/* —— 小节标签: 每个面板里最密的强调点 —— */
+.secLabel { color:var(--acc); border-bottom:1px solid var(--accBd); }
+
+/* —— 主按钮: 黄底黑字 —— */
+.bigBtn { background:linear-gradient(180deg,#ffd77a,#e0b040); color:#1a1a1a; border:1px solid var(--acc3); font-weight:700; text-shadow:none; }
+.bigBtn:hover { background:linear-gradient(180deg,#ffe49b,#efc257); }
+
+/* —— 交互态: 悬停 / 选中 —— */
+.optBtn:hover { border-color:var(--acc); color:var(--acc); }
+.optBtn.sel { background:var(--accBg); border-color:var(--acc); color:var(--acc); }
+.classCard:hover { border-color:var(--acc); }
+.classCard.sel { background:var(--accBg); border-color:var(--acc); }
+.classCard.sel .cname { color:var(--acc); }
+.spawnBtn:hover { border-color:var(--acc); }
+.spawnBtn.sel { background:var(--accBg); border-color:var(--acc); color:var(--acc); }
+.lootRow.sel { background:var(--accBg); border:1px solid var(--acc); color:var(--acc); }
+#mArmory .arRow:hover { border-color:var(--acc); }
+button.apBuy { background:var(--accBg); border-color:var(--acc); color:var(--acc); }
+button.apBuy:hover { background:rgba(255,215,122,.3); }
+
+/* —— 数值 / 价格 / 关键读数 —— */
+.sliderRow .val { color:var(--acc); }
+#mArmory .arWallet, #mArmory .arPrice { color:var(--acc); }
+#endStats b { color:var(--acc); }
+#lootHint b, #bagPanelHint b, #ammoShopHint b { color:var(--acc); }
+.lootRow .lrMark, .bagRow .lrQty { color:var(--acc); }
+#bagPanelTitle, #lootTitle, #ammoShopTitle, #bigmapTitle { color:var(--acc); }
+#quickHud b, #clsTip b { color:var(--acc); }
+#endTitle.win { color:var(--acc); text-shadow:0 0 30px rgba(255,215,122,.45); }
+#scoreboard h3 { color:var(--acc); }
+#scoreboard th { color:#c8a24a; border-bottom:1px solid var(--acc3); }
+
+/* —— 任务追踪 —— */
+#questHud .qhHead { color:var(--acc); }
+#questHud .qhRow b { color:var(--acc); }
+
+/* —— 表单 —— */
+input[type="range"], input[type="checkbox"], progress { accent-color:var(--acc); }
+.multiField input:focus, .multiChatRow input:focus { border-color:var(--acc); }
+#mSet .optBtn.sel, #mPlay .optBtn.sel, #mArmory .optBtn.sel { background:var(--accBg); border-color:var(--acc); color:var(--acc); }
+
+/* —— 局内 HUD: 只在关键处落黄, 其余保持中性, 避免满屏花 —— */
+#ammoPanel #wname { color:var(--acc); }
+#mmHint, #bigmapHint { color:rgba(255,215,122,.62); }
+#stamBar { background:rgba(255,215,122,.62); }
+
+/* —— 主菜单三个入口: 主操作实心黄底黑字, 次操作描边黄字, 拉开层次 —— */
+.navBtn { background:transparent; color:var(--acc); border:1px solid var(--accBd); font-weight:600; text-shadow:none; }
+.navBtn:hover { background:var(--accBg); border-color:var(--acc); }
+.navBtn[data-p="mPlay"] { background:linear-gradient(180deg,#ffd77a,#e0b040); color:#1a1a1a; border-color:var(--acc3); font-weight:700; }
+.navBtn[data-p="mPlay"]:hover { background:linear-gradient(180deg,#ffe49b,#efc257); }
+
+/* —— 背包面板操作条 (2026-09-16) ——
+   手机端没有键盘, 而"丢弃"原本只有双击/长按两个入口, 在移动浏览器上都不靠谱
+   (双击会被缩放吃掉, 长按要看系统是否发 contextmenu)。所以做成面板内的实体按钮。
+   桌面端也保留这排按钮: 点了就有反馈, 比记 G / Shift+G / Q 直观。 */
+#bagPanelBtns { display:flex; flex-wrap:wrap; gap:6px; margin-top:9px; }
+#bagPanelBtns:empty { display:none; }
+.bagAct { flex:1 1 auto; min-width:86px; padding:8px 10px; font-size:13px; letter-spacing:1px;
+  font-family:inherit; border-radius:6px; cursor:pointer; white-space:nowrap;
+  background:var(--accBg); border:1px solid var(--acc); color:var(--acc); }
+.bagAct:hover { background:rgba(255,215,122,.3); }
+.bagAct:active { transform:translateY(1px); }
+.bagAct.danger { background:rgba(226,80,60,.16); border-color:#e0705c; color:#ff9d78; }
+.bagAct.danger:hover { background:rgba(226,80,60,.3); }
+.bagAct.danger.armed { background:#e0705c; border-color:#ffb08c; color:#1a1a1a; font-weight:700; }
+/* 装备到快捷栏: 用绿色(正向动作), 与「存入安全箱/丢弃」区分开 */
+.bagAct.eq { background:rgba(120,200,140,.16); border-color:#6aa87a; color:#9fe6b4; }
+.bagAct.eq:hover { background:rgba(120,200,140,.32); }
+.bagAct.ghost { flex:0 0 auto; background:transparent; border-color:#666; color:#b0b0b0; }
+.bagAct.ghost:hover { border-color:#b8b8b8; color:#f0f0f0; }
+/* 手机上按钮要够大够好点 (44px 触控目标), 面板也放宽一点 */
+body.mobile .bagAct { min-height:44px; font-size:14px; letter-spacing:2px; }
+body.mobile #bagPanel { width:min(94vw,460px); max-height:92vh; padding:10px 12px; }
+body.mobile #bagPanelHead { padding-bottom:6px; margin-bottom:6px; }
+/* 手机横屏只有 ~390px 高: 加了安全箱区块后要把各处间距收紧,
+   否则背包列表会被挤到只剩一两行 (列表本身可滚动, 但不能挤没了)。 */
+body.mobile #bagPanelList { max-height:42vh; }
+body.mobile #bagPanelHint { margin-top:6px; padding-top:5px; }
+body.mobile #secBox { margin-top:7px; padding-top:6px; }
+body.mobile #secList { max-height:92px; }
+
+/* ⚠️ #ui 是 pointer-events:none, 而 pointer-events 是**继承属性** ——
+   项目惯例是每个可交互元素单独声明 auto(见 .bigBtn / .optBtn / .classCard / .spawnBtn)。
+   背包面板以前漏了这一步, 所以它的行和按钮**从来没被鼠标/触摸命中过**:
+   桌面端靠 G / Shift+G / Q 键盘快捷键兜住了, 手机端没有键盘 → 完全点不动。
+   (同期的 #lootPanel 是**故意** none 的: 它靠触控层的 tSelUp/tSelDown/tTake 操作, 别照抄这里。) */
+#bagPanel { pointer-events:auto; }
+#bagPanel .lootRow { pointer-events:auto; cursor:pointer; }
+#bagPanelList { touch-action:pan-y; }
+.bagAct { pointer-events:auto; }
+
+/* 背包面板打开时把整块触控层藏掉(31_touch.js 的 uiOpen 机制)。
+   否则 #tLook 全屏 + #tStickZone 左下 42%×60% + 右侧按键簇都会盖在面板上,
+   触摸落点被抢走。和菜单/部署/结算面板用的是同一套处理。 */
+
+/* —— 安全箱区块 (2026-09-16) ——
+   以前只有 secureAdd, 东西放进去就再也拿不出来, 面板里也看不到箱里装了什么。
+   现在列出内容, 每行带一个「取出」按钮(点一下回背包, 背包满会明确提示);
+   箱里没东西时整块隐藏, 不占手机屏幕高度。 */
+#secBox { margin-top:9px; border-top:1px solid rgba(216,216,216,.22); padding-top:7px; }
+#secHead { display:flex; align-items:baseline; justify-content:space-between;
+  color:var(--acc); font-size:12px; letter-spacing:3px; margin-bottom:3px; }
+#secStat { color:#b0b0b0; font-size:11px; letter-spacing:1px; }
+#secList { max-height:132px; overflow-y:auto; touch-action:pan-y; }
+#secList::-webkit-scrollbar { width:6px; }
+#secList::-webkit-scrollbar-thumb { background:rgba(216,216,216,.35); border-radius:3px; }
+.secRow { background:rgba(255,215,122,.07); }
+button.secTake { flex:none; pointer-events:auto; cursor:pointer; font-family:inherit;
+  background:var(--accBg); border:1px solid var(--acc); color:var(--acc);
+  border-radius:4px; padding:3px 10px; font-size:12px; letter-spacing:1px; white-space:nowrap; }
+button.secTake:hover { background:rgba(255,215,122,.3); }
+button.secTake:active { transform:translateY(1px); }
+body.mobile button.secTake { min-height:34px; padding:6px 14px; font-size:13px; letter-spacing:2px; }
+
+/* —— 药品轮盘 (53_medwheel.js) ——
+   故意放在 #ui 外面 + z-index 60: 做成全屏模态, 直接盖住 #touchUI(z-index 40),
+   这样手机端点格子不会被摇杆区/转视角触摸面抢走。
+   ⚠️ pointer-events 必须显式写 auto —— #ui 是 none, 而它是继承属性。 */
+#medWheel { position:fixed; inset:0; z-index:60; pointer-events:auto;
+  display:flex; align-items:center; justify-content:center;
+  background:rgba(6,6,6,.78); }
+#medWheel.hidden { display:none !important; }
+#mwRing { position:relative; width:0; height:0; }
+.mwItem { position:absolute; left:0; top:0; width:104px; padding:8px 6px; text-align:center;
+  border-radius:10px; cursor:pointer; background:rgba(20,20,20,.94);
+  border:1px solid #5a5a5a; color:#d8d8d8; pointer-events:auto;
+  transition:border-color .12s, background .12s; }
+.mwItem .mwIco { font-size:22px; line-height:1.15; }
+.mwItem .mwName { font-size:12px; margin-top:2px; letter-spacing:1px; }
+.mwItem .mwQty { font-size:11px; color:#9a9a9a; }
+.mwItem.sel { background:rgba(255,215,122,.16); border-color:var(--acc); color:var(--acc);
+  box-shadow:0 0 0 1px var(--acc), 0 0 22px rgba(255,215,122,.3); }
+.mwItem.sel .mwQty { color:var(--acc); }
+#mwHub { position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+  width:164px; text-align:center; pointer-events:none; }
+#mwTitle { color:var(--acc); font-size:15px; letter-spacing:4px; }
+#mwSub { color:#a8a8a8; font-size:11px; line-height:1.5; margin-top:5px; min-height:32px; }
+#mwClose { pointer-events:auto; margin-top:8px; cursor:pointer; font-family:inherit;
+  background:transparent; border:1px solid #666; color:#b0b0b0;
+  border-radius:5px; padding:5px 16px; font-size:12px; letter-spacing:2px; }
+#mwClose:hover { border-color:#b8b8b8; color:#f0f0f0; }
+body.mobile .mwItem { width:88px; padding:6px 4px; }
+body.mobile .mwItem .mwIco { font-size:19px; }
+body.mobile .mwItem .mwName { font-size:11px; letter-spacing:0; }
+body.mobile #mwHub { width:150px; }
+
+/* ===== VibeHub 联机 / 排行榜 (54_vibe.js + 55_net.js) ===== */
+.netAcct{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 10px;border:1px solid #666666;border-radius:6px;background:rgba(0,0,0,.35);font-size:13px}
+.netAcct #vhUser{flex:1;min-width:120px}
+.netRow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.netInput{flex:1;min-width:120px;padding:8px 10px;border:1px solid #666666;border-radius:6px;background:rgba(0,0,0,.5);color:#f0f0f0;font-size:15px;letter-spacing:3px;text-transform:uppercase}
+.netRoom{padding:8px 10px;border:1px solid #666666;border-radius:6px;background:rgba(0,0,0,.35);font-size:13px}
+.netLog{margin-top:6px;color:#b0b0b0;font-size:12px;line-height:1.6}
+.netSub{color:#b0b0b0;font-size:12px}
+#netSearch{margin-top:10px;padding:8px 10px;border:1px solid #666666;border-radius:6px;background:rgba(0,0,0,.55);color:#e8e8e8;font-size:13px}
+#vhBoard{font-size:13px}
+.vhMe{display:flex;gap:14px;flex-wrap:wrap;padding:8px 10px;border:1px solid #666666;border-radius:6px;background:rgba(0,0,0,.35)}
+.vhMe b{color:#e8c56a;font-weight:normal}
+.vhTip{color:#b0b0b0;font-size:12px;line-height:1.6;padding:4px 0}
+.vhWarn{color:#e0b080}
+.vhRows{margin-top:6px;border:1px solid #666666;border-radius:6px;overflow:hidden}
+.vhRow{display:grid;grid-template-columns:28px 1fr 56px 76px 76px;gap:6px;padding:5px 8px;font-size:12px;border-bottom:1px solid #444444;background:rgba(0,0,0,.3)}
+.vhRow:last-child{border-bottom:none}
+.vhHead{color:#b0b0b0;background:rgba(0,0,0,.5)}
+.vhMine{background:rgba(120,200,140,.14)}
+
+/* ===== 爆闪手电: 自己被晃眼时的纯白屏 (15c_flashlight) ===== */
+#strobeOv{position:fixed;inset:0;background:#ffffff;opacity:0;pointer-events:none;z-index:18;transition:opacity .08s linear}
+
+/* ===== 剧情模式 (2026-09-19) ===== */
+#storyHud{position:absolute;right:14px;top:300px;width:236px;background:rgba(14,14,14,.80);
+ border:1px solid rgba(255,215,122,.45);border-radius:6px;padding:8px 10px;font-size:12px;
+ color:#e2e2e2;z-index:11;pointer-events:none;letter-spacing:.4px;line-height:1.55}
+#storyHud.hidden{display:none}
+#storyHud .shTitle{color:#ffd77a;font-weight:700;margin-bottom:4px}
+#storyHud .shObj{color:#cfcfcf}
+#storyHud .shObj.ok{color:#8fe6a8}
+#storyHud .shSay{margin-top:6px;padding-top:6px;border-top:1px dashed rgba(255,215,122,.3);color:#f0e0b0;font-style:italic}
+#storyList .storyHead{color:#ffd77a;font-size:16px;font-weight:700;letter-spacing:2px;text-align:center}
+#storyList .storySub{color:#b8b8b8;font-size:12px;text-align:center;margin:6px 0 12px}
+#storyList .storyFoot{color:#d8c890;font-size:13px;text-align:center;line-height:1.7;margin:14px 0}
+#storyList .storyCard{background:rgba(0,0,0,.38);border:1px solid #666666;border-radius:8px;
+ padding:10px 12px;margin-bottom:10px}
+#storyList .storyCard.done{border-color:rgba(143,230,168,.55)}
+#storyList .storyCard.lock{opacity:.55}
+#storyList .scNo{color:#ffd77a;font-size:12px;letter-spacing:2px}
+#storyList .scName{color:#f0f0f0;font-size:17px;font-weight:700;margin:2px 0 4px}
+#storyList .scTag{color:#9a9a9a;font-size:11px;margin-bottom:6px}
+#storyList .scBrief{color:#cfcfcf;font-size:12px;line-height:1.65}
+#storyList .scObj{color:#a8d8b0;font-size:12px;margin-top:6px;line-height:1.6}
+#storyList .scRw{color:#d8b878;font-size:12px;margin-top:4px}
+#storyList .scBtn{margin-top:8px;width:100%}
+
+body.mobile #storyHud{right:8px;top:auto;bottom:104px;width:172px;font-size:11px;padding:6px 8px}
+#storyList .scKit{color:#c8b0d8;font-size:12px;margin-top:4px;line-height:1.6}
+
+/* ===== PC 触控屏: 显示虚拟按键时套用移动端相关适配 (见 01_data 的 TOUCHUI) ===== */
+/* ⚠️ 只加「触控相关」的规则 —— 不动 body.mobile 那套 (隐藏任务 HUD 等), PC 屏幕大, 不该照搬 */
+body.touchui #touchUI { display:block; }
+body.touchui #hint, body.touchui #ctrlHelp, body.touchui #interact { display:none !important; }
+body.touchui .bagAct { min-height:44px; font-size:14px; letter-spacing:2px; }
+body.touchui button.secTake { min-height:34px; padding:6px 14px; font-size:13px; letter-spacing:2px; }
+body.touchui #storyHud { right:8px; top:auto; bottom:104px; width:172px; font-size:11px; padding:6px 8px; }
+/* ===== 倒地 / 救援 HUD (57_downed) ===== */
+#downHud { position:absolute; left:50%; transform:translateX(-50%); bottom:23%; display:none;
+  background:rgba(20,10,10,.80); border:1px solid rgba(255,120,100,.55); border-radius:6px;
+  padding:8px 18px; text-align:center; z-index:12; pointer-events:none; letter-spacing:1px; }
+#downHud .dhTitle { color:#ff9c8a; font-size:15px; font-weight:700; margin-bottom:3px; }
+#downHud .dhRow { color:#e0e0e0; font-size:12px; }
+#downHud .dhRow b { color:#ffd77a; font-size:14px; }
+#downHud .dhBar { width:190px; height:7px; background:#2a2020; border-radius:4px; overflow:hidden; margin-top:2px; }
+#downHud .dhBar i { display:block; height:100%; background:linear-gradient(90deg,#4ad98a,#a8ffd0); }

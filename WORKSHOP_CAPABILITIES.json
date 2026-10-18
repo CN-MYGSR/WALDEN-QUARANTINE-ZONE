@@ -1,0 +1,92 @@
+[
+  {
+    "id": "weapons.register",
+    "name": "注册/替换武器",
+    "description": "通过 modApi.weapons.register(key, def) 在游戏启动前向 WPN_DEFS 注册一把新武器或覆盖现有武器的字段（伤害/射速/散布/后坐力/开镜倍率等）。返回被替换的旧定义（不存在则 null）。Mod 不能新增 type 枚举之外的行为（如新增火箭筒）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "weapons.read",
+    "name": "读取武器定义",
+    "description": "通过 modApi.weapons.get(key) / listAll() / listModded() 读取当前可用的武器列表和参数快照。仅供查询，不应直接修改返回的对象（通过 register 才是稳定方式）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "npcs.register-template",
+    "name": "注册 NPC 模板",
+    "description": "通过 modApi.npcs.register(template) 注册一个会被注入到所有敌方 Bot 生成流程的模板（血量倍率/反应倍率/散布倍率/视野倍率/受伤倍率/指定武器/名字前缀）。可选 match(bot, ctx) 函数做条件过滤。多个模板对一个 Bot 生效时按相乘叠加。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "npcs.apply-to",
+    "name": "应用 NPC 模板",
+    "description": "通过 modApi.npcs.applyTo(bot) 手动对一个 bot 实例应用所有已注册模板（也可通过 modApi.npcs.snapshot() 拿到数组后批量应用）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "npcs.snapshot",
+    "name": "只读访问 NPC 列表",
+    "description": "通过 modApi.npcs.snapshot() 拿到当前所有 combatants 的浅拷贝快照。只读，不要直接修改其中元素。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "maps.register",
+    "name": "注册新地图",
+    "description": "通过 modApi.maps.register(def) 向 CAMPAIGNS 追加或覆盖一张地图。必填 id/title/modeName/layout/terr/theme/f/mapSize/bases/extract。注册后立刻出现在部署界面的地图选择里。切换需 reload 页面（modApi.maps.select 自动写 localStorage.sf_campaign）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "maps.list",
+    "name": "读取地图列表",
+    "description": "通过 modApi.maps.list() 读取当前所有地图（原生 + mod 注册）的浅拷贝快照。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "player.snapshot",
+    "name": "只读访问玩家",
+    "description": "通过 modApi.player.snapshot() 拿到玩家当前 hp/limbs/team/cls/pos 的只读快照。不要修改其中字段（Mod 改 player 字段没有事件总线参与，会破坏一致）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "player.heal",
+    "name": "给自己加血",
+    "description": "通过 modApi.player.heal(amount) 直接给玩家加血（夹紧到 maxHp，limbs 同步加）。返回实际加上的值。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "player.set-visual",
+    "name": "玩家外观",
+    "description": "通过 modApi.player.setVisual({ skinColor, coatColor, pantsColor, helmColor }) 修改玩家的视觉颜色。多个 mod 注册时按 id 顺序叠加覆盖。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "player.hook-damage",
+    "name": "伤害钩子",
+    "description": "通过 modApi.player.hookDamage(fn) 注册玩家伤害前回调：fn(amount, attacker, target, info) -> number。返回新值时改写原伤害，返回 undefined 时透传。info = { isHead, part, isPlayer }。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "player.hook-fire",
+    "name": "子弹钩子",
+    "description": "通过 modApi.player.hookFireBullet(fn) 注册每次开火前的子弹定义钩子：fn(def, shooter, origin, dir) -> def。返回新 def 时替换原 def（可修改 dmg/headMul/spread 等）。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "events.subscribe",
+    "name": "订阅游戏事件",
+    "description": "通过 modApi.events.on(event, fn) 订阅平台事件：damage、kill、death、round:start、round:end、extract、weapon:registered、npc:registered、map:registered。返回退订函数。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "events.emit",
+    "name": "广播自定义事件",
+    "description": "通过 modApi.events.emit(name, payload) 主动广播一个事件给其他 Mod 订阅。平台事件名空间为 weapon:registered / npc:registered / map:registered，其余自定义名建议加 mod 前缀。",
+    "multiplayer": "local"
+  },
+  {
+    "id": "refs.read-only",
+    "name": "只读游戏数据",
+    "description": "通过 modApi.refs.WPN_DEFS / CAMPAIGNS / FACTIONS / ELO 读取游戏的顶层数据字典。读取是允许的，但 Mod 应优先使用具名注册函数（weapons.register / maps.register / npcs.register-template），而不是直接 mutate 这些对象，这样能保持 mod 的稳定兼容性。",
+    "multiplayer": "local"
+  }
+]

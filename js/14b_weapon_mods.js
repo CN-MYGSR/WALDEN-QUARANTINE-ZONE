@@ -1,7 +1,7 @@
 'use strict';
 // ===================== 武器改装系统 =====================
 // 每位玩家的武器可在部署时加装配件, 改装后模型与属性同时变化
-// 四个槽位: optic(瞄具) · muzzle(枪口) · magazine(弹匣) · gear(战术配件/夜视仪)
+// 七个槽位: optic(瞄具) · muzzle(枪口) · mag(弹匣) · stock(枪托) · grip(握把) · gear(战术配件/夜视仪) · light(照明)
 
 const ALL_MODS = {
   // ---- 瞄具 ----
@@ -22,6 +22,22 @@ const ALL_MODS = {
   mag_ext:          { slot:'mag', name:'扩容弹匣',   desc:'弹容量 +40%·装填稍慢',icon:'▣', affects:{ magMul:1.4, reload:1.15 }, cost:400 },
   mag_quick:        { slot:'mag', name:'快拔弹匣',   desc:'装填加快·弹容 -15%',icon:'▤', affects:{ magMul:0.85, reload:0.78 }, cost:320 },
 
+  // ---- 弹匣 · 大容量 ----
+  mag_drum:         { slot:'mag', name:'弹鼓',     desc:'弹容量 ×2·换弹最慢·腰射变差', icon:'◍', affects:{ magMul:2.0, reload:1.5, spreadHip:1.10 }, cost:900 },
+
+  // ---- 枪托 ----
+  // 只给有托的武器 (手枪/火箭筒没有枪托, 见下方按类别自动分配)
+  stock_standard:   { slot:'stock', name:'标准枪托',     desc:'出厂标配',            icon:'▭', affects:{} },
+  stock_heavy:      { slot:'stock', name:'重型枪托',     desc:'后座显著降低·腰射略差', icon:'▬', affects:{ recoil:0.80, recSide:0.86, spreadHip:1.06, kick:0.88 }, cost:420 },
+  stock_light:      { slot:'stock', name:'轻量枪托',     desc:'腰射更灵活·后座增大',  icon:'▱', affects:{ spreadHip:0.90, recoil:1.10, kick:1.08 }, cost:380 },
+  stock_precision:  { slot:'stock', name:'精确射手枪托', desc:'架枪极稳·腰射最差',    icon:'▮', affects:{ recoil:0.86, recSide:0.80, spreadAds:0.88, spreadHip:1.18 }, cost:620 },
+
+  // ---- 握把 (前握把, 装在护木下方) ----
+  grip_none:        { slot:'grip', name:'无前握把', desc:'不安装前握把',        icon:'○', affects:{} },
+  grip_vertical:    { slot:'grip', name:'垂直握把', desc:'压住水平后座·腰射略差', icon:'▯', affects:{ recSide:0.76, recoil:0.95, spreadHip:1.05 }, cost:340 },
+  grip_angled:      { slot:'grip', name:'斜角握把', desc:'腰射更稳·换弹略快',    icon:'◣', affects:{ spreadHip:0.85, reload:0.94, recSide:1.05 }, cost:360 },
+  grip_tactical:    { slot:'grip', name:'战术握把', desc:'开镜更准·换弹更快',    icon:'▰', affects:{ spreadAds:0.86, reload:0.90, recoil:1.05 }, cost:520 },
+
   // ---- 战术配件 ----
   gear_none:        { slot:'gear', name:'无配件',   desc:'不携带夜视仪',       icon:'▢', affects:{} },
   gear_nvg:         { slot:'gear', name:'夜视仪',   desc:'需仓库持有夜视仪·局内按 N 开关(夜间增强/白天过曝)·阵亡丢失', icon:'◐', affects:{}, cost:0 },
@@ -31,6 +47,8 @@ const ALL_MODS = {
   // 属于「用隐蔽性换信息」的改件 —— 楼道/地下/夜战收益最大。
   light_none:       { slot:'light', name:'无照明',   desc:'不安装照明',        icon:'○', affects:{} },
   light_flash:      { slot:'light', name:'战术手电', desc:'局内按 G 开关·照亮前方·同时暴露自身位置', icon:'✦', affects:{}, cost:260 },
+  light_laser:      { slot:'light', name:'激光指示器', desc:'局内按 G 开关·红色光柱与落点·不照亮环境也不暴露自己', icon:'●', affects:{}, cost:300 },
+  light_strobe:     { slot:'light', name:'爆闪手电',   desc:'局内按 G 触发爆闪·连闪 10 次·范围内敌人短暂失能·自己也晃眼', icon:'✹', affects:{}, cost:780 },
 };
 
 // 每个武器可用的模组 (按武器 key)
@@ -98,12 +116,30 @@ const MOD_AVAIL = {
   pf3:       { optic:['optic_iron'],                                    muzzle:['muzzle_standard'],                                  mag:['mag_standard'] },
   p320:      { optic:['optic_iron'],                                    muzzle:['muzzle_standard','muzzle_supp'],                    mag:['mag_standard','mag_ext'] },
   g17:       { optic:['optic_iron'],                                    muzzle:['muzzle_standard','muzzle_supp'],                    mag:['mag_standard','mag_ext'] },
+  // ---- 现代 · 新增 6 把 ----
+  deagle:    { optic:['optic_iron'],                                    muzzle:['muzzle_standard','muzzle_comp'],                    mag:['mag_standard','mag_ext'] },
+  glock18:   { optic:['optic_iron'],                                    muzzle:['muzzle_standard','muzzle_comp','muzzle_supp'],      mag:['mag_standard','mag_ext','mag_quick'] },
+  awm:       { optic:['optic_4x','optic_2x'],                           muzzle:['muzzle_standard','muzzle_supp'],                    mag:['mag_standard','mag_quick'] },
+  qbz95:     { optic:['optic_iron','optic_reflex','optic_2x'],          muzzle:['muzzle_standard','muzzle_comp','muzzle_supp'],      mag:['mag_standard','mag_ext','mag_quick'] },
+  qbz191:    { optic:['optic_iron','optic_reflex','optic_2x'],          muzzle:['muzzle_standard','muzzle_comp','muzzle_supp'],      mag:['mag_standard','mag_ext','mag_quick'] },
+  hk416:     { optic:['optic_iron','optic_reflex','optic_2x'],          muzzle:['muzzle_standard','muzzle_comp','muzzle_supp'],      mag:['mag_standard','mag_ext','mag_quick'] },
 };
 // 战术配件槽: 所有武器可选 无配件/夜视仪; 有瞄具槽的武器追加 夜视瞄具
 Object.values(MOD_AVAIL).forEach(a=>{
   a.gear=['gear_none','gear_nvg'];
-  a.light=['light_none','light_flash'];
+  a.light=['light_none','light_flash','light_laser','light_strobe'];
   if(a.optic&&a.optic.length>1) a.optic.push('optic_nvg');
+});
+// 枪托 / 握把: 按武器类别自动分配 (与 gear/light 同一手法 —— 不逐把写, 免得漏)
+//   · 手枪(pistol) 没有枪托, 前握把也无处可装 → 空数组 = 工坊里不显示这两行
+//   · 火箭筒/迫击炮(snd==='cannon') 同理
+//   · 弹鼓只给全自动且非机枪 (机枪本身弹容就大, 再翻倍太离谱)
+Object.entries(MOD_AVAIL).forEach(([k,a])=>{
+  const d=WPN_DEFS[k]||{};
+  const bare=!!d.pistol||d.snd==='cannon';
+  a.stock = bare ? [] : ['stock_standard','stock_heavy','stock_light','stock_precision'];
+  a.grip  = bare ? [] : ['grip_none','grip_vertical','grip_angled','grip_tactical'];
+  if(d.type==='auto'&&d.snd!=='mg'&&a.mag&&a.mag.indexOf('mag_drum')<0) a.mag.push('mag_drum');
 });
 
 // 玩家存储的改装选择: { weaponKey: { optic:'optic_2x', muzzle:'muzzle_comp', mag:'mag_standard' } }
@@ -112,7 +148,9 @@ try { PLAYER_MODS = JSON.parse(localStorage.getItem('sf_mods')||'{}'); } catch(e
 
 function savePlayerMods() { try { localStorage.setItem('sf_mods', JSON.stringify(PLAYER_MODS)); } catch(e) {} }
 
-function getModSlots(key) { return MOD_AVAIL[key] || { optic:['optic_iron'], muzzle:['muzzle_standard'], mag:['mag_standard'], gear:['gear_none'], light:['light_none','light_flash'] }; }
+// ⚠️ 兜底字面量的 gear 槽**必须也含 gear_nvg** —— 没有 MOD_AVAIL 条目的武器会走这里,
+// 漏了它 → 那几把枪在工坊里没有夜视仪选项 → 拥有夜视仪也用不了。
+function getModSlots(key) { return MOD_AVAIL[key] || { optic:['optic_iron'], muzzle:['muzzle_standard'], mag:['mag_standard'], stock:['stock_standard','stock_heavy','stock_light','stock_precision'], grip:['grip_none','grip_vertical','grip_angled','grip_tactical'], gear:['gear_none','gear_nvg'], light:['light_none','light_flash','light_laser','light_strobe'] }; }
 function getModChoice(key, slot) {
   const wm = PLAYER_MODS[key] || {};
   const avail = getModSlots(key);
@@ -131,7 +169,7 @@ function moddedDef(key) {
   const base = WPN_DEFS[key];
   if(!base) return null;
   const out = Object.assign({}, base);
-  ['optic','muzzle','mag'].forEach(slot => {
+  ['optic','muzzle','mag','stock','grip'].forEach(slot => {
     const mid = getModChoice(key, slot);
     if(slot==='optic'&&opticBlocked(key)) return;
     const mod = ALL_MODS[mid];
@@ -164,12 +202,16 @@ function addModVisuals(parts, key) {
   const optic = effectiveOptic(key);
   const adsA = parts.anchors && parts.anchors.ads;
   if(!alreadyScoped && adsA && optic !== 'optic_iron') {
-    const p0y = adsA.pos.y, p0z = adsA.pos.z;
+    // ⚠️ 必须取负: adsFromSight 返回的 pos.y 是"把枪往下压多少"的相机相对偏移(负值),
+    // 不是枪身局部高度。直接用会让镜体落到 y≈-0.06, 而枪身 y 范围是 [-0.11,0.062] → 埋进机匣, 看不见。
+    // 取负后 ≈ +0.060, 与机瞄顶 parts.sightAnchor.y(≈0.068) 同量级, 正好坐在机匣上。
+    const p0y = -adsA.pos.y, p0z = adsA.pos.z;
     if(optic === 'optic_reflex') {
       const bxBase = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.016,0.04), gl);
       bxBase.position.set(0, p0y-0.003, p0z-0.05); G.add(bxBase);
       const lens = new THREE.Mesh(new THREE.BoxGeometry(0.028,0.022,0.005), new THREE.MeshLambertMaterial({color:0x8ac0e0}));
       lens.position.set(0, p0y-0.003, p0z-0.07); G.add(lens);
+      parts.opticSightY = p0y-0.003;   // 光学中心高度, 供 buildGunModel 算 sightAnchor
       adsA.pos.y += 0.015;
       adsA.pos.z += 0.06;
     } else if(optic === 'optic_2x') {
@@ -180,6 +222,7 @@ function addModVisuals(parts, key) {
       const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.015,0.002,6,8), gl);
       r1.position.set(0, p0y-0.002, p0z-0.02); G.add(r1);
       const r2 = r1.clone(); r2.position.z = p0z-0.08; G.add(r2);
+      parts.opticSightY = p0y-0.002;
       adsA.pos.y += 0.025;
       adsA.pos.z += 0.055;
     } else if(optic === 'optic_4x') {
@@ -190,6 +233,7 @@ function addModVisuals(parts, key) {
       const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.019,0.0025,8,10), gl);
       r1.position.set(0, p0y, p0z-0.01); G.add(r1);
       const r2 = r1.clone(); r2.position.z = p0z-0.09; G.add(r2);
+      parts.opticSightY = p0y;
       adsA.pos.y += 0.035;
       adsA.pos.z += 0.05;
     } else if(optic === 'optic_nvg') {
@@ -202,6 +246,7 @@ function addModVisuals(parts, key) {
       lensG.position.set(0, p0y-0.002, p0z-0.124); lensG.rotation.x = HPI; G.add(lensG);
       const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.017,0.0025,8,10), gl);
       r1.position.set(0, p0y-0.002, p0z-0.02); G.add(r1);
+      parts.opticSightY = p0y-0.002;
       adsA.pos.y += 0.028;
       adsA.pos.z += 0.05;
     }
@@ -244,6 +289,49 @@ function addModVisuals(parts, key) {
     parts.flashLens = lens;
   }
 
+  // 爆闪手电: 与手电同槽位(互斥)。灯头明显更粗(大反光碗), 镜片更大更亮
+  if(getModChoice(key, 'light') === 'light_strobe') {
+    const tl = clamp(Math.abs(muzz.z) * 0.15, 0.042, 0.070);
+    const rr = 0.0135 * (0.55 + 0.45 * tl / 0.070);
+    const bx = -0.030, by = muzz.y + 0.012, bz = muzz.z + tl * 1.35 + 0.012;
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr * 1.06, tl, 8), gm);
+    tube.position.set(bx, by, bz); tube.rotation.x = HPI; G.add(tube);
+    // 粗灯头 + 前端喇叭口 (爆闪灯的典型外形)
+    const head = new THREE.Mesh(new THREE.CylinderGeometry(rr * 1.75, rr * 1.1, tl * 0.42, 10), gl);
+    head.position.set(bx, by, bz - tl * 0.72); head.rotation.x = HPI; G.add(head);
+    const rim = new THREE.Mesh(new THREE.TorusGeometry(rr * 1.72, rr * 0.16, 6, 12), gl);
+    rim.position.set(bx, by, bz - tl * 0.93); G.add(rim);
+    // 散热槽
+    for (let i = 0; i < 3; i++) {
+      const fin = new THREE.Mesh(new THREE.TorusGeometry(rr * 1.14, rr * 0.09, 5, 10), gl);
+      fin.position.set(bx, by, bz - tl * (0.28 + i * 0.13)); G.add(fin);
+    }
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(rr * 1.6, rr * 1.6, 0.005, 12),
+      new THREE.MeshBasicMaterial({color:0x4a4740}));
+    lens.position.set(bx, by, bz - tl * 0.95); lens.rotation.x = HPI; G.add(lens);
+    parts.flashLens = lens;
+  }
+
+  // 激光指示器: 与手电同槽位(互斥)。筒身更短更细, 前端红色镜片 + 侧面拨杆开关
+  if(getModChoice(key, 'light') === 'light_laser') {
+    const tl = clamp(Math.abs(muzz.z) * 0.13, 0.032, 0.058);
+    const rr = 0.0102 * (0.55 + 0.45 * tl / 0.058);
+    const bx = -0.030, by = muzz.y + 0.012, bz = muzz.z + tl * 1.35 + 0.012;
+    const tube = new THREE.Mesh(new THREE.CylinderGeometry(rr, rr * 1.05, tl, 8), gm);
+    tube.position.set(bx, by, bz); tube.rotation.x = HPI; G.add(tube);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(rr * 1.16, rr * 0.2, 6, 10), gl);
+    ring.position.set(bx, by, bz - tl * 0.34); G.add(ring);
+    // 侧面拨杆开关 (和手电区分开)
+    const sw = new THREE.Mesh(new THREE.BoxGeometry(rr * 0.55, rr * 0.8, rr * 0.55), gl);
+    sw.position.set(bx + rr * 1.15, by + rr * 0.55, bz + tl * 0.22); G.add(sw);
+    // 红色镜片: 颜色由 15c_flashlight 每帧控制亮/灭
+    const lens = new THREE.Mesh(new THREE.CylinderGeometry(rr * 1.0, rr * 1.0, 0.004, 10),
+      new THREE.MeshBasicMaterial({color:0x5a2020}));
+    lens.position.set(bx, by, bz - tl * 0.72); lens.rotation.x = HPI; G.add(lens);
+    parts.laserLens = lens;
+    parts.laserEmit = V3(bx, by, bz - tl * 0.78);
+  }
+
   // 夜视仪(战术配件槽 gear_nvg): 机匣顶部后段的小型夜视仪 —— 基座 + 镜筒 + 荧光物镜 + 目镜
   // 放在机匣后部(朝射手方向), 不与前部瞄具/夜视瞄镜抢位置; 开镜时它落在视野下方边缘
   if(getModChoice(key, 'gear') === 'gear_nvg' && adsA) {
@@ -272,15 +360,62 @@ function addModVisuals(parts, key) {
     // 快拔弹匣: 底部加装快拔环
     const ring = new THREE.Mesh(new THREE.TorusGeometry(0.018,0.003,6,8), gl);
     ring.position.set(mw.x, mw.y - 0.08, mw.z); G.add(ring);
+  } else if(mag === 'mag_drum' && mw) {
+    // 弹鼓: 弹匣井下方一个扁圆柱
+    const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.052,0.052,0.042,14), pk);
+    drum.position.set(mw.x, mw.y - 0.085, mw.z); drum.rotation.z = HPI; G.add(drum);
+    const hub = new THREE.Mesh(new THREE.CylinderGeometry(0.016,0.016,0.05,10), gl);
+    hub.position.set(mw.x, mw.y - 0.085, mw.z); hub.rotation.z = HPI; G.add(hub);
+  }
+
+  // ---- 枪托: 以右手锚点为参考 (托在持握手之后), 只在机匣后方加装附件 ----
+  const stk = getModChoice(key, 'stock');
+  const rhA = parts.anchors && parts.anchors.rHand;
+  if(rhA && stk && stk !== 'stock_standard') {
+    const sz = rhA.pos.z + 0.18, sy = rhA.pos.y + 0.030;
+    if(stk === 'stock_heavy') {
+      // 厚重颊托 + 橡胶托底
+      bx(gl, 0.036, 0.030, 0.13, 0, sy, sz, G);
+      bx(pk, 0.044, 0.075, 0.030, 0, sy - 0.020, sz + 0.075, G);
+    } else if(stk === 'stock_light') {
+      // 镂空骨架: 两根细杆 + 细托底
+      bx(gl, 0.010, 0.012, 0.16, -0.013, sy - 0.004, sz, G);
+      bx(gl, 0.010, 0.012, 0.16,  0.013, sy - 0.004, sz, G);
+      bx(pk, 0.034, 0.052, 0.020, 0, sy - 0.014, sz + 0.085, G);
+    } else if(stk === 'stock_precision') {
+      // 可调颊托 + 后支撑脚
+      bx(gl, 0.038, 0.026, 0.15, 0, sy + 0.008, sz, G);
+      bx(pk, 0.046, 0.085, 0.034, 0, sy - 0.020, sz + 0.082, G);
+      cyl(gl, 0.006, 0.006, 0.09, 0, sy - 0.075, sz + 0.070, G, 0);   // rx=0 → 竖直
+    }
+  }
+
+  // ---- 握把 (前握把): 以左手锚点为参考 (支撑手本来就握在护木这里) ----
+  const gp = getModChoice(key, 'grip');
+  const lhA = parts.anchors && parts.anchors.lHand;
+  if(lhA && gp && gp !== 'grip_none') {
+    const gx = lhA.pos.x, gy = lhA.pos.y - 0.012, gz = lhA.pos.z;
+    if(gp === 'grip_vertical') {
+      cyl(gl, 0.011, 0.011, 0.075, gx, gy - 0.045, gz, G, 0);          // rx=0 → 竖直
+      bx(pk, 0.020, 0.014, 0.034, gx, gy - 0.008, gz, G);
+    } else if(gp === 'grip_angled') {
+      const ag = bx(gl, 0.018, 0.062, 0.030, gx, gy - 0.040, gz, G);
+      ag.rotation.x = 0.42;
+      bx(pk, 0.020, 0.012, 0.032, gx, gy - 0.006, gz, G);
+    } else if(gp === 'grip_tactical') {
+      cyl(gl, 0.013, 0.011, 0.045, gx, gy - 0.030, gz, G, 0);
+      bx(pk, 0.024, 0.020, 0.046, gx, gy - 0.056, gz, G);
+      bx(gl, 0.008, 0.010, 0.050, gx + 0.016, gy - 0.020, gz + 0.028, G);
+    }
   }
 }
 
 // 改装外观显示名称 (部署界面)
 function modDisplayName(key) {
   const parts = [];
-  ['optic','muzzle','mag','gear','light'].forEach(s => {
+  ['optic','muzzle','mag','stock','grip','gear','light'].forEach(s => {
     const mid = getModChoice(key, s);
-    if(mid && mid !== 'optic_iron' && mid !== 'muzzle_standard' && mid !== 'mag_standard' && mid !== 'gear_none' && mid !== 'light_none') {
+    if(mid && mid !== 'optic_iron' && mid !== 'muzzle_standard' && mid !== 'mag_standard' && mid !== 'stock_standard' && mid !== 'grip_none' && mid !== 'gear_none' && mid !== 'light_none') {
       parts.push(ALL_MODS[mid].name);
     }
   });
@@ -290,7 +425,7 @@ function modDisplayName(key) {
 // 改装总开销
 function modTotalCost(key) {
   let total = 0;
-  ['optic','muzzle','mag','gear','light'].forEach(s => {
+  ['optic','muzzle','mag','stock','grip','gear','light'].forEach(s => {
     const mid = getModChoice(key, s);
     if(mid && ALL_MODS[mid].cost) total += ALL_MODS[mid].cost;
   });

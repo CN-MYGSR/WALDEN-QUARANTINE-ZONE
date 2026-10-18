@@ -26,7 +26,7 @@
 //     · 合并: 每 UNIT_MERGE_IV 秒扫一次, 同阵营两个"编制和 ≤ 4 且都没在交战"的单位合并,
 //             合并后解散空单位。交战中不合并, 避免目标点跳变。
 //  ④ 过滤插入点(全部走 unitBlocks(a,b), 未加载本文件时自动退化为按队伍):
-//     · 目标选择: 19_bot perceive() 的 combatants 循环 + TANK_CREW_PROXIES 循环
+//     · 目标选择: 19_bot perceive() 的 combatants 循环
 //     · 伤害结算(硬闸): 19_bot damage() / 23_player damage() 入口直接 return,
 //             同单位之间不结算任何伤害(自伤除外), 任何新增伤害路径都自动受此约束
 //     · 弹道命中: 17_ragdoll raySoldiers() —— 同单位不吃这颗子弹
@@ -184,14 +184,6 @@ if(typeof Bot!=='undefined'&&Bot.prototype){
   try{ assignUnit(this); }catch(e){}
   return r;
  };
- if(Bot.prototype.spawnInVehicle){
-  const _uSpawnV=Bot.prototype.spawnInVehicle;
-  Bot.prototype.spawnInVehicle=function(){
-   const r=_uSpawnV.apply(this,arguments);
-   try{ assignUnit(this); }catch(e){}
-   return r;
-  };
- }
  // 阵亡: 保留编制位(不重编), 只刷新存活数
  const _uDie=Bot.prototype.die;
  Bot.prototype.die=function(){

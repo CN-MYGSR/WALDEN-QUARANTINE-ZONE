@@ -9,8 +9,61 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
+<!-- 资源加载失败兜底 (2026-09-15):
+     任何一个 <script>/<link> 拉取失败, 游戏会因为缺符号而静默崩成一堆 "xxx is not defined",
+     玩家只看到一个坏掉的界面(没有菜单、点哪都没反应), 完全不知道发生了什么。
+     典型场景: 刚发版时 CDN 边缘节点还没同步完, 少数文件短暂 404。
+     这里捕获资源错误 + 检查核心符号, 给出可操作的提示。
+     注意: 只对本站 js/css 判为致命 —— 创意工坊 loader 是外部可选依赖, 失败不该拦人。 -->
+<script>
+(function(){
+  var shown=false, failed=[];
+  function isCritical(u){
+    if(!u) return false;
+    return u.indexOf('/js/')>=0 || u.indexOf('/css/')>=0
+        || u.indexOf('js/')===0 || u.indexOf('css/')===0;
+  }
+  function show(reason){
+    if(shown) return; shown=true;
+    var mk=function(){
+      if(document.getElementById('loadFailOv')) return;
+      var d=document.createElement('div');
+      d.id='loadFailOv';
+      d.style.cssText='position:fixed;inset:0;z-index:99999;background:#141414;color:#e8e8e8;'
+        +'display:flex;align-items:center;justify-content:center;font:14px/1.7 system-ui,"Microsoft YaHei",sans-serif';
+      d.innerHTML='<div style="max-width:560px;padding:28px 32px;text-align:center">'
+        +'<div style="font-size:22px;letter-spacing:4px;margin-bottom:14px">资 源 加 载 失 败</div>'
+        +'<div style="color:#b8b8b8;margin-bottom:8px">游戏有文件没下载成功。刚更新完 CDN 需要一点时间同步，稍等几秒重试通常就好。</div>'
+        +'<div style="color:#8f8f8f;font-size:12px;margin-bottom:20px;word-break:break-all">'
+        +String(reason||'').replace(/[<>&]/g,'')+'</div>'
+        +'<button id="loadFailBtn" style="padding:10px 26px;border-radius:6px;cursor:pointer;'
+        +'background:#2b2b2b;color:#f0f0f0;border:1px solid #8f8f8f;font-size:14px;letter-spacing:2px">重 新 加 载</button>'
+        +' <button id="loadFailSkip" style="padding:10px 18px;border-radius:6px;cursor:pointer;'
+        +'background:transparent;color:#8f8f8f;border:1px solid #4a4a4a;font-size:13px">仍要继续</button></div>';
+      document.body.appendChild(d);
+      d.querySelector('#loadFailBtn').onclick=function(){ location.reload(); };
+      d.querySelector('#loadFailSkip').onclick=function(){ d.remove(); };
+    };
+    if(document.body) mk(); else addEventListener('DOMContentLoaded', mk);
+  }
+  addEventListener('error', function(e){
+    var t=e.target;
+    if(!t || t===window || !t.tagName) return;
+    if(t.tagName!=='SCRIPT' && t.tagName!=='LINK') return;
+    var u=t.src||t.href||'';
+    if(isCritical(u)){ failed.push(u); show('未能加载: '+u); }
+  }, true);
+  addEventListener('load', function(){
+    setTimeout(function(){
+      if(typeof el!=='function' || typeof THREE==='undefined'){
+        show('核心脚本未能执行'+(failed.length?'（'+failed.join(' , ')+'）':''));
+      }
+    }, 2000);
+  });
+})();
+</script>
 <title>BF Urban Infantry · 无载具巷战</title>
-<link rel="stylesheet" href="css/style.css?v=20260913g">
+<link rel="stylesheet" href="css/style.css?v=20260929b">
 </head>
 <body>
 <div id="ui">
@@ -31,12 +84,24 @@
 </svg></div><div id="hpTotal">440 / 440</div></div><div id="vitalsCol"><div id="stamBarWrap"><div id="stamBar"></div></div><div id="statBarWrap"><span id="waterBar" class="statBar" data-tip="水分"><i style="display:block;width:100%"></i></span><span id="foodBar" class="statBar" data-tip="保食度"><i style="display:block;width:100%"></i></span></div></div></div>
 <div id="armorHud"></div>
 <div id="lootHud"></div>
+<!-- 爆闪手电: 自己也被晃眼时的纯白屏 (见 15c_flashlight 的 STROBE.blindT) -->
+<div id="strobeOv"></div>
 <div id="quickHud" style="display:none"></div>
 <div id="lootPanel" class="hidden"><div id="lootTitle">尸 体</div><div id="lootList"></div><div id="lootHint"></div></div>
 <div id="bagPanel" class="hidden">
 <div id="bagPanelHead"><span id="bagPanelTitle">背 包</span><span id="bagPanelStat"></span></div>
 <div id="bagPanelList"></div>
+<!-- 安全箱: 以前只有"放进去"没有"取出来", 而且面板里根本看不到箱里装了什么。
+     现在列出内容, 每行带一个「取出」按钮(点一下回背包, 背包满会明确提示)。
+     箱里没东西时整块隐藏, 不占手机屏幕高度。 -->
+<div id="secBox" class="hidden">
+<div id="secHead">安全箱 <span id="secStat"></span></div>
+<div id="secList"></div>
+</div>
 <div id="bagPanelHint"></div>
+<!-- 手机端没有键盘: 丢弃 / 存入安全箱 只能靠双击或长按, 在移动浏览器上不可靠。
+     这里给面板加一排实体按钮, 桌面端也一起用(点了就有反馈, 比记快捷键直观)。 -->
+<div id="bagPanelBtns"></div>
 </div>
 <div id="ammoShopPanel" class="hidden">
 <div id="ammoShopHead"><span id="ammoShopTitle">弹 药 商 店</span><span id="ammoShopStat"></span></div>
@@ -48,13 +113,12 @@
 <div id="bigmapWrap" class="hidden"><div id="bigmapTitle">战 场 态 势 · 大地图</div><canvas id="bigmap" width="780" height="780"></canvas><div id="bigmapHint">[M] 关闭 · 绿=友军 红=暴露敌军 蓝/红方框=坦克 ✈=战机</div></div>
 <div id="squadHUD"></div>
 <div id="topBar">
-<div id="tickets"><span class="tl">盟军 280</span> &nbsp;·&nbsp; <span class="tr">280 德军</span></div>
+<div id="tickets"><span class="tl">USEC 280</span> &nbsp;·&nbsp; <span class="tr">280 PMC</span></div>
 <div id="flagIcons"><span id="fiA">A</span><span id="fiB">B</span><span id="fiC">C</span><span id="fiD">D</span><span id="fiE">E</span></div>
 <div id="timeTxt">15:00</div>
 <canvas id="compass" width="460" height="26"></canvas>
 </div>
 <div id="killfeed"></div>
-<canvas id="xrayCv" width="400" height="226"></canvas>
 <div id="msgC"></div><div id="scorePop"></div>
 <div id="extractHud" class="hidden"><b>撤 离 中</b><div id="extractBarWrap"><div id="extractBar"></div></div><div id="extractTxt"></div></div>
 <div id="capPanel"><span id="capLetter">B</span><div id="capBarWrap"><div id="capBarFill"></div></div><div id="capTxt"></div></div>
@@ -64,22 +128,18 @@
 <div id="flashInd"></div>
 <div id="nadeInd"><span id="nadeIndTxt">手雷就位</span><span id="nadeIndBarWrap"><span id="nadeIndBar"></span></span></div>
 <div id="nadeWarn">⚠ 手雷 ⚠</div>
-<div id="leadPip"></div>
-<div id="tankPip"></div>
-<div id="tankSight"></div>
-<div id="planeSight"></div>
-<div id="mgPip"></div>
 <div id="heatWrap"><div id="heatFill"></div></div>
-<div id="scoreboard"><h3>战 场 记 分 板</h3><div id="sbCols"><div><table><thead><tr><th class="t0h">盟军</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbL"></tbody></table></div><div><table><thead><tr><th class="t1h">德军</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbR"></tbody></table></div></div></div>
+<div id="scoreboard"><h3>战 场 记 分 板</h3><div id="sbCols"><div><table><thead><tr><th class="t0h">USEC</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbL"></tbody></table></div><div><table><thead><tr><th class="t1h">PMC</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbR"></tbody></table></div></div></div>
 <div id="fps"></div>
 <div id="nvgInd" class="hidden"></div>
+<div id="storyHud" class="hidden"></div>
+<div id="downHud"></div>
 <div id="clsTip"></div>
 </div>
 <div id="blackOv"></div>
 <div id="deathQuote"></div>
 <div id="killInfo"></div>
 <div id="kcBanner"></div>
-<div id="hideGunTip"></div>
 <div id="stormOv" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none"></div>
 <div id="flashOv" style="position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none"></div>
 <div id="cutOv" style="display:none"><div id="cutTitle"></div><div id="cutSub"></div><div id="cutSkip"></div></div>
@@ -88,7 +148,6 @@
 <div id="tLook"></div>
 <div id="tStickZone"><div id="tStick"><div id="tKnob"></div></div></div>
 <div class="tbtn tMain" id="tFire" data-act="fire"><span class="tIco">◉</span><span class="tLbl">开火</span></div>
-<div class="tbtn" id="tFireL" data-act="fire"><span class="tIco">◉</span><span class="tLbl">开火</span></div>
 <div class="tbtn" id="tAds" data-act="ads"><span class="tIco">⊕</span><span class="tLbl">瞄准</span></div>
 <div class="tbtn" id="tJump" data-act="jump"><span class="tIco">⬆</span><span class="tLbl">跳</span></div>
 <div class="tbtn" id="tCrouch" data-act="crouch"><span class="tIco">▼</span><span class="tLbl">蹲/趴</span></div>
@@ -97,16 +156,22 @@
 <div class="tbtn sm" id="tMelee" data-act="melee"><span class="tIco">🗡</span><span class="tLbl">近战</span></div>
 <div class="tbtn" id="tNade" data-act="nade"><span class="tIco">◔</span><span class="tLbl">手雷</span></div>
 <div class="tbtn sm" id="tNadeType" data-act="nadetype"><span class="tLbl">雷种</span></div>
-<div class="tbtn sm" id="tHeal" data-act="heal"><span class="tIco">✚</span><span class="tLbl">用药</span></div>
-<div class="tbtn sm" id="tEat" data-act="eat" style="display:none"><span class="tIco">🍖</span><span class="tLbl">进食</span></div>
-<div class="tbtn sm" id="tSelUp" data-act="selup" style="display:none"><span class="tIco">▲</span><span class="tLbl">选择</span></div>
-<div class="tbtn sm" id="tSelDown" data-act="seldown" style="display:none"><span class="tIco">▼</span><span class="tLbl">换选</span></div>
-<div class="tbtn sm" id="tTake" data-act="take" style="display:none"><span class="tIco">✋</span><span class="tLbl">拿取</span></div>
-<div class="tbtn sm" id="tSkill" data-act="skill"><span class="tLbl">技能</span></div>
-<div class="tbtn sm" id="tBuildSel" data-act="buildsel"><span class="tLbl">工事</span></div>
+<div class="tbtn sm" id="tSelUp" data-act="selup"><span class="tIco">▲</span><span class="tLbl">选择</span></div>
+<div class="tbtn sm" id="tSelDown" data-act="seldown"><span class="tIco">▼</span><span class="tLbl">换选</span></div>
+<div class="tbtn sm" id="tTake" data-act="take"><span class="tIco">✋</span><span class="tLbl">拿取</span></div>
 <div class="tbtn sm" id="tBrace" data-act="brace"><span class="tIco">▙</span><span class="tLbl">架枪</span></div>
+<div class="tbtn sm" id="tSkill" data-act="skill"><span class="tLbl">技能</span></div>
+<div class="tbtn sm" id="tHeal" data-act="heal"><span class="tIco">✚</span><span class="tLbl">用药</span></div>
+<div class="tbtn sm" id="tNvg" data-act="nvg"><span class="tIco">◐</span><span class="tLbl">夜视</span></div>
+<div class="tbtn sm" id="tEat" data-act="eat"><span class="tIco">🍖</span><span class="tLbl">进食</span></div>
+<div class="tbtn sm" id="tMedWheel" data-act="medwheel"><span class="tIco">▦</span><span class="tLbl">药品</span></div>
+<div class="tbtn sm" id="tBuildSel" data-act="buildsel"><span class="tLbl">工事</span></div>
+<div class="tbtn" id="tLeanL" data-act="leanl"><span class="tIco">◀</span><span class="tLbl">左探</span></div>
+<div class="tbtn" id="tLeanR" data-act="leanr"><span class="tIco">▶</span><span class="tLbl">右探</span></div>
+<div class="tbtn sm" id="tFlash" data-act="flash"><span class="tIco">🔦</span><span class="tLbl">手电</span></div>
+<div class="tbtn sm" id="tBag" data-act="bag"><span class="tIco">🎒</span><span class="tLbl">背包</span></div>
 <div class="tbtn wide" id="tInteract" data-act="interact"><span class="tLbl">互动</span></div>
-<div class="tbtn tiny" id="tSquad" data-act="squadmove"><span class="tLbl">标点</span></div>
+<div class="tbtn tiny" id="tAttack" data-act="squadattack"><span class="tLbl">攻击</span></div>
 <div class="tbtn tiny" id="tGuard" data-act="squadguard"><span class="tLbl">驻守</span></div>
 <div class="tbtn tiny" id="tFollow" data-act="squadfollow"><span class="tLbl">跟随</span></div>
 <div class="tbtn tiny" id="tMap" data-act="bigmap"><span class="tLbl">地图</span></div>
@@ -125,7 +190,9 @@
 <div class="subtitle" id="menuSub">—— 当 前 地 图 ——</div>
 <div class="menuNav">
 <button class="bigBtn navBtn" data-p="mPlay">撤 离 部 署</button>
+<button class="bigBtn navBtn" data-p="mStory">剧 情 模 式</button>
 <button class="bigBtn navBtn" data-p="mArmory">军 械 库 / 仓 库</button>
+<button class="bigBtn navBtn" data-p="mNet">联 机 / 排 行 榜</button>
 <button class="bigBtn navBtn" data-p="mSet">游 戏 设 置</button>
 </div>
 <div id="menuVer">ESCAPE FROM WALDEN · 隔离禁区 QZ · 2026</div>
@@ -134,12 +201,15 @@
 <h2 class="mSubTitle">撤 离 部 署</h2>
 <div class="secLabel">选择地图（点击即进入部署）</div>
 <div class="rowFlex" id="mapRow" style="flex-wrap:wrap;justify-content:center"></div>
-<div id="mapBrief" style="margin-top:8px;padding:8px 10px;border:1px solid #475466;border-radius:6px;color:#c8d2b8;font-size:12px;line-height:1.6;background:rgba(0,0,0,.35)"></div>
+<div id="mapBrief" style="margin-top:8px;padding:8px 10px;border:1px solid #666666;border-radius:6px;color:#d2d2d2;font-size:12px;line-height:1.6;background:rgba(0,0,0,.35)"></div>
+<div class="secLabel">本局天气（随机决定）</div>
+<div id="weatherDesc" style="margin-top:5px;color:#b0b0b0;font-size:12px"></div>
 <div class="secLabel">选择阵营</div>
 <div class="rowFlex">
-<button class="optBtn teamBtn sel" id="teamUS">盟军</button>
-<button class="optBtn teamBtn" id="teamGER">德军</button>
+<button class="optBtn teamBtn sel" id="teamUS">USEC</button>
+<button class="optBtn teamBtn" id="teamGER">PMC</button>
 </div>
+<div id="foeHint" style="margin-top:6px;color:#b0b0b0;font-size:12px"></div>
 <div class="secLabel">BOT 难度（ELO 动态难度的基准档）</div>
 <div class="rowFlex">
 <button class="optBtn diffBtn" data-d="0">新兵</button>
@@ -147,22 +217,34 @@
 <button class="optBtn diffBtn" data-d="2">精英</button>
 </div>
 <div class="secLabel">敌方强度 · ELO 动态难度</div>
-<div id="eloBox" style="padding:8px 10px;border:1px solid #475466;border-radius:6px;color:#d8d2b8;font-size:13px;line-height:1.7;background:rgba(0,0,0,.35)"></div>
+<div id="eloBox" style="padding:8px 10px;border:1px solid #666666;border-radius:6px;color:#d8d8d8;font-size:13px;line-height:1.7;background:rgba(0,0,0,.35)"></div>
 <div class="rowFlex" style="margin-top:6px">
 <button class="optBtn" id="eloToggle">动 态 难 度 ： 开</button>
 </div>
 <div class="secLabel">当前配装（仓库绑定）</div>
-<div id="loadoutSummary" style="padding:8px 10px;border:1px solid #475466;border-radius:6px;color:#d8d2b8;font-size:13px;background:rgba(0,0,0,.35)"></div>
-<div class="secLabel">兵力规模</div>
-<div class="rowFlex">
-<button class="optBtn sizeBtn" data-s="0">标准 11v11</button>
-<button class="optBtn sizeBtn" data-s="1">加强 16v16</button>
-<button class="optBtn sizeBtn" data-s="2">史诗 22v22</button>
-</div>
+<div id="loadoutSummary" style="padding:8px 10px;border:1px solid #666666;border-radius:6px;color:#d8d8d8;font-size:13px;background:rgba(0,0,0,.35)"></div>
 <div class="center" style="margin-top:22px">
 <button class="bigBtn" id="startBtn">进 入 当 前 地 图</button>
 <button class="bigBtn backBtn">返 回</button>
 </div>
+</div>
+<div id="mStory" class="mSub hidden">
+<h2 class="mSubTitle">剧 情 模 式</h2>
+<div class="subtitle" style="margin-top:-6px">瓦尔登隔离禁区 · 行动档案</div>
+<div id="storyList" style="max-height:60vh;overflow-y:auto;padding-right:6px;text-align:left"></div>
+<div class="center" style="margin-top:14px"><button class="bigBtn backBtn">返 回</button></div>
+</div>
+<div id="mNet" class="mSub hidden">
+  <h2 class="mSubTitle">联 机 / 排 行 榜</h2>
+  <div class="secLabel">VibeHub 账号</div>
+  <div class="netAcct"><span id="vhUser">连接中…</span>
+    <button class="optBtn" id="vhLogin">登 录</button>
+    <button class="optBtn" id="vhLogout" style="display:none">退 出</button></div>
+  <div class="secLabel">房间（每队 4 人 · 缺人自动用 AI 补足）</div>
+  <div id="netBox"></div>
+  <div class="secLabel">全服排行榜</div>
+  <div id="vhBoard"></div>
+  <div class="center" style="margin-top:18px"><button class="bigBtn backBtn">返 回</button></div>
 </div>
 <div id="mArmory" class="mSub hidden">
 <h2 class="mSubTitle">军 械 库 / 仓 库</h2>
@@ -175,7 +257,7 @@
 <button class="optBtn arTab" data-ar="loot">战 利 品</button>
 <button class="optBtn arTab" data-ar="quests">任 务</button>
 </div>
-<input id="arSearch" type="text" placeholder="🔍 搜索物品（名称 / 描述）…" autocomplete="off" style="width:100%;box-sizing:border-box;margin:8px 0 6px;padding:8px 10px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466;outline:none;font:inherit">
+<input id="arSearch" type="text" placeholder="🔍 搜索物品（名称 / 描述）…" autocomplete="off" style="width:100%;box-sizing:border-box;margin:8px 0 6px;padding:8px 10px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666;outline:none;font:inherit">
 <div id="arList" class="arList"></div>
 <div id="arHint" class="arHint"></div>
 <div class="center" style="margin-top:18px"><button class="bigBtn backBtn">返 回</button></div>
@@ -190,24 +272,45 @@
 </div>
 <div class="sliderRow">鼠标灵敏度 <input type="range" id="sensRange" min="20" max="200" value="100"><span class="val" id="sensVal">1.0</span></div>
 <div class="sliderRow">视野 FOV <input type="range" id="fovRange" min="60" max="100" value="74"><span class="val" id="fovVal">74</span><span class="val" style="opacity:.65;font-size:11px">越大越广（开镜倍率不变）</span></div>
+<div class="secLabel">显示比例</div>
+<div class="rowFlex" id="aspectRow">
+<button class="optBtn" data-aspect="auto">自动</button>
+<button class="optBtn" data-aspect="16:9">16:9</button>
+<button class="optBtn" data-aspect="4:3">4:3</button>
+<button class="optBtn" data-aspect="21:9">21:9</button>
+</div>
+<div id="aspectHint" style="margin-top:5px;color:#b0b0b0;font-size:12px"></div>
 <div class="sliderRow">右键瞄准方式 <button class="optBtn" id="adsModeBtn" style="margin-left:10px">按住瞄准</button><span class="val" style="opacity:.65;font-size:11px">切换模式下按一下开镜、再按一下收镜</span></div>
 <div class="sliderRow">音量 <input type="range" id="volRange" min="0" max="100" value="80"><span class="val" id="volVal">80</span></div>
 <div class="sliderRow">触控按键大小 <input type="range" id="tsizeRange" min="70" max="150" value="100"><span class="val" id="tsizeVal">100%</span></div>
+<div class="sliderRow">虚拟按键 <button class="optBtn" id="touchModeBtn" style="margin-left:10px">自动</button><span class="val" style="opacity:.65;font-size:11px">有触摸屏就会显示；检测到键盘会自动收起（PC 触控屏用）</span></div>
 <div class="sliderRow">视角抖动 <button class="optBtn" id="shakeBtn" style="margin-left:10px">视角抖动: 开</button> <input type="range" id="shakeRange" min="0" max="200" value="100"><span class="val" id="shakeVal">100%</span></div>
 <div class="sliderRow">夜视滤镜 <span class="val" style="opacity:.65;font-size:11px">战斗内按 N 开关夜视仪</span>
 <button class="optBtn" id="nvgBlue" style="margin-left:10px">蓝色</button>
 <button class="optBtn" id="nvgGreen">绿色</button>
 <button class="optBtn" id="nvgWhite">白色</button></div>
+<div class="secLabel">键位设置（点击右侧按键 → 按新键 · Esc 取消）</div>
+<div id="keyGrid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:4px"></div>
+<div class="rowFlex" style="margin-top:6px"><button class="optBtn" id="keyResetBtn">恢复默认键位</button></div>
+<div class="secLabel">手机端按钮布局</div>
+<div class="rowFlex">
+<button class="optBtn" id="tLayoutBtn">编辑布局</button>
+<button class="optBtn" id="tLayoutReset">恢复默认布局</button>
+</div>
+<div style="margin-top:4px;color:#b0b0b0;font-size:12px">进入编辑后可直接拖动屏幕上的按钮（鼠标或手指）。位置按屏幕百分比保存，换分辨率也能对上；「触控按键大小」滑条仍会整体缩放。</div>
 <div class="secLabel">键位说明</div>
+<!-- 按键字母全部由 [data-k] 标记 + keyLabelOf() 动态填 (24_input.js 的 refreshKeyLabels)。
+     ⚠️ 不要在这里硬编码字母: 玩家改键后硬编码的提示会骗人 (2026-09-16 发现「B 兵种技能」
+     和「Tab 记分板」两处都是错的)。WASD / 左键 / 右键 不是可改键位, 保持字面量。 -->
 <div id="ctrlHelp">
-<div><b>WASD</b> 移动 · <b>Shift</b> 疾跑 · <b>左键</b>射击 <b>右键</b>机瞄 · <b>R</b> 装填 · <b>1/2</b> 切枪 · <b>V</b> 近战 · <b>N</b> 夜视仪</div>
-<div><b>G</b> 战术手电 · <b>3</b> 手雷(按住右键蓄力) · <b>4</b> 闪光弹 · <b>5</b> 烟雾弹 · <b>6</b> 选工事(工程兵) · <b>H</b> 用药(自动选伤势) · <b>K</b> 进食/喝水 · <b>J</b> 换食物 · <b>C</b> 蹲 · <b>Z</b> 趴 · <b>X</b> 架枪 · <b>Q/E</b> 侧身 · <b>空格</b> 跳</div>
-<div style="margin-top:4px;color:#c8b98a"><b>投掷物自费:</b> 手雷 / 闪光弹 / 烟雾弹需在「军械库 → 市集」用作战货币买入仓库，再在部署界面选择携带数量；出击即从仓库扣除，用掉或阵亡都永久损失。</div>
-<div><b>F</b> 互动: 搜尸/物资箱(↑/↓选择·F拿取)/机枪/迫击炮/补给 · 撤离点按住保持</div>
-<div><b>N</b> 夜视仪(需工坊装战术配件槽 + 仓库持有夜视仪 · 夜间增强视野 · 白天可开但过曝) · 死亡会丢失夜视仪</div>
-<div><b>B</b> 兵种技能 · <b>T/U/Y</b> 小队指令 · <b>M</b> 大地图 · <b>Tab</b> 记分板</div>
-<div style="margin-top:6px;color:#b8c8a0"><b>撤离规则:</b> 单命局 · 开局后不再有新人员进场 · 阵亡=撤离失败, 背包与装备丢失(保险可返还) · 水分/保食度归零会持续掉血</div>
-<div style="margin-top:6px;color:#c8b98a"><b>提示:</b> 若右键(瞄准)会触发浏览器"鼠标手势"，请关闭浏览器的手势功能：Edge 在 设置→外观→自定义浏览器→鼠标手势 中关闭；或关闭手势类扩展。也可以把上方"右键瞄准方式"改为<b>切换模式</b>，无需按住右键。</div>
+<div><b>WASD</b> 移动 · <b data-k="sprint">Shift</b> 疾跑 · <b>左键</b>射击 <b>右键</b>机瞄 · <b data-k="reload">R</b> 装填 · <b data-k="slot1" data-k2="slot2">1/2</b> 切枪 · <b data-k="melee">V</b> 近战 · <b data-k="nvg">N</b> 夜视仪</div>
+<div><b data-k="flashLight">G</b> 战术手电 / 激光指示器 · <b data-k="nade">3</b> 手雷(按住右键蓄力) · <b data-k="flash">4</b> 闪光弹 · <b data-k="smoke">5</b> 烟雾弹 · <b data-k="build">6</b> 选工事(工程兵) · <b data-k="heal">H</b> 用药(自动选伤势) · <b data-k="eat">K</b> 进食/喝水 · <b data-k="food">J</b> 换食物 · <b data-k="crouch">C</b> 蹲 · <b data-k="prone">Z</b> 趴 · <b data-k="brace">X</b> 架枪 · <b data-k="leanL" data-k2="leanR">Q/E</b> 侧身 · <b data-k="jump">空格</b> 跳</div>
+<div style="margin-top:4px;color:#c8c8c8"><b>投掷物自费:</b> 手雷 / 闪光弹 / 烟雾弹需在「军械库 → 市集」用作战货币买入仓库，再在部署界面选择携带数量；出击即从仓库扣除，用掉或阵亡都永久损失。</div>
+<div><b data-k="interact">F</b> 互动: 搜尸/物资箱(↑/↓选择·F拿取)/机枪/迫击炮/补给 · 撤离点按住保持</div>
+<div><b data-k="nvg">N</b> 夜视仪(需工坊装战术配件槽 + 仓库持有夜视仪 · 夜间增强视野 · 白天可开但过曝) · 死亡会丢失夜视仪</div>
+<div><b data-k="medwheel">B</b> 药品轮盘(选一种药用) · <b data-k="skill">O</b> 兵种技能 · <b data-k="squadAttack" data-k2="squadFollow">T/Y</b> 小队指令 · <b data-k="map">M</b> 大地图 · <b data-k="bag">Tab</b> 背包 · <b data-k="score">P</b> 计分板</div>
+<div style="margin-top:6px;color:#c8c8c8"><b>撤离规则:</b> 单命局 · 开局后不再有新人员进场 · 阵亡=撤离失败, 背包与装备丢失(保险可返还) · 水分/保食度归零会持续掉血</div>
+<div style="margin-top:6px;color:#c8c8c8"><b>提示:</b> 若右键(瞄准)会触发浏览器"鼠标手势"，请关闭浏览器的手势功能：Edge 在 设置→外观→自定义浏览器→鼠标手势 中关闭；或关闭手势类扩展。也可以把上方"右键瞄准方式"改为<b>切换模式</b>，无需按住右键。</div>
 </div>
 <div class="center" style="margin-top:18px"><button class="bigBtn backBtn">返 回</button></div>
 </div>
@@ -222,27 +325,37 @@
 <div class="secLabel">兵种（仅提供技能，不再决定武器）</div>
 <div class="rowFlex" id="classGrid" style="display:none"></div>
 <div class="secLabel">主武器（仓库）</div>
-<select id="arsenalSelect" style="width:100%;padding:8px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
-<div id="arsenalStats" style="margin-top:5px;color:#c8b98a;font-size:11px"></div>
+<select id="arsenalSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div id="arsenalStats" style="margin-top:5px;color:#c8c8c8;font-size:11px"></div>
 <div class="secLabel">副武器（仓库）</div>
-<select id="secondarySelect" style="width:100%;padding:8px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
+<select id="secondarySelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">防弹衣（仓库）</div>
-<select id="armorSelect" style="width:100%;padding:8px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
-<div id="loadoutSummary" style="margin-top:6px;padding:7px 9px;border:1px solid #475466;border-radius:6px;color:#d8d2b8;font-size:12px;background:rgba(0,0,0,.35)"></div>
+<select id="armorSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">头盔（仓库）</div>
+<select id="helmetSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">耳机（仓库 · 影响听力范围与环境音）</div>
+<select id="headsetSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">胸挂（仓库 · 与背包共存，但只收 2 格以内的物品）</div>
+<select id="chestSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">夜视仪（仓库 · 部署时选一型 · 主武器须装入「战术配件」槽）</div>
+<select id="nvgSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div id="loadoutSummary" style="margin-top:6px;padding:7px 9px;border:1px solid #666666;border-radius:6px;color:#d8d8d8;font-size:12px;background:rgba(0,0,0,.35)"></div>
 <div class="secLabel">背 包</div>
-<select id="packSelect" style="width:100%;padding:8px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
+<select id="packSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">医疗品（各带 1 件 · 出击消耗）</div>
-<select id="medSel1" style="width:100%;padding:6px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
-<select id="medSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
-<select id="medSel3" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
+<select id="medSel1" style="width:100%;padding:6px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<select id="medSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<select id="medSel3" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">食物（各带 1 份 · 出击消耗 · 局内 [K]食用 [J]切换）</div>
-<select id="foodSel1" style="width:100%;padding:6px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
-<select id="foodSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#17202b;color:#dce6ea;border:1px solid #475466"></select>
+<select id="foodSel1" style="width:100%;padding:6px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<select id="foodSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">投掷物（自费 · 出击从仓库扣除 · [3]手雷 [4]闪光 [5]烟雾）</div>
 <div id="throwRow" style="display:flex;gap:6px;flex-wrap:wrap"></div>
+<div class="secLabel">撤离通行证（仅「港口」登船有效 · 成功登船时消耗）</div>
+<select id="passSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">装 备 保 险</div>
-<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#c8d2b8"><input type="checkbox" id="insureChk"> 为武器/护甲投保（14% 价值 · 阵亡 70% 返还）</label>
-<div id="consumSummary" style="margin-top:6px;padding:7px 9px;border:1px solid #475466;border-radius:6px;color:#d8d2b8;font-size:12px;background:rgba(0,0,0,.35)"></div>
+<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#d2d2d2"><input type="checkbox" id="insureChk"> 为武器/护甲投保（14% 价值 · 阵亡 70% 返还）</label>
+<div id="consumSummary" style="margin-top:6px;padding:7px 9px;border:1px solid #666666;border-radius:6px;color:#d8d8d8;font-size:12px;background:rgba(0,0,0,.35)"></div>
 <div class="secLabel">出生点</div>
 <div id="spawnList"></div>
 </div>
@@ -252,6 +365,7 @@
 </div>
 </div>
 <div class="center" style="margin-top:20px"><button class="bigBtn" id="deployBtn">部 署 <span id="respawnTxt"></span></button>
+<div id="netSearch" class="hidden">正在寻找开放房间…<span id="netSearchT"></span><br><span class="netSub">30 秒内没找到就用 AI 代替队友</span></div>
 <button class="bigBtn" id="resumeBtn" style="display:none">返 回 战 斗</button></div>
 </div>
 </div>
@@ -262,64 +376,93 @@
 <div class="center"><button class="bigBtn" id="againBtn">再 来 一 局</button> <button class="bigBtn" id="armoryBtn">返 回 军 械 库</button></div>
 </div>
 </div>
+<!-- 药品轮盘 (53_medwheel.js): 按 B 打开, 选一种药品直接使用。
+     故意放在 #ui 外面并给高 z-index —— #ui 是 pointer-events:none(会继承),
+     而 #touchUI 是 z-index 40, 放里面会被触控层吃掉点击(背包面板就踩过这个坑)。
+     这里做成全屏模态, 直接把触控层盖住。 -->
+<div id="medWheel" class="hidden">
+<div id="mwRing"></div>
+<div id="mwHub">
+<div id="mwTitle">药 品</div>
+<div id="mwSub"></div>
+<button id="mwClose">关 闭</button>
+</div>
+</div>
 <script src="vendor/three.min.js"></script>
 <script src="vendor/cannon.min.js"></script>
-<script src="js/00_core.js?v=20260913s"></script>
-<script src="js/00b_elo.js?v=20260913s"></script>
-<script src="js/01_data.js?v=20260913s"></script>
-<script src="js/02_audio.js?v=20260913s"></script>
-<script src="js/03_renderer.js?v=20260913s"></script>
-<script src="js/04_textures.js?v=20260913s"></script>
-<script src="js/05_terrain.js?v=20260913s"></script>
-<script src="js/06_collision.js?v=20260913s"></script>
-<script src="js/07_props.js?v=20260913s"></script>
-<script src="js/07b_batch.js?v=20260913s"></script>
-<script src="js/07c_buildings.js?v=20260913s"></script>
-<script src="js/07d_lab.js?v=20260913s"></script>
-<script src="js/07e_port.js?v=20260913s"></script>
-<script src="js/08_world.js?v=20260913s"></script>
-<script src="js/09_deployables.js?v=20260913s"></script>
-<script src="js/10_nav.js?v=20260913s"></script>
-<script src="js/11_particles.js?v=20260913s"></script>
-<script src="js/12_weather_fx.js?v=20260913s"></script>
-<script src="js/13_weapons_data.js?v=20260913s"></script>
-<script src="js/14_gunmodels.js?v=20260913s"></script>
-<script src="js/14b_weapon_mods.js?v=20260913s"></script>
-<script src="js/15_viewmodel.js?v=20260913s"></script>
-<script src="js/15c_flashlight.js?v=20260913s"></script>
-<script src="js/16_soldier.js?v=20260913s"></script>
-<script src="js/17_ragdoll.js?v=20260913s"></script>
-<script src="js/18_ballistics.js?v=20260913s"></script>
-<script src="js/19_bot.js?v=20260913s"></script>
-<script src="js/20_tank.js?v=20260913s"></script>
-<script src="js/21_plane.js?v=20260913s"></script>
-<script src="js/21b_apc.js?v=20260913s"></script>
-<script src="js/22_emplacements.js?v=20260913s"></script>
-<script src="js/23_player.js?v=20260913s"></script>
-<script src="js/24_input.js?v=20260913s"></script>
-<script src="js/25_player_update.js?v=20260913s"></script>
-<script src="js/26_camera.js?v=20260913s"></script>
-<script src="js/27_gamemode.js?v=20260913s"></script>
-<script src="js/27x_xray.js?v=20260913s"></script>
-<script src="js/28_hud.js?v=20260913s"></script>
-<script src="js/29_menus.js?v=20260913s"></script>
-<script src="js/30c_cutscene.js?v=20260913s"></script>
-<script src="js/30_main.js?v=20260913s"></script>
-<script src="js/31_touch.js?v=20260913s"></script>
-<script src="js/34_nvg.js?v=20260913s"></script>
-<script src="js/37_meta.js?v=20260913s"></script>
-<script src="js/38_tarkov.js?v=20260913s"></script>
-<script src="js/35_extraction.js?v=20260913s"></script>
-<script src="js/39_quests.js?v=20260913s"></script>
-<script src="js/40_raidshop.js?v=20260913s"></script>
-<script src="js/41_raidloot.js?v=20260913s"></script>
-<script src="js/42_shake.js?v=20260913s"></script>
-<script src="js/43_maps.js?v=20260913s"></script>
-<script src="js/45_elo_bots.js?v=20260913s"></script>
-<script src="js/44_deathcam.js?v=20260913s"></script>
-<script src="js/46_throwables.js?v=20260913s"></script>
-<script src="js/47_units.js?v=20260913s"></script>
-<script src="js/48_shopsearch.js?v=20260913s"></script>
-<script src="js/32_boot.js?v=20260913s"></script>
+<script src="js/00_core.js?v=20260929b"></script>
+<script src="js/00b_elo.js?v=20260929b"></script>
+<script src="js/01_data.js?v=20260929b"></script>
+<script src="js/02_audio.js?v=20260929b"></script>
+<script src="js/03_renderer.js?v=20260929b"></script>
+<script src="js/04_textures.js?v=20260929b"></script>
+<script src="js/05_terrain.js?v=20260929b"></script>
+<script src="js/06_collision.js?v=20260929b"></script>
+<script src="js/07_props.js?v=20260929b"></script>
+<script src="js/07b_batch.js?v=20260929b"></script>
+<script src="js/07c_buildings.js?v=20260929b"></script>
+<script src="js/07d_lab.js?v=20260929b"></script>
+<script src="js/07e_port.js?v=20260929b"></script>
+<script src="js/07f_airport.js?v=20260929b"></script>
+<script src="js/07g_anvil.js?v=20260929b"></script>
+<script src="js/08_world.js?v=20260929b"></script>
+<script src="js/09_deployables.js?v=20260929b"></script>
+<script src="js/10_nav.js?v=20260929b"></script>
+<script src="js/11_particles.js?v=20260929b"></script>
+<script src="js/12_weather_fx.js?v=20260929b"></script>
+<script src="js/13_weapons_data.js?v=20260929b"></script>
+<script src="js/14_gunmodels.js?v=20260929b"></script>
+<script src="js/14b_weapon_mods.js?v=20260929b"></script>
+<script src="js/15_viewmodel.js?v=20260929b"></script>
+<script src="js/15c_flashlight.js?v=20260929b"></script>
+<script src="js/16_soldier.js?v=20260929b"></script>
+<script src="js/17_ragdoll.js?v=20260929b"></script>
+<script src="js/18_ballistics.js?v=20260929b"></script>
+<script src="js/19_bot.js?v=20260929b"></script>
+<script src="js/20_explosives.js?v=20260929b"></script>
+<script src="js/22_emplacements.js?v=20260929b"></script>
+<script src="js/23_player.js?v=20260929b"></script>
+<script src="js/24_input.js?v=20260929b"></script>
+<script src="js/25_player_update.js?v=20260929b"></script>
+<script src="js/26_camera.js?v=20260929b"></script>
+<script src="js/27_gamemode.js?v=20260929b"></script>
+<script src="js/28_hud.js?v=20260929b"></script>
+<script src="js/29_menus.js?v=20260929b"></script>
+<script src="js/30c_cutscene.js?v=20260929b"></script>
+<script src="js/30_main.js?v=20260929b"></script>
+<script src="js/31_touch.js?v=20260929b"></script>
+<script src="js/34_nvg.js?v=20260929b"></script>
+<script src="js/37_meta.js?v=20260929b"></script>
+<script src="js/38_tarkov.js?v=20260929b"></script>
+<script src="js/35_extraction.js?v=20260929b"></script>
+<script src="js/39_quests.js?v=20260929b"></script>
+<script src="js/40_raidshop.js?v=20260929b"></script>
+<script src="js/41_raidloot.js?v=20260929b"></script>
+<script src="js/42_shake.js?v=20260929b"></script>
+<script src="js/43_maps.js?v=20260929b"></script>
+<script src="js/45_elo_bots.js?v=20260929b"></script>
+<script src="js/44_deathcam.js?v=20260929b"></script>
+<script src="js/46_throwables.js?v=20260929b"></script>
+<script src="js/47_units.js?v=20260929b"></script>
+<script src="js/48_shopsearch.js?v=20260929b"></script>
+<!-- VibeHub Workshop 接入点 (2026-09-13):
+     32_boot 只挂 window._wfBoot, 不立即启动; 49_mod_api 建立 modApi;
+     Loader 暴露 VibeHubWorkshop; 50_workshop_boot 在 beforeStart 之后才调 _wfBoot -->
+<script src="js/32_boot.js?v=20260929b"></script>
+<script src="js/49_mod_api.js?v=20260929b"></script>
+<script src="https://gamesvibe.app/workshop/loader/v1.js"></script>
+<script type="module" src="js/50_workshop_boot.js?v=20260929b"></script>
+<!-- 设置扩展: 键位自定义 + 手机端按钮布局 (依赖 24_input 的键位映射层与 31_touch 的按钮) -->
+<script src="js/51_settings.js?v=20260929b"></script>
+<!-- 开发者控制台: 按 \ (Backslash) 或 F2 开关 (不写进作品简介/版本日志) -->
+<script src="js/52_devconsole.js?v=20260929b"></script>
+<!-- 药品轮盘: 依赖 38_tarkov(MED_DEFS/RUN) 与 40_raidshop(useLootFromBag), 所以放在最后 -->
+<!-- VibeHub SDK: 必须用绝对地址（游戏页在 vibeapps 域，相对路径会 404） -->
+<script src="https://vibe.lumigrav.space/sdk/v3/vibehub.js"></script>
+<script src="js/53_medwheel.js?v=20260929b"></script>
+<script src="js/54_vibe.js?v=20260929b"></script>
+<script src="js/55_net.js?v=20260929b"></script>
+<script src="js/56_story.js?v=20260929b"></script>
+<script src="js/57_downed.js?v=20260929b"></script>
 </body>
 </html>

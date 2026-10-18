@@ -31,7 +31,9 @@ if(!this.alive||matchOver) return;
 // 同单位免伤(玩家是己方 1 组的编外成员, 见 47_units): 自伤不受影响
 if(attacker&&attacker!==this&&typeof unitBlocks==='function'&&unitBlocks(attacker,this)) return;
 const L=this.limbs, limb=part||(isHead?'head':'torso');
-const reduced=Math.max(1,amt*(1-(this.armorResist||0)));
+// 头部看头盔, 其余看护甲 (与 38_tarkov 的活跃路径一致)
+ const _rs=(limb==='head')?(this.helmetResist||0):(this.armorResist||0);
+ const reduced=Math.max(1,amt*(1-_rs));
 L[limb]=Math.max(0,L[limb]-reduced);
 let final=reduced;
 if(limb==='legs') final*=0.7;

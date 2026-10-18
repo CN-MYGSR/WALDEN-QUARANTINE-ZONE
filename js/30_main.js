@@ -24,7 +24,7 @@ NAV.budget=2;
 updateNavDirty(dt);
 updateWires(dt);
 updateRisers(dt);
-if(MOBILE&&window.updateTouchVis) updateTouchVis();
+if(TOUCHUI&&window.updateTouchVis) updateTouchVis();
 if(mortarMarker.visible&&!(player.alive&&player.onMortar)) mortarMarker.visible=false;
 updatePlayer(dt);
 updatePlayerBody(dt);
@@ -65,9 +65,6 @@ s.tickSkip=d2p>110?3:d2p>60?2:1;
 updateMedCrates(dt);
 updateBloodDecals(dt);
 separateSoldiers();
-for(const t of tanks) t.update(dt);
-updateAPCs(dt);
-for(const pl of planes) pl.update(dt);
 // 树倒动画
 for(let i=fTrees.length-1;i>=0;i--){
 const ft=fTrees[i];
@@ -90,28 +87,27 @@ m2.position.y=ft.gy+dy*c2;
 m2.rotation.set(0,0,Math.atan2(ft.fallX,ft.fallZ?1:0));
 }
 }
-updatePlaneWrecks(dt);
 updateRagdolls(dt);
-updateShells(dt);
-updateFlak(dt);
 updateNades(dt);
 updateParticles(dt);
 updateTracers(dt);
 updateCasings(dt);
 updateFlags(dt);
 if(typeof updateExtraction==='function') updateExtraction(dt);
+// 联机: 广播自身状态 / 房主广播 NPC 快照 (见 55_net.js)
+if(typeof netTick==='function') netTick(dt);
 if(flashTimer>0){ flashTimer-=dt; if(flashTimer<=0) flashLight.intensity=0; }
-if(player.alive&&player.curW&&!player.onMG&&(!player.onVehicle||isApcPassenger())&&!player.onAT&&!player.onAA&&!player.onMortar){
+if(player.alive&&player.curW&&!player.onMG&&!player.onVehicle&&!player.onAT&&!player.onAA&&!player.onMortar){
 updateViewModel(dt,player);
 } else if(player.alive&&(player.onMG||player.onAT||player.onAA)){
 camera.fov=dampF(camera.fov,(SETTINGS.fov||74),10,dt);
 camera.updateProjectionMatrix();
 }
 if(typeof updateFlashlight==='function') updateFlashlight(dt);
+if(typeof updateStrobe==='function') updateStrobe(dt);   // 爆闪手电 (见 15c_flashlight)
 player.mouseDX*=Math.pow(0.0001,dt*3);
 player.mouseDY*=Math.pow(0.0001,dt*3);
 updateHUD(dt);
-updateXray(dt);
 NVG.render(()=>{
 renderer.clear();
 renderer.render(scene,camera);

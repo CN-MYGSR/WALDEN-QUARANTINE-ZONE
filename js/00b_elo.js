@@ -79,7 +79,7 @@ function eloGearValue(){
   if(L.primary) v+=price(L.primary);
   if(L.secondary) v+=price(L.secondary);
   if(L.armor) v+=price(L.armor);
-  if(L.nvg) v+=price('nvg');
+  if(L.nvg) v+=price(L.nvg);   // 2026-09-19: 原来硬编码 'nvg', 三型夜视仪都按基础款估值
   if(typeof modTotalCost==='function'){
     try{ if(L.primary) v+=modTotalCost(L.primary); }catch(e){}
     try{ if(L.secondary) v+=modTotalCost(L.secondary); }catch(e){}
@@ -133,12 +133,11 @@ function eloApplyRaid(extracted,lootValue){
   eloRecalc(); eloSave();
   return {from,to,delta:to-from,perf,tier:eloTier(to)};
 }
-// 兵力规模随评分浮动 (战场规模, 双方同步 → 主要影响战斗烈度与局时长)
+// 兵力规模不再随评分浮动 (2026-09-18 用户要求「不要在对局前选人数」, 编制改为每图固定)。
+// 保留函数名以免改动调用方; 现在只负责把征服模式的票数按评分缩放。
 function eloApplyForceSize(){
-  if(typeof SIZE_OPTS==='undefined'||typeof BOTS_PER_TEAM==='undefined') return;
-  const o=SIZE_OPTS[clamp(SIZE_IDX|0,0,SIZE_OPTS.length-1)];
-  BOTS_PER_TEAM=Math.max(4,Math.round(o.bots*ELO.enemyCount));
-  const tk=Math.max(60,Math.round(o.tk*ELO.enemyCount));
+  if(typeof START_TICKETS==='undefined'||typeof tickets==='undefined') return;
+  const tk=Math.max(60,Math.round(START_TICKETS*(ELO.enemyCount||1)));
   tickets[0]=tk; tickets[1]=tk;
 }
 // ---- 持久化: 挂在 META 上, 与钱包/仓库共用一份存档 ----

@@ -227,11 +227,13 @@ function enhanceBagPanel(){
   b.dataset.buse = key;
   row.appendChild(b);
  });
- // 提示行追加 [E] 说明
+ // 提示行统一走 38_tarkov 的 bagHintHTML(): 桌面列快捷键 / 手机显示触屏说明,
+ // 并自动带上「E 立即使用」。以前这里自己拼字符串, 会把手机端文案覆盖掉。
  const hint = (typeof el==='function') ? el('bagPanelHint') : document.getElementById('bagPanelHint');
- if(hint && bagUsableKeys().length){
-  const base = `<b>↑/↓</b> 选择 · <b>E</b> 立即使用 · <b>G</b> 丢弃 1 个 · <b>Shift+G</b> 全部丢弃(装备类放回仓库) · <b>Q</b> 存入安全箱 · <b>Tab</b> 关闭`;
-  hint.innerHTML = base;
+ if(hint){
+  hint.innerHTML = (typeof bagHintHTML==='function')
+   ? bagHintHTML()
+   : `<b>↑/↓</b> 选择 · <b>E</b> 立即使用 · <b>G</b> 丢弃 1 个 · <b>Shift+G</b> 全部丢弃(装备类放回仓库) · <b>Q</b> 存入安全箱 · <b>Tab</b> 关闭`;
  }
  if(list && !list._useBound){
   list._useBound = true;
@@ -325,7 +327,27 @@ function buyAmmoPack(id){
  if(typeof AudioSys!=='undefined' && AudioSys.metalSlide) AudioSys.metalSlide(0.3,0.15,500,900);
  emitRaidEvent('OnAmmoPurchased', { id:id, rounds:q.give, price:q.price });
  renderAmmoShop();
+ autoSwitchToPrimaryAfterAmmo();
  return true;
+}
+// 购买成功后自动切回主武器 (slot 0)。
+// 修复: 之前买完后玩家"卡手"无法切枪 —— 根因是 buyAmmoPack 期间 VM 视图模型可能停留在
+// reload / equip / unequip 状态, 而 switchSlot() 要求 VM.state ∈ {idle, fire}, 直接 return。
+// 这里强制把 VM 状态重置回 idle 再切枪, 让玩家能立刻用主武器开打。
+// 边界: 玩家在操作工事(onMG/onAT/onAA)时不打断; 玩家已经在 slot 0 时不重复切。
+function autoSwitchToPrimaryAfterAmmo(){
+ if(typeof player==='undefined' || !player || !player.alive) return;
+ if(!player.slots || !player.slots[0]) return;
+ if(player.curSlot === 0) return;
+ if(player.onMG || player.onAT || player.onAA) return;
+ if(typeof VM !== 'undefined' && VM){
+  if(VM.state !== 'idle' && VM.state !== 'fire'){
+   VM.state = 'idle';
+   VM.stateT = 0;
+   VM.stateDur = 0;
+  }
+ }
+ if(typeof switchSlot === 'function') switchSlot(0);
 }
 
 // ---------- 移除免费补给: 弹药箱不再白给 ----------
@@ -478,7 +500,7 @@ finishRaid = function(extracted){
  if(spent > 0){
   const es = document.getElementById('endStats');
   if(es) es.insertAdjacentHTML('beforeend',
-   `<div style="margin-top:6px;color:#d8c0a0;font-size:13px">局内弹药采购 <b>${RUN.ammoRounds||0}</b> 发 · 支出 <b>¥${formatMoney(spent)}</b></div>`);
+   `<div style="margin-top:6px;color:#d8d8d8;font-size:13px">局内弹药采购 <b>${RUN.ammoRounds||0}</b> 发 · 支出 <b>¥${formatMoney(spent)}</b></div>`);
  }
  emitRaidEvent('OnMatchEnd', { extracted:!!extracted, ammoSpent:spent });
  return r;

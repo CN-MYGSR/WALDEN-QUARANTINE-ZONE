@@ -127,14 +127,54 @@ tex.offset.set(c[0]*0.25,c[1]===0?0.5:0);
 };
 return face;
 }
-function buildSoldierMesh(team,name){
+// armorKey / chestKey: 可选, 只有玩家侧调用才传 (见下方「护具配色」的三种情况说明)。
+function buildSoldierMesh(team,name,armorKey,chestKey){
 const U=uniformMats[team];
 const root=new THREE.Group();
 const helmParts=[];
 const hAdd=(mesh)=>{ helmParts.push(mesh); return mesh; };
 const pelvis=new THREE.Group(); pelvis.position.y=0.94; root.add(pelvis);
 const torsoG=new THREE.Group(); pelvis.add(torsoG);
-bx(U.coat,0.44,0.55,0.26, 0,0.28,0, torsoG);
+// ---- 护具配色 ----
+// ⚠️ 必须区分三种情况, 否则 NPC 会全变成游骑兵黄:
+//   armorKey === undefined → **没传参**(所有 Bot) → 用阵营制服色, 保持原样
+//   armorKey === ''        → **明确没穿护具**(玩家) → 游骑兵黄
+//   armorKey 有效          → 用那件护甲的颜色
+// 躯干颜色优先级: **胸挂 > 护甲 > 游骑兵黄**
+//   (胸挂穿在护甲外面, 观感上是最外层 —— 穿黑胸挂时躯干就该是黑的)
+const _AD=(typeof ARMOR_DEFS!=='undefined')?ARMOR_DEFS:{};
+const _CD=(typeof CHEST_DEFS!=='undefined')?CHEST_DEFS:{};
+const _RY=(typeof RANGER_YELLOW!=='undefined')?RANGER_YELLOW:0xc8a03c;
+const _ar=(armorKey&&_AD[armorKey])?_AD[armorKey]:null;
+const _cr=(chestKey&&_CD[chestKey])?_CD[chestKey]:null;
+const _bodyCol=(armorKey===undefined)?U.coat.color
+  :(_cr?(_cr.hex!=null?_cr.hex:_RY):(_ar?(_ar.color!=null?_ar.color:_RY):_RY));
+// 这两个材质是**每个士兵独有**的 → 标 userData.perSoldier, 清场/布娃娃回收时才会被 dispose
+// ⚠️ uniformMats[team] 是共享材质, 绝不能标
+const _bodyMat=new THREE.MeshLambertMaterial({color:_bodyCol}); _bodyMat.userData.perSoldier=true;
+// 护甲板颜色跟**护甲**走, 不跟躯干色 —— 穿胸挂时躯干是胸挂色, 甲板仍要能看出是护甲
+const _plateCol=(_ar&&_ar.color!=null)?_ar.color:_bodyCol;
+const _plateMat=new THREE.MeshLambertMaterial({color:new THREE.Color(_plateCol).multiplyScalar(0.78)}); _plateMat.userData.perSoldier=true;
+bx(_bodyMat,0.44,0.55,0.26, 0,0.28,0, torsoG);
+// ---- 护甲几何: 按 level 递进 (士兵模型面朝局部 +Z, 所以 +Z 是正面) ----
+if(_ar){
+ const lv=_ar.level||1;
+ bx(_plateMat,0.30,0.30,0.05, 0,0.34,0.15, torsoG);          // 前板: 所有等级都有
+ if(lv>=3){
+  bx(_plateMat,0.28,0.28,0.05, 0,0.34,-0.15, torsoG);         // 背板
+  bx(_plateMat,0.07,0.05,0.30, -0.13,0.55,0, torsoG);         // 左肩带
+  bx(_plateMat,0.07,0.05,0.30,  0.13,0.55,0, torsoG);         // 右肩带
+ }
+ if(lv>=5){
+  bx(_plateMat,0.13,0.10,0.26, -0.20,0.50,0, torsoG);        // 左肩垫
+  bx(_plateMat,0.13,0.10,0.26,  0.20,0.50,0, torsoG);        // 右肩垫
+  bx(_plateMat,0.22,0.14,0.05, 0,0.06,0.14, torsoG);         // 裆片
+ }
+ if(lv>=6){
+  bx(_plateMat,0.05,0.26,0.22, -0.22,0.32,0, torsoG);        // 左侧板
+  bx(_plateMat,0.05,0.26,0.22,  0.22,0.32,0, torsoG);        // 右侧板
+ }
+}
 const headG=new THREE.Group(); headG.position.set(0,0.62,0); torsoG.add(headG);
 bx(U.skin,0.2,0.22,0.2, 0,0.1,0, headG);
 const face=addFace(headG);
@@ -213,5 +253,5 @@ const tag=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture
 tag.scale.set(0.9,0.22,1); tag.position.y=2.05; tag.renderOrder=5;
 root.add(tag);
 scene.add(root);
-return {root,pelvis,torsoG,headG,armL,armR,legL,legR,gunG,tag,helmParts,face};
+return {root,pelvis,torsoG,headG,armL,armR,legL,legR,gunG,tag,helmParts,face,bodyMat:_bodyMat,armorKey:armorKey||''};
 }

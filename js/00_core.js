@@ -15,7 +15,11 @@ if(isFinite(v)) return clamp(v,60,100);
 }catch(e){}
 return 74;
 })(),
-adsToggle:(function(){ try{ return localStorage.getItem('sf_adsmode')==='toggle'; }catch(e){ return false; } })() };
+adsToggle:(function(){ try{ return localStorage.getItem('sf_adsmode')==='toggle'; }catch(e){ return false; } })(),
+// 显示比例: auto(跟随窗口) / 16:9 / 4:3 / 21:9。非 auto 时按该比例做**信箱式(letterbox)**渲染 ——
+// 画面居中、两侧或上下留黑边, 不拉伸变形; HUD 与触控层会跟着缩进到同一块区域 (见 51_settings 的 applyAspect)。
+aspect:(function(){ try{ const v=localStorage.getItem('sf_aspect'); return ['auto','16:9','4:3','21:9'].indexOf(v)>=0?v:'auto'; }catch(e){ return 'auto'; } })() };
+const ASPECT_MODES={ auto:'自动（跟随窗口）', '16:9':'16:9（常见宽屏）', '4:3':'4:3（经典）', '21:9':'21:9（带鱼屏）' };
 // 历史基准: 徒步腰射 FOV 74 / 开镜默认 60, 两者的比值就是"开镜倍率", 设置里只允许改基准值。
 const BASE_FOV_74=74;
 const DIFF_TABLE = [

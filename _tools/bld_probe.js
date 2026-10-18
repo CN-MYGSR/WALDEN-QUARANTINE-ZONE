@@ -129,15 +129,20 @@ try{
    T.doorGaps.push(gaps);
    if(gaps===0) T.noExit.push(1);
    // 楼梯: 是否越界 + 顶部落点是否真有楼板
+   // ⚠️ 必须在本循环内重算本栋的 cs/sn —— 上面那个循环跑完后它们是"最后一栋"的旋转角,
+   //    直接沿用会把楼梯的局部坐标算错 (2026-09-17 修)。
+   // ⚠️ 筛选也不能用 hypot < max(w,d): 相邻建筑会互相误判 (塔台与机库只差 32m,
+   //    塔台的楼梯被算进机库 → 假的 stairOut)。改成"楼梯中心必须落进本栋 footprint"。
+   const cs0=Math.cos(b.ry), sn0=Math.sin(b.ry);
    for(const r of RAMPS){
-     if(Math.hypot(r.x-b.x,r.z-b.z)>Math.max(b.w,b.d)) continue;
-     const lx0=(r.x-b.x)*cs-(r.z-b.z)*sn, lz0=(r.x-b.x)*sn+(r.z-b.z)*cs;
-     const dlx=Math.sin(r.ry)*cs-Math.cos(r.ry)*sn, dlz=Math.sin(r.ry)*sn+Math.cos(r.ry)*cs;
+     const lx0=(r.x-b.x)*cs0-(r.z-b.z)*sn0, lz0=(r.x-b.x)*sn0+(r.z-b.z)*cs0;
+     if(Math.abs(lx0)>b.w/2+1.5||Math.abs(lz0)>b.d/2+1.5) continue;
+     const dlx=Math.sin(r.ry)*cs0-Math.cos(r.ry)*sn0, dlz=Math.sin(r.ry)*sn0+Math.cos(r.ry)*cs0;
      const e1=[lx0-dlx*r.len/2, lz0-dlz*r.len/2], e2=[lx0+dlx*r.len/2, lz0+dlz*r.len/2];
      const over=Math.max(Math.abs(e1[0]),Math.abs(e2[0]))-(b.w/2) > 0.35 || Math.max(Math.abs(e1[1]),Math.abs(e2[1]))-(b.d/2) > 0.35;
      if(over){ T.stairOut++; if(out.bad.length<40) out.bad.push({t:key,x:+b.x.toFixed(1),z:+b.z.toFixed(1),over:'stair'}); }
      const ext=0.40;
-     const w2=b.x+(e2[0]+dlx*ext)*cs+(e2[1]+dlz*ext)*sn, z2=b.z-(e2[0]+dlx*ext)*sn+(e2[1]+dlz*ext)*cs;
+     const w2=b.x+(e2[0]+dlx*ext)*cs0+(e2[1]+dlz*ext)*sn0, z2=b.z-(e2[0]+dlx*ext)*sn0+(e2[1]+dlz*ext)*cs0;
      // 顶部落点: 只认"实体楼板"(跳过 stair 台阶与坡道本身, 否则是循环论证)
      let top=-1e9;
      { const {N,boxCells}=RGRID; const [ci,cj]=cellIdx(w2,z2);

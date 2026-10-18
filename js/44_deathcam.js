@@ -10,8 +10,8 @@
 //      真正的修正在 15_viewmodel: ADS 基础推远量加大 + 按实测包围盒钳制深度,
 //      保证枪身/双臂任何一点离 vmCamera 都不少于 VM_ADS_MIN_CLEAR, 后照门与枪机的
 //      低模几何不会再被透视放大成挡住屏幕中央的黑块。
-//      本文件只补一层近裁剪面兜底 (开镜 0.05), 外加一个可选的"镜内隐藏枪身"开关:
-//      默认**看得见枪**, 按 L 才隐藏 (隐藏时自动用准星接管瞄准); 设置存 localStorage.sf_hidegun
+//      本文件只补一层近裁剪面兜底 (开镜 0.05)。历史上这里还有个"按 L 隐藏镜内枪身"的
+//      临时开关, 因为挡视野 Bug 已在 15_viewmodel 修好, 2026-09-17 已整套删除。
 // 加载位置: 43_maps 之后 / 32_boot 之前
 // 手法: 沿用 40/41/43 的"包裹式扩展", 不替换任何既有函数体
 // =====================================================================
@@ -21,7 +21,7 @@ const PART_CN={head:'头部',torso:'躯干',arms:'手臂',legs:'腿部'};
 const PART_ORDER=['head','torso','arms','legs'];
 function kcTeamName(t){
   try{ if(typeof TEAM_NAME!=='undefined'&&TEAM_NAME[t]) return TEAM_NAME[t]; }catch(e){}
-  return t===0?'盟军':'德军';
+  return t===0?'USEC':'PMC';
 }
 function kcWeaponName(who){
   if(!who) return '未知武器';
@@ -58,7 +58,9 @@ player.damage=function(amt,attacker,isHead,part){
   try{
     if(this.alive&&!matchOver&&attacker&&attacker!==this){
       const partKey=part||(isHead?'head':'torso');
-      const applied=Math.round(Math.max(1,amt*(1-(this.armorResist||0))));
+      // 头部看头盔减伤, 其余看护甲减伤 (与 38_tarkov.applyPlayerBodyDamage 保持一致)
+      const _rs=(partKey==='head')?(this.helmetResist||0):(this.armorResist||0);
+      const applied=Math.round(Math.max(1,amt*(1-_rs)));
       let dist=0;
       try{ dist=Math.round(Math.hypot(attacker.pos.x-this.pos.x,attacker.pos.z-this.pos.z)); }catch(e){}
       this.lastHit={
@@ -235,64 +237,23 @@ function deathAnalysisHTML(){
 
 // ============================ 4) 开镜视野保护 ============================
 // 需求: 开镜时枪械模型挡住视线。
-// 三重保障:
-//   a. 开镜时把视模型相机的近裁剪面抬起 → 任何"糊在镜头前"的几何直接被裁掉(物理上不可能再挡住)
-//   b. 视模型整体深度钳制 → 永远不允许贴到镜头前
-//   c. 镜内枪身可隐藏 (默认隐藏, 由准星接管瞄准) —— 按 L 切回"看得见枪"的原味机瞄
-// 需求: 默认**看得见枪** (不隐藏)。只在玩家主动按 L 时才隐藏枪身。
+// 兜底: 开镜时把视模型相机的近裁剪面抬起 → 任何"糊在镜头前"的几何直接被裁掉。
 // 挡视野的正解在 15_viewmodel 里: 加大 ADS 推远量 + 按实测包围盒保证净空。
-let HIDE_GUN_ADS=false, _hideGunHinted=false;
-try{ const v=localStorage.getItem('sf_hidegun'); if(v==='1') HIDE_GUN_ADS=true; }catch(e){}
-function setHideGun(v,quiet){
-  HIDE_GUN_ADS=!!v;
-  try{ localStorage.setItem('sf_hidegun',HIDE_GUN_ADS?'1':'0'); }catch(e){}
-  const t=document.getElementById('hideGunTip');
-  if(t&&!quiet){
-    t.textContent=HIDE_GUN_ADS?'开镜隐藏枪身: 开（按 L 切换）':'开镜隐藏枪身: 关（按 L 切换）';
-    t.classList.add('show');
-    clearTimeout(setHideGun._t);
-    setHideGun._t=setTimeout(()=>t.classList.remove('show'),1800);
-  }
-}
-window.addEventListener('keydown',function(e){
-  if(e.code==='KeyL'&&!e.repeat){ setHideGun(!HIDE_GUN_ADS); }
-});
-// 是否此刻应该把枪身藏起来
-function kcGunHidden(){
-  if(!HIDE_GUN_ADS) return false;
-  const d=(typeof WPN_DEFS!=='undefined'&&WPN_DEFS[VM.key])||{};
-  if(d.scoped) return false;              // 光学镜本来就有 scopeOv 遮罩
-  return (VM.adsBlend||0)>0.6;
-}
+//
+// ⚠️ 历史: 这里曾有一整套"按 L 隐藏镜内枪身"的临时开关
+//    (HIDE_GUN_ADS / localStorage.sf_hidegun / #hideGunTip / kcGunHidden() / 隐藏时用准星接管瞄准),
+//    是为绕开上面那个挡视野 Bug 打的补丁。Bug 在 15_viewmodel 修好后,
+//    2026-09-17 按用户要求**整套删除**, L 键一并释放。
 // 包裹 updateViewModel: 原逻辑跑完后做视野保护
 const _kcOrigUpdateViewModel=updateViewModel;
 updateViewModel=function(dt,p){
   const r=_kcOrigUpdateViewModel.apply(this,arguments);
   try{
     const ab=VM.adsBlend||0;
-    // a. 近裁剪面兜底: 开镜时抬到 0.05, 任何"糊在镜头前"的残余几何直接被裁掉。
-    //    真正的修正在 15_viewmodel: 基础推远量加大 + 按实测包围盒保证枪身离镜头 >= VM_ADS_MIN_CLEAR。
+    // 近裁剪面兜底: 开镜时抬到 0.05, 任何"糊在镜头前"的残余几何直接被裁掉。
+    // 真正的修正在 15_viewmodel: 基础推远量加大 + 按实测包围盒保证枪身离镜头 >= VM_ADS_MIN_CLEAR。
     const near=lerp(0.012,0.05,ab);
     if(Math.abs(vmCamera.near-near)>0.0015){ vmCamera.near=near; vmCamera.updateProjectionMatrix(); }
-    // b. 镜内隐藏枪身 (默认关闭; 按 L 才开)
-    if(kcGunHidden()){
-      VM.inner.visible=false;
-      // 第一次触发时提示一次, 否则玩家不知道有这个开关
-      if(!_hideGunHinted){ _hideGunHinted=true; setHideGun(true); }
-    }
-  }catch(e){}
-  return r;
-};
-// 枪身藏起来后必须给一个瞄准参照, 否则开镜等于闭眼
-const _kcOrigUpdateHUD=updateHUD;
-updateHUD=function(dt){
-  const r=_kcOrigUpdateHUD.apply(this,arguments);
-  try{
-    const ch=document.getElementById('crosshair');
-    if(ch&&player.alive&&!player.onVehicle&&kcGunHidden()){
-      ch.style.display='block';
-      ch.style.setProperty('--gap','2px');
-    }
   }catch(e){}
   return r;
 };
@@ -320,6 +281,4 @@ updateHUD=function(dt){
       return r;
     };
   }
-  // 初始化时把开关状态同步到提示文案
-  setHideGun(HIDE_GUN_ADS,true);
 })();

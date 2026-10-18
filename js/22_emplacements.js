@@ -1,52 +1,4 @@
 'use strict';
-const ATGUNS=[], AAGUNS=[];
-function atGun(x,z,face){
-const g0=heightAt(x,z);
-sandbagWall(x-Math.sin(face)*1.6,z-Math.cos(face)*1.6,3.5,face);
-const grp=new THREE.Group(); grp.position.set(x,g0+0.85,z); grp.rotation.y=face;
-const yaw=new THREE.Group(); grp.add(yaw);
-const pitch=new THREE.Group(); yaw.add(pitch);
-const shield=new THREE.Mesh(new THREE.BoxGeometry(2.0,0.95,0.06),MAT.metal);
-shield.position.set(0,0.15,0.35); yaw.add(shield);
-const barrel=new THREE.Mesh(new THREE.CylinderGeometry(0.06,0.08,2.6,8),vmMats.gun);
-barrel.rotation.x=HPI; barrel.position.z=1.3; pitch.add(barrel);
-pitch.add(new THREE.Mesh(new THREE.BoxGeometry(0.32,0.3,0.6),vmMats.gunL));
-const wl=new THREE.Mesh(new THREE.CylinderGeometry(0.4,0.4,0.12,12),vmMats.gunL);
-wl.rotation.z=HPI; wl.position.set(0.75,-0.35,0); grp.add(wl);
-const wr2=wl.clone(); wr2.position.x=-0.75; grp.add(wr2);
-grp.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
-world.add(grp);
-CYLS.push({x,z,r:0.6,y0:g0,y1:g0+1.2});
-ATGUNS.push({x,z,y:g0+0.85,face,grp,yaw,pitch,user:null,cd:0,kind:'at'});
-}
-function aaGun(x,z){
-const g0=heightAt(x,z);
-const grp=new THREE.Group(); grp.position.set(x,g0+1.15,z);
-const yaw=new THREE.Group(); grp.add(yaw);
-const pitch=new THREE.Group(); pitch.position.y=0.1; yaw.add(pitch);
-const b1=new THREE.Mesh(new THREE.CylinderGeometry(0.05,0.06,1.7,8),vmMats.gun);
-b1.rotation.x=HPI; b1.position.set(0.22,0,0.85); pitch.add(b1);
-const b2=b1.clone(); b2.position.x=-0.22; pitch.add(b2);
-pitch.add(new THREE.Mesh(new THREE.BoxGeometry(0.7,0.35,0.7),vmMats.gunL));
-const ped=new THREE.Mesh(new THREE.CylinderGeometry(0.2,0.28,1.1,8),vmMats.gunL);
-ped.position.y=-0.6; grp.add(ped);
-const base=new THREE.Mesh(new THREE.CylinderGeometry(0.9,1.0,0.18,10),MAT.metal);
-base.position.y=-1.1; grp.add(base);
-grp.traverse(o=>{ if(o.isMesh) o.castShadow=true; });
-world.add(grp);
-CYLS.push({x,z,r:0.7,y0:g0,y1:g0+1.4});
-AAGUNS.push({x,z,y:g0+1.25,grp,yaw,pitch,user:null,cd:0,kind:'aa'});
-}
-// 反坦克炮/防空炮: 按旗点间隔与基地通用摆放
-for(let i=0;i<FLAGS.length-1;i++){
-const a=FLAGS[i], b=FLAGS[i+1];
-atGun((a.x+b.x)/2+rand(-8,8),(a.z+b.z)/2+rand(-8,8),Math.atan2(b.x-a.x,b.z-a.z)+HPI*(i%2?1:-1));
-}
-if(FLAGS.length>2) atGun(FLAGS[0].x+rand(-12,12),FLAGS[0].z+rand(-12,12),rand(0,TAU));
-// 防空炮已移除 (2026-09-13 需求: 过于强大, 影响对局体验) —— AAGUNS 保持为空数组
-// aaGun(BASES[0].x+(BASES[0].x<0?10:-10),10);
-// aaGun(BASES[1].x+(BASES[1].x<0?10:-10),-10);
-// if(FLAGS.length){ const fm=FLAGS[Math.floor(FLAGS.length/2)]; aaGun(fm.x+rand(-10,10),fm.z+rand(-10,10)); }
 NAV.refresh();
 function findFreeSpawn(x,z){
 for(let r=0;r<7;r++){
@@ -190,6 +142,6 @@ if(Math.abs(fp[0])<MAP_EDGE&&Math.abs(fp[1])<MAP_EDGE) return {x:fp[0],z:fp[1]};
 }
 return pickSpawnFor(team);
 }
-let nowT=0, matchOver=false, matchTime=15*60;
+let nowT=0, matchOver=false, matchTime=5*60;   // 5 分钟一局 (2026-09-18)
 const tickets=[START_TICKETS,START_TICKETS];
 let nadeWarnT=0;

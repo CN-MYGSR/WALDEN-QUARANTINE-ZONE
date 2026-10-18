@@ -12,12 +12,6 @@ if(Math.hypot(c.pos.x-f.x,c.pos.z-f.z)<f.r&&Math.abs(c.pos.y-f.gy)<7){
 if(c.team===0)c0++; else c1++;
 }
 }
-for(const t of tanks){
-if(!t.alive) continue;
-if(Math.hypot(t.pos.x-f.x,t.pos.z-f.z)<f.r){
-if(t.team===0)c0++; else c1++;
-}
-}
 f.present=[c0,c1];
 let attacker=-1;
 if(c0>0&&c1===0) attacker=0;

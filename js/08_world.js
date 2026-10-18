@@ -571,6 +571,9 @@ case 'ruins': layoutRuins(); break;
 case 'cqb': layoutCQB(); break;
 case 'lab': layoutLab(); break;
 case 'port': layoutPort(); break;
+case 'airport': layoutAirport(); break;
+case 'anvil_yard': layoutAnvilYard(); break;
+case 'anvil_b2': layoutAnvilB2(); break;
 case 'delta': layoutDelta(); break;
 case 'loess': layoutLoess(); break;
 case 'jungle': layoutJungle(); break;
@@ -584,9 +587,9 @@ const g=buildDepot(f.x,f.z,rand(0,3));
 if(g) DEPOTS.push({id:f.id,x:f.x,z:f.z,g,destroyed:false});
 }
 }
-// 基地营区 (通用) —— 室内/港区地图不摆野战帐篷, 改用设施内或堆场里的设备掩体
-// (见 07d_lab 入口区 / 07e_port 出生点)
-if(CAMPAIGN.layout!=='lab'&&CAMPAIGN.layout!=='port'){
+// 基地营区 (通用) —— 室内/港区/机场地图不摆野战帐篷, 改用设施内或堆场里的设备掩体
+// (见 07d_lab 入口区 / 07e_port 出生点 / 07f_airport 场坪)
+if(CAMPAIGN.layout!=='lab'&&CAMPAIGN.layout!=='port'&&CAMPAIGN.layout!=='airport'){
 CAMPAIGN.bases.forEach((b,t)=>{
 const sgn=b.x<0?1:-1;
 tent(b.x+sgn*2,6,0.3); tent(b.x,-6,-0.2); tent(b.x-sgn*4,0,0);
@@ -700,7 +703,11 @@ AMMO_CRATES.push({x,z,y:g0});
 }
 // 弹药箱: 每个旗点与基地附近 (通用)
 FLAGS.forEach(f=>ammoCrate(f.x+rand(-5,5),f.z+rand(-5,5)));
-ammoCrate(BASES[0].x+(BASES[0].x<0?3:-3),3); ammoCrate(BASES[1].x+(BASES[1].x<0?3:-3),-3);
+// ⚠️ 这里原本是硬编码 z=±3 —— 只在基地落在 z=0 轴上的地图(街区/实验室)成立。
+//    港口的基地在 z=±64, 弹药箱就一直生成在地图中央(离出生点 60 多米), 玩家根本找不到。
+//    改成相对基地的偏移: 对 z=0 的地图结果不变, 对港口/机场才是"基地附近"。
+ammoCrate(BASES[0].x+(BASES[0].x<0?3:-3), BASES[0].z+3);
+ammoCrate(BASES[1].x+(BASES[1].x<0?3:-3), BASES[1].z-3);
 // ---- 撤离突袭物资: 可搜索战利品箱 + 单一撤离灯塔 ----
 const LOOT_CRATES=[];
 // 共享自发光材质: 逐个 new 会让每个箱子各占一个合批分组
