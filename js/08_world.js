@@ -20,6 +20,96 @@ mesh(new THREE.BoxGeometry(w,0.08,len/segs+0.3),pm,x,heightAt(x,z)+0.04,z,ry,fal
 //  · 出生点: 西北 / 东南对角, 三点环线互相牵制, 中路有强掩体控制点。
 //  · 开阔区占比 < 15%: 仅保留 2 个小型交叉口广场, 其余全为巷道与室内。
 const CQB_BLOCK=38;      // 街区尺寸(含巷道)
+
+// Align pavement and paint to the grade. Long level slabs used to bury
+// road markings at one end and leave the other end floating above the street.
+function cityStreetStrip(x1,z1,x2,z2,width,mat,lift){
+const dx=x2-x1, dz=z2-z1, length=Math.hypot(dx,dz);
+const steps=Math.ceil(length/3), ox=dz*width/(2*length), oz=-dx*width/(2*length);
+const tile=mat.map?.userData.tileMeters||4, mx=(x1+x2)/2, mz=(z1+z2)/2, pos=[], uv=[], faces=[];
+for(let i=0;i<=steps;i++){
+  const cx=x1+dx*i/steps, cz=z1+dz*i/steps;
+  for(const side of [-1,1]){
+    const x=cx+side*ox, z=cz+side*oz;
+    pos.push(x-mx,heightAt(x,z)+lift,z-mz);
+    uv.push(x/tile,z/tile);
+  }
+  if(i){ const a=2*i-2; faces.push(a,a+2,a+1,a+1,a+2,a+3); }
+}
+const geo=new THREE.BufferGeometry();
+geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+geo.setIndex(faces); geo.computeVertexNormals();
+mesh(geo,mat,mx,0,mz,0,false,true);
+}
+
+// The municipal water tower sits beyond the playable edge, clear of the
+// north beacon and the paths used to reach it.
+function districtWaterTower(x,z){
+const base=heightAt(x,z), steel=MAT.metalDark;
+const tank=new THREE.MeshLambertMaterial({map:makeTex(512,128,(g,w,h)=>{
+  const noise=texRng(4103);
+  g.fillStyle='#55716f'; g.fillRect(0,0,w,h);
+  g.fillStyle='#c0baa0'; g.fillRect(0,28,w,72);
+  g.fillStyle='#3e5554'; g.fillRect(0,31,w,2); g.fillRect(0,95,w,2);
+  for(const left of [0,w/2]){
+    g.textAlign='center'; g.fillStyle='#384745';
+    g.font='bold 37px Arial'; g.fillText('WALDEN',left+120,75);
+    g.font='bold 10px Arial'; g.fillText('W O D O C I Ą G I    /    0 3',left+119,89);
+  }
+  for(let i=0;i<w;i+=32){
+    g.fillStyle='rgba(30,41,38,.38)'; g.fillRect(i,0,1,h);
+    for(let k=4;k<h;k+=11) g.fillRect(i+2,k,1.4,1.4);
+  }
+  for(let i=0;i<340;i++){
+    const px=noise()*w, py=noise()*h;
+    g.fillStyle=i%3?'rgba(73,49,35,.22)':'rgba(198,192,166,.26)';
+    g.fillRect(px,py,0.6+noise()*2,1+noise()*9);
+  }
+})});
+function cylinder(top,bottom,h,cy,mat){
+  return mesh(new THREE.CylinderGeometry(top,bottom,h,24),mat,x,base+cy,z,0,false,true);
+}
+function brace(ax,ay,az,bx,by,bz,r){
+  const line=new THREE.Vector3(bx-ax,by-ay,bz-az);
+  const rod=mesh(new THREE.CylinderGeometry(r,r,line.length(),5),steel,
+    x+(ax+bx)/2,base+(ay+by)/2,z+(az+bz)/2,0,false,true);
+  rod.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0),line.normalize());
+}
+for(const sx of [-1,1])for(const sz of [-1,1]){
+  const px=3.2*sx, pz=3.2*sz;
+  mesh(new THREE.BoxGeometry(1.15,0.95,1.15),MAT.concreteBarrier,x+px,base+0.36,z+pz,0,false,true);
+  brace(px,0.8,pz,2.55*sx,12.96,2.55*sz,0.2);
+  brace(3*sx,3.5,3*sz,-2.7*sx,9.8,2.7*sz,0.08);
+  brace(3*sx,3.5,3*sz,2.7*sx,9.8,-2.7*sz,0.08);
+}
+cylinder(0.48,0.48,11.6,5.7,MAT.metal);
+cylinder(3.75,1.05,2.4,11.75,MAT.containerRust);
+cylinder(4.05,4.05,0.24,12.96,steel);
+cylinder(3.7,3.7,4.25,15.18,tank).rotation.y=HPI;
+cylinder(3.84,3.84,0.16,17.38,steel);
+cylinder(0.65,3.82,1.45,18.17,MAT.metal);
+cylinder(0.42,0.48,0.62,19.14,steel);
+// Raised service walk and rail; all small metalwork shares a static batch.
+const ring=mesh(new THREE.TorusGeometry(3.95,0.055,5,32),steel,x,base+13.95,z,0,false,true);
+ring.rotation.x=HPI;
+for(let i=0;i<12;i++){
+  const a=i*TAU/12, px=3.95*Math.cos(a), pz=3.95*Math.sin(a);
+  brace(px,13.04,pz,px,13.96,pz,0.047);
+}
+// Maintenance access connects the pump room to the outside service walk.
+for(const sx of [-0.24,0.24]) brace(sx,0.48,-4.04,sx,13.9,-4.04,0.045);
+for(let y=0.85;y<13.7;y+=0.48) brace(-0.24,y,-4.04,0.24,y,-4.04,0.033);
+brace(-2.93,6.0,-2.93,2.93,6.0,-2.93,0.085);
+brace(0,6.0,-2.93,0,6.0,-4.04,0.06);
+const shedX=x+8.5, shedZ=z-1.0;
+mesh(new THREE.BoxGeometry(5.6,0.36,4.1),MAT.concreteBarrier,shedX,base+0.14,shedZ,0,false,true);
+mesh(new THREE.BoxGeometry(5.35,2.85,3.9),MAT.brick,shedX,base+1.69,shedZ,0,false,true);
+mesh(new THREE.BoxGeometry(5.85,0.16,4.38),MAT.metal,shedX,base+3.13,shedZ,0,false,true);
+mesh(new THREE.BoxGeometry(1.19,2.1,0.13),MAT.metal,shedX-1.17,base+1.34,shedZ-1.98,0,false,true);
+for(let i=0;i<5;i++) mesh(new THREE.BoxGeometry(1.18,0.08,0.13),steel,shedX+1.13,base+1.61+i*0.15,shedZ-1.96,0,false,true);
+brace(0,1.15,0,5.95,1.15,0,0.23);
+}
 // 出生点/撤离点保护区: 这些圆内不生成建筑, 保证双方出生区开阔可用的同时仍是"街头掩体区"
 function cqbNearSpawn(x,z,r){
 for(const b of CAMPAIGN.bases) if(Math.hypot(x-b.x,z-b.z)<r) return true;
@@ -46,17 +136,35 @@ const off=i*CQB_BLOCK;
 lanes.push(off);
 }
 for(const off of lanes){
-paveStreet(-W,off, W,off, 5.0);
-paveStreet(off,-W, off,W, 5.0);
+cityStreetStrip(-W,off,W,off,5,MAT.pave,0.055);
+cityStreetStrip(off,-W,off,W,5,MAT.pave,0.07);
 }
 // 街心线(视觉): 破损黄线
 for(const off of lanes){
 for(let t=-W;t<W;t+=3.2){
 if(Math.random()<0.55) continue;
-mesh(new THREE.BoxGeometry(1.5,0.02,0.14), MAT.carRust||MAT.metalDark, t+1.6,heightAt(t+1.6,off)+0.075,off,0,false,true);
-mesh(new THREE.BoxGeometry(0.14,0.02,1.5), MAT.carRust||MAT.metalDark, off,heightAt(off,t+1.6)+0.075,t+1.6,0,false,true);
+if(lanes.some(c=>Math.abs(t+1.6-c)<3.3)) continue;
+cityStreetStrip(t+0.85,off,t+2.35,off,0.13,MAT.roadPaint,0.10);
+cityStreetStrip(off,t+0.85,off,t+2.35,0.13,MAT.roadPaint,0.10);
 }
 }
+// Broad kerbs and faded pedestrian crossings identify the old tram avenue.
+// They have no colliders and leave both ends of each side street open.
+for(let i=0;i<lanes.length-1;i++){
+  const a=lanes[i]+3.5, b=lanes[i+1]-3.5;
+  for(const side of [-1,1]){
+    cityStreetStrip(a,side*3.15,b,side*3.15,1.2,MAT.concreteBarrier,0.083);
+    cityStreetStrip(side*3.15,a,side*3.15,b,1.2,MAT.concreteBarrier,0.083);
+  }
+}
+const crossPaint=new THREE.MeshLambertMaterial({color:0xc0b9a5,map:MAT.roadPaint.map});
+for(const cx of [-CQB_BLOCK,0,CQB_BLOCK]){
+  for(let stripe=-2;stripe<=2;stripe++){
+    const cz=stripe*0.88;
+    cityStreetStrip(cx+4.8,cz,cx+6.6,cz,0.42,crossPaint,0.102);
+  }
+}
+districtWaterTower(0,MAP_HALF+7);
 // 主街 NAV_CLEARS: 沿中心线每 8m 一个, 保证 Bot 主路畅通
 for(const off of lanes){
 for(let t=-W;t<=W;t+=8){
@@ -73,8 +181,8 @@ for(let bi=-N;bi<N;bi++)for(let bj=-N;bj<N;bj++){
 const cx0=bi*CQB_BLOCK+CQB_BLOCK/2;
 const cz0=bj*CQB_BLOCK+CQB_BLOCK/2;
 // 内巷十字: 横向 + 纵向各一条, 宽 4m, 交叉穿过街区中心
-paveStreet(cx0-14,cz0,cx0+14,cz0,4);
-paveStreet(cx0,cz0-14,cx0,cz0+14,4);
+cityStreetStrip(cx0-14,cz0,cx0+14,cz0,4,MAT.pave,0.055);
+cityStreetStrip(cx0,cz0-14,cx0,cz0+14,4,MAT.pave,0.07);
 // 内巷 NAV_CLEARS
 for(let k=-1;k<=1;k++){
 NAV_CLEARS.push({x:cx0+k*7,z:cz0,r:1.3});
@@ -673,7 +781,19 @@ CYLS.push({x,z,r:0.2,y0:g0,y1:g0+6.5});
 }
 }
 }
-buildWorld();
+// The world exists before the player joins a room. Peers on the same map must
+// build the same walls and props. Only synchronous map construction is seeded.
+function buildMapSection(section,build){
+ const nativeRandom=Math.random;
+ let state=2166136261;
+ for(const c of CAMPAIGN.id+'/'+section) state=Math.imul(state^c.charCodeAt(0),16777619)>>>0;
+ Math.random=()=>{
+  state=(Math.imul(1664525,state)+1013904223)>>>0;
+  return state/4294967296;
+ };
+ try{ build(); }finally{ Math.random=nativeRandom; }
+}
+buildMapSection('world',buildWorld);
 const FLAGS=CAMPAIGN.flags.map(f=>({id:f.id,x:f.x,z:f.z,r:f.r,owner:-1,cap:0,capTeam:-1}));
 const BASES=CAMPAIGN.bases.map(b=>({x:b.x,z:b.z}));
 FLAGS.forEach(f=>{
@@ -704,12 +824,14 @@ const lid=mesh(new THREE.BoxGeometry(1.15,0.08,0.85),MAT.wood,x,g0+0.74,z,m.rota
 AMMO_CRATES.push({x,z,y:g0});
 }
 // 弹药箱: 每个旗点与基地附近 (通用)
+buildMapSection('ammo-crates',()=>{
 FLAGS.forEach(f=>ammoCrate(f.x+rand(-5,5),f.z+rand(-5,5)));
 // ⚠️ 这里原本是硬编码 z=±3 —— 只在基地落在 z=0 轴上的地图(街区/实验室)成立。
 //    港口的基地在 z=±64, 弹药箱就一直生成在地图中央(离出生点 60 多米), 玩家根本找不到。
 //    改成相对基地的偏移: 对 z=0 的地图结果不变, 对港口/机场才是"基地附近"。
 ammoCrate(BASES[0].x+(BASES[0].x<0?3:-3), BASES[0].z+3);
 ammoCrate(BASES[1].x+(BASES[1].x<0?3:-3), BASES[1].z-3);
+});
 // ---- 撤离突袭物资: 可搜索战利品箱 + 单一撤离灯塔 ----
 const LOOT_CRATES=[];
 // 共享自发光材质: 逐个 new 会让每个箱子各占一个合批分组
@@ -727,16 +849,36 @@ const DEFAULT_LOOT_SPOTS=[[-57,-57],[-19,-57],[19,-57],[57,-57],
 [-57,-19],[-19,-19],[19,-19],[57,-19],
 [-57,19],[19,19],[57,19],[-19,57],[19,57],[0,0]];
 const lootSpots=(CAMPAIGN.lootSpots&&CAMPAIGN.lootSpots.length)?CAMPAIGN.lootSpots:DEFAULT_LOOT_SPOTS;
-lootSpots.forEach(sp=>{
+buildMapSection('loot-crates',()=>lootSpots.forEach(sp=>{
 if(Array.isArray(sp)) lootCrate(sp[0],sp[1],false);
 else lootCrate(sp.x,sp.z,sp.rich);
-});
+}));
 const EXTRACT_POINTS=[];
+let districtExitPlate;
 function extractionBeacon(x,z){
 const g0=heightAt(x,z);
 const base=mesh(new THREE.CylinderGeometry(2.4,2.8,0.32,18),MAT.metal,x,g0+0.16,z);
 const pole=mesh(new THREE.CylinderGeometry(0.08,0.1,4.3,8),MAT.metal,x,g0+2.15,z);
-const orb=mesh(new THREE.SphereGeometry(0.58,14,10),new THREE.MeshLambertMaterial({color:0x35e0a0,emissive:0x0f5a3a}),x,g0+4.4,z);
+const urban=CAMPAIGN.id==='bfruins';
+const orb=mesh(urban?new THREE.CylinderGeometry(0.39,0.34,0.74,12):new THREE.SphereGeometry(0.58,14,10),new THREE.MeshLambertMaterial({color:0x35e0a0,emissive:0x0f5a3a}),x,g0+4.4,z);
+if(urban){
+  mesh(new THREE.CylinderGeometry(0.47,0.24,0.2,12),MAT.metalDark,x,g0+4.00,z,0,false,true);
+  mesh(new THREE.CylinderGeometry(0.19,0.48,0.24,12),MAT.metalDark,x,g0+4.87,z,0,false,true);
+  for(let i=0;i<4;i++){
+    const a=i*HPI;
+    mesh(new THREE.CylinderGeometry(0.023,0.023,0.78,5),MAT.metal,x+0.385*Math.cos(a),g0+4.4,z+0.385*Math.sin(a),0,false,true);
+  }
+  if(!districtExitPlate) districtExitPlate=new THREE.MeshLambertMaterial({map:makeTex(256,96,(g,w,h)=>{
+    g.fillStyle='#34584d'; g.fillRect(0,0,w,h);
+    g.strokeStyle='#d4d6ba'; g.lineWidth=2; g.strokeRect(4,4,248,88);
+    g.fillStyle=g.strokeStyle; g.font='bold 37px Arial'; g.fillText('WYJŚCIE',20,49);
+    g.font='bold 17px Arial'; g.fillText('E  X  I  T',21,76);
+    g.lineWidth=7; g.beginPath(); g.moveTo(216,20); g.lineTo(216,71);
+    g.moveTo(199,55); g.lineTo(216,73); g.lineTo(233,55); g.stroke();
+  })});
+  const ry=Math.atan2(-x,-z);
+  mesh(new THREE.PlaneGeometry(1.45,0.55),districtExitPlate,x+Math.sin(ry)*.14,g0+2.75,z+Math.cos(ry)*.14,ry,false,true);
+}
 EXTRACT_POINTS.push({x,z,y:g0,r:5,progress:0,orb});
 }
 // 每个撤离点各建立一座灯塔(街区 3 个, 实验室/港口各 1 个)

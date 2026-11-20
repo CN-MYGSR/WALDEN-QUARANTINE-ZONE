@@ -1,14 +1,34 @@
 'use strict';
 const world = new THREE.Group(); scene.add(world);
 const NAV_CLEARS=[];
+// Project in the building's own axes so neighbouring lintels, piers and storeys
+// share one masonry pattern even when the whole building is turned slightly.
+function tileBoxSurface(geo, tileMeters, x, y, z, ry){
+  const {position,normal,uv}=geo.attributes;
+  const cs=Math.cos(ry), sn=Math.sin(ry);
+  const offsetX=x*cs-z*sn, offsetZ=x*sn+z*cs, scale=1/tileMeters;
+  for(let i=0;i<position.count;i++){
+    const lx=position.getX(i)+offsetX, lz=position.getZ(i)+offsetZ;
+    const nx=normal.getX(i), ny=normal.getY(i);
+    if(ny) uv.setXY(i,lx*scale,-ny*lz*scale);
+    else {
+      const alongWall=nx ? -nx*lz : normal.getZ(i)*lx;
+      uv.setXY(i,alongWall*scale,(position.getY(i)+y)*scale);
+    }
+  }
+}
 function mesh(geo,mat,x,y,z,ry=0,cast=true,recv=true){
+const tileMeters=mat?.map?.userData?.tileMeters;
+if(tileMeters && geo.type==='BoxGeometry'){
+  tileBoxSurface(geo,tileMeters,x,y,z,ry);
+}
 const m=new THREE.Mesh(geo,mat);
 m.position.set(x,y,z); m.rotation.y=ry;
 m.castShadow=cast; m.receiveShadow=recv;
 world.add(m); return m;
 }
-function solidBox(mat,w,h,d,x,y,z,ry=0){
-const m=mesh(new THREE.BoxGeometry(w,h,d),mat,x,y,z,ry);
+function solidBox(mat,w,h,d,x,y,z,ry=0,geometry){
+const m=mesh(geometry||new THREE.BoxGeometry(w,h,d),mat,x,y,z,ry);
 const sn=Math.sin(ry), cs=Math.cos(ry);
 // 近轴对齐阈值 0.09 (≈5.2°): 城市街区/道具的微旋转(±3.5°)全部走单块 AABB 碰撞体。
 // 旧阈值 0.02 会把每一面微旋转的墙拆成 ~7 个 0.55m 方块 —— 等效墙厚被撑到 0.55m,
@@ -76,7 +96,7 @@ if(g.dead) return; g.dead=true;
 for(const m of g.meshes){
 // 墙体拆成物理碎块坍塌 (cannon可用时)
 if(!silent) spawnWallDebris(m,g.cx,g.cz);
-world.remove(m);
+removeStructureMesh(m);
 }
 for(const i of g.bi){
 const b=BOXES[i]; b.dead=true;
@@ -109,11 +129,11 @@ if(g.roofRef.dead>=2){
 g.roofRef.done=true;
 const rms=Array.isArray(g.roofRef.m)?g.roofRef.m:[g.roofRef.m];
 for(const rm of rms){
-if(!silent&&rm.parent){
+if(!silent&&(rm.parent||wallRanges.has(rm))){
 spawnWallDebris(rm,g.cx,g.cz);
 for(let k=0;k<3;k++) spawnP(PT.dirt,rm.position.x+rand(-1.5,1.5),rm.position.y,rm.position.z+rand(-1.5,1.5),rand(-2,2),rand(0,2),rand(-2,2),rand(0.5,0.8),1.5,rand(0.8,1.2),0.85,3);
 }
-world.remove(rm);
+removeStructureMesh(rm);
 }
 }
 }
@@ -639,25 +659,93 @@ coverPoints.push({x:x+Math.sin(ry)*(d/2+0.9),z:z+Math.cos(ry)*(d/2+0.9)});
 }
 
 // 废弃轿车: 低矮掩体, 车身趴伏, 引擎盖/车顶两级掩体
+// Opaque painted panels, window gaskets and lamps share one atlas. The two
+// original collision boxes still define cover, independently of the silhouette.
+let wreckPanels;
+function oldSedanPanels(){
+if(wreckPanels) return wreckPanels;
+const map=makeTex(512,256,(g,w,h)=>{
+  const noise=texRng(1986);
+  g.fillStyle='#858677'; g.fillRect(0,0,w,h);
+  // Side doors, sills and wheel housings.
+  g.fillStyle='#5c6059'; g.fillRect(0,46,320,3); g.fillRect(0,66,320,8);
+  g.strokeStyle='#4a4f4a'; g.lineWidth=1.3;
+  for(const x of [65,151,231]){
+    g.beginPath(); g.moveTo(x,1); g.lineTo(x-1,42); g.lineTo(x-5,63); g.stroke();
+  }
+  for(const x of [74,158]){ g.fillStyle='#424947'; g.fillRect(x,12,14,3); }
+  // Pressed radiator grille, sealed-beam lights, cracked tail lamps.
+  g.fillStyle='#303733'; g.fillRect(354,19,124,29);
+  for(let y=22;y<46;y+=5){ g.fillStyle='#858881'; g.fillRect(357,y,118,2); }
+  for(const x of [327,481]){
+    g.fillStyle='#ddd1a8'; g.fillRect(x,18,24,17);
+    g.fillStyle='#9d7847'; g.fillRect(x,37,24,6);
+    g.fillStyle='#834939'; g.fillRect(x,99,24,14);
+    g.fillStyle='#c69a58'; g.fillRect(x,115,24,5);
+  }
+  g.fillStyle='#444a46'; g.fillRect(320,53,192,9); g.fillRect(320,130,192,9);
+  g.fillStyle='#b4aea0'; g.fillRect(386,101,60,15);
+  g.font='bold 11px monospace'; g.fillStyle='#575951'; g.fillText('WD · 426',389,112);
+  // Dusty grey-blue safety glass, black rubber seals, central door pillar.
+  function glazing(x,y,ww,hh){
+    g.fillStyle='#343c38'; g.fillRect(x,y,ww,hh);
+    const grad=g.createLinearGradient(0,y,0,y+hh);
+    grad.addColorStop(0,'#849492'); grad.addColorStop(.55,'#687a7b'); grad.addColorStop(1,'#465452');
+    g.fillStyle=grad; g.fillRect(x+4,y+4,ww-8,hh-8);
+    g.fillStyle='rgba(186,192,180,.19)'; g.beginPath();
+    g.moveTo(x+ww*.31,y+4); g.lineTo(x+ww*.58,y+4); g.lineTo(x+ww*.15,y+hh-4); g.lineTo(x+6,y+hh-4); g.fill();
+  }
+  glazing(0,78,316,69); glazing(0,155,217,91);
+  g.fillStyle='#454d47'; g.fillRect(149,78,13,69);
+  g.strokeStyle='#adbbb4'; g.lineWidth=1; g.beginPath();
+  g.moveTo(30,160); g.lineTo(46,174); g.lineTo(41,182); g.lineTo(58,196);
+  g.moveTo(46,174); g.lineTo(65,171); g.lineTo(80,177); g.stroke();
+  for(let i=0;i<1250;i++){
+    const x=noise()*w, y=noise()*h;
+    g.fillStyle=i%4?'rgba(80,59,42,.22)':'rgba(205,198,165,.36)';
+    g.fillRect(x,y,0.7+noise()*4,0.6+noise()*2);
+  }
+});
+const skins=[0xf3f0de,0xc0cccc,0xccb4a5].map(color=>new THREE.MeshLambertMaterial({map,color}));
+const body=new THREE.BoxGeometry(1.85,0.78,4.35,1,1,4);
+const cab=new THREE.BoxGeometry(1.7,0.62,2.1);
+const side=[1,1,315,72], front=[322,1,188,72], rear=[322,77,188,71];
+const roof=[225,155,284,90], sideGlass=[1,79,314,67], screen=[1,156,215,89];
+for(const [geo,panels] of [[body,[side,side,roof,roof,front,rear]],[cab,[sideGlass,sideGlass,roof,roof,screen,screen]]]){
+  const pos=geo.attributes.position, uv=geo.attributes.uv;
+  for(let i=0;i<pos.count;i++){
+    const x=pos.getX(i), y=pos.getY(i), z=pos.getZ(i);
+    if(geo===body){
+      const end=Math.pow(Math.abs(z)/2.175,3);
+      pos.setXYZ(i,x*(1-0.12*end)*(y<0?0.93:1),y+(y<0?0.09:-0.14)*end,z);
+    }else if(y>0) pos.setXYZ(i,x*0.80,y,z*0.60-0.11);
+  }
+  geo.groups.forEach((group,face)=>{
+    const [left,top,width,height]=panels[face], indices=new Set();
+    for(let i=group.start;i<group.start+group.count;i++) indices.add(geo.index.getX(i));
+    for(const i of indices) uv.setXY(i,(left+uv.getX(i)*width)/512,1-(top+(1-uv.getY(i))*height)/256);
+  });
+  geo.computeVertexNormals();
+}
+wreckPanels={body,cab,skins,tire:new THREE.CylinderGeometry(0.34,0.34,0.22,12),hub:new THREE.CylinderGeometry(0.16,0.16,0.23,10)};
+return wreckPanels;
+}
 function wreckCar(x,z,ry){
-const g0=heightAt(x,z);
-solidBox(MAT.carRust||MAT.metalDark,1.85,0.78,4.35,x,g0+0.62,z,ry);
-// 车顶(略矮, 半身高)
-const cab=solidBox(MAT.carRust||MAT.metalDark,1.7,0.62,2.1,x-Math.sin(ry)*0.35,g0+1.3,z-Math.cos(ry)*0.35,ry);
+const g0=heightAt(x,z), panels=oldSedanPanels(), cs=Math.cos(ry),sn=Math.sin(ry);
+const skin=panels.skins[Math.abs(Math.round(x*3+z))%3];
+solidBox(skin,1.85,0.78,4.35,x,g0+0.62,z,ry,panels.body);
+const cab=solidBox(skin,1.7,0.62,2.1,x-sn*0.35,g0+1.3,z-cs*0.35,ry,panels.cab);
 cab.rotation.z=rand(-0.05,0.05);
-// 破碎挡风玻璃
-const ws=mesh(new THREE.BoxGeometry(1.6,0.5,0.06),MAT.glassCrack||MAT.glass,x+Math.sin(ry)*0.95,g0+1.42,z+Math.cos(ry)*0.95, ry);
-ws.rotation.x=rand(-0.4,0.4);
-// 车轮(部分缺失)
-const cs=Math.cos(ry),sn=Math.sin(ry);
 for(const o of [-1.35,1.35]) for(const s of [-1,1]){
 if(Math.random()<0.28) continue;
-const wh=mesh(new THREE.CylinderGeometry(0.34,0.34,0.22,10),MAT.metalDark, x+cs*s*0.85+sn*o,g0+0.34,z-sn*s*0.85+cs*o, ry);
-wh.rotation.z=HPI;
+const wx=x+cs*s*0.85+sn*o, wz=z-sn*s*0.85+cs*o;
+mesh(panels.tire,MAT.metalDark,wx,g0+0.34,wz,ry).rotation.z=HPI;
+mesh(panels.hub,MAT.metal,wx+cs*s*.015,g0+0.34,wz-sn*s*.015,ry,false,true).rotation.z=HPI;
 }
-// 敞开的引擎盖
-const hood=mesh(new THREE.BoxGeometry(1.5,0.08,1.0),MAT.carRust||MAT.metalDark, x+Math.sin(ry)*1.75,g0+1.22,z+Math.cos(ry)*1.75, ry);
-hood.rotation.x=-0.5;
+if((Math.round(x)+Math.round(z))%3===0){
+  const hood=mesh(new THREE.BoxGeometry(1.48,0.06,1.12),MAT.carRust,x+sn*1.39,g0+1.21,z+cs*1.39,ry);
+  hood.rotation.set(-0.53,ry,0,'YXZ');
+}
 addCoverAround(x,z,2.0,4.5,ry);
 }
 

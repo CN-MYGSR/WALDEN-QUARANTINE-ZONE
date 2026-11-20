@@ -143,7 +143,7 @@ if(wallGs[0]._collapsed) return; wallGs[0]._collapsed=true;
 for(const um of upperMeshes){
 if(!um||!um.geometry) continue;
 try{ spawnWallDebris(um,x,z); }catch(_){}
-world.remove(um);
+removeStructureMesh(um);
 }
 for(let k2=0;k2<3;k2++) spawnP(PT.dirt,x+rand(-2,2),g0+rand(0.2,3),z+rand(-2,2),rand(-3,3),rand(1,4),rand(-3,3),rand(0.6,1.2),2,rand(0.8,1.4),0.9,2);
 rubblePile(x+rand(-2,2),z+rand(-2,2),2.8);
@@ -226,7 +226,7 @@ if(wallGs.length){
 const check=()=>{
 if(wallGs.every(g=>g.dead)&&!wallGs[0]._collapsed){
 wallGs[0]._collapsed=true;
-for(const um of upperMeshes){ try{ if(um&&um.geometry){ spawnWallDebris(um,x,z); world.remove(um); } }catch(_){} }
+for(const um of upperMeshes){ try{ if(um&&um.geometry){ spawnWallDebris(um,x,z); removeStructureMesh(um); } }catch(_){} }
 for(let k2=0;k2<4;k2++) spawnP(PT.dirt,x+rand(-2,2),g0+rand(0.5,4),z+rand(-2,2),rand(-3,3),rand(1,5),rand(-3,3),rand(0.7,1.3),2.5,rand(0.8,1.6),0.9,2);
 rubblePile(x+rand(-3,3),z+rand(-3,3),3.2);
 AudioSys.explosion(Math.hypot(x-camera.position.x,z-camera.position.z)*0.55);
@@ -477,6 +477,103 @@ const CQB_WINH=1.40;    // 窗洞净高
 // 可进入建筑登记表: {x,z,ry,w,d,floors,g0,topY,kind,exits,shaft}
 const CQ_BUILDINGS=[];
 
+// One enamel atlas for the old town. Awnings and shutters are children of
+// their own destructible lintel, so a blown-out wall takes its fittings with it.
+const districtFacade={material:null,awnings:[],shutters:new Map()};
+function districtEnamel(){
+if(districtFacade.material) return districtFacade.material;
+const map=makeTex(512,512,(g,w,h)=>{
+  const random=texRng(719);
+  g.fillStyle='#66716c'; g.fillRect(0,0,w,h);
+  const shops=[['APTEKA','#365f55'],['PIEKARNIA','#795045'],['POCZTA','#8a6638']];
+  shops.forEach(([label,paint],i)=>{
+    const y=i*96;
+    g.fillStyle=paint; g.fillRect(0,y,w,90);
+    g.strokeStyle='#d4c7a3'; g.lineWidth=1.6; g.strokeRect(5,y+5,w-10,80);
+    g.fillStyle='#d9d1b2'; g.fillRect(86,y+12,2,66);
+    g.save(); g.translate(281,y+63); g.scale(0.77,1); g.textAlign='center';
+    g.font=i===1?'bold 52px Georgia':'bold 52px Arial'; g.fillText(label,0,0); g.restore();
+    g.fillRect(446,y+17,1.5,55); g.font='bold 20px monospace'; g.fillText(['14','08','21'][i],462,y+54);
+    g.save(); g.translate(45,y+44); g.strokeStyle=g.fillStyle; g.lineWidth=4;
+    if(i===0){
+      g.fillRect(-7,-20,14,40); g.fillRect(-20,-7,40,14);
+    }else if(i===1){
+      g.beginPath(); g.ellipse(0,3,23,12,-0.23,0,TAU); g.fill();
+      g.strokeStyle=paint; g.lineWidth=2;
+      for(let x=-10;x<=10;x+=10){ g.beginPath(); g.moveTo(x-2,-4); g.lineTo(x+3,6); g.stroke(); }
+    }else{
+      g.strokeRect(-21,-13,42,27); g.beginPath();
+      g.moveTo(-20,-11); g.lineTo(0,3); g.lineTo(20,-11); g.stroke();
+    }
+    g.restore();
+  });
+  // Folded zinc canopy tops and two sun-faded colours of wooden shutters.
+  for(let x=0;x<w;x+=18){
+    g.fillStyle='#495752'; g.fillRect(x,290,2,88);
+    g.fillStyle='#99a097'; g.fillRect(x+2,290,1,88);
+  }
+  g.fillStyle='#556b63'; g.fillRect(0,384,256,128);
+  g.fillStyle='#77604d'; g.fillRect(256,384,256,128);
+  for(let y=388;y<512;y+=10){
+    g.fillStyle='rgba(18,24,22,.52)'; g.fillRect(0,y,w,3);
+    g.fillStyle='rgba(205,196,166,.34)'; g.fillRect(0,y+4,w,2);
+  }
+  for(let k=0;k<1100;k++){
+    g.fillStyle=k%3?'rgba(58,44,34,.24)':'rgba(200,193,165,.35)';
+    g.fillRect(random()*w,random()*h,1+random()*4,1+random()*2);
+  }
+});
+districtFacade.material=new THREE.MeshLambertMaterial({map});
+return districtFacade.material;
+}
+
+function districtAwning(lintel,style){
+let geo=districtFacade.awnings[style];
+if(!geo){
+  const shop=style<3;
+  geo=new THREE.BoxGeometry(shop?6.45:1.85,shop?0.54:0.14,shop?0.95:0.78);
+  const pos=geo.attributes.position, uv=geo.attributes.uv;
+  for(let i=0;i<pos.count;i++){
+    const front=Math.floor(i/4)===4 && shop;
+    const row=front?style*96:290, high=front?90:86;
+    // Front face uses enamel lettering; the other box faces use sheet metal.
+    uv.setXY(i,(1+uv.getX(i)*510)/512,1-(row+1+(1-uv.getY(i))*(high-2))/512);
+    if(pos.getZ(i)>0) pos.setY(i,pos.getY(i)-(shop?0.11:0.16));
+  }
+  geo.computeVertexNormals();
+  districtFacade.awnings[style]=geo;
+}
+const hood=new THREE.Mesh(geo,districtEnamel());
+hood.position.set(0,0.04,lintel.geometry.parameters.depth/2+geo.parameters.depth/2-0.035);
+hood.receiveShadow=true;
+lintel.add(hood);
+}
+
+function districtShutters(lintel,style){
+const {width,height,depth}=lintel.geometry.parameters, key=width.toFixed(3)+'/'+style;
+let geo=districtFacade.shutters.get(key);
+if(!geo){
+  const pos=[], uv=[], idx=[], wing=0.38;
+  const u0=style?0.51:0.01, u1=style?0.99:0.49;
+  for(const side of [-1,1]){
+    const edge=side*(width/2+0.025), l=side<0?edge-wing:edge;
+    const base=pos.length/3;
+    pos.push(l,-0.66,0,l+wing,-0.66,0,l+wing,0.66,0,l,0.66,0);
+    uv.push(u0,0.01,u1,0.01,u1,0.24,u0,0.24);
+    idx.push(base,base+1,base+2,base,base+2,base+3);
+  }
+  geo=new THREE.BufferGeometry();
+  geo.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
+  geo.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
+  geo.setIndex(idx); geo.computeVertexNormals();
+  districtFacade.shutters.set(key,geo);
+}
+const shutters=new THREE.Mesh(geo,districtEnamel());
+shutters.position.set(0,-(height+CQB_WINH)/2,depth/2+0.035);
+shutters.receiveShadow=true;
+lintel.add(shutters);
+}
+
 // 建筑局部坐标 → 世界坐标 (lx 沿宽 w, lz 沿深 d; +lz 为临街正面)
 function _cqbL(x,z,ry){ const cs=Math.cos(ry),sn=Math.sin(ry); return (lx,lz)=>[x+lx*cs+lz*sn, z-lx*sn+lz*cs]; }
 
@@ -491,7 +588,7 @@ const ops=[];
 const push=(o,def,kind)=>{
 const obj=(o&&typeof o==='object');
 const c=obj?o.c:o, w=(obj&&o.w)?o.w:def, nav=!(obj&&o.nav===false);
-if(c>a0+w*0.5&&c<a1-w*0.5) ops.push({c,w,kind,nav});
+if(c>a0+w*0.5&&c<a1-w*0.5) ops.push({c,w,kind,nav,onLintel:obj&&o.onLintel});
 };
 for(const o of (doors||[])) push(o,dw,'door');
 for(const o of (wins||[]))  push(o,ww,'win');
@@ -501,7 +598,8 @@ if(e-s<0.04||hh<0.04) return;
 const c=(s+e)/2;
 const q=(axis==='x')?L(c,at):L(at,c);
 const bw=(axis==='x')?(e-s):t, bd=(axis==='x')?t:(e-s);
-dBegin(); dBox(mat,bw,hh,bd,q[0],cy,q[1],ry); const g=dEnd(); if(g&&gs) gs.push(g);
+dBegin(); const m=dBox(mat,bw,hh,bd,q[0],cy,q[1],ry); const g=dEnd(); if(g&&gs) gs.push(g);
+return m;
 };
 let cur=a0;
 for(const o of ops){
@@ -510,10 +608,16 @@ if(s>cur+0.04) put(cur,s,y0+h/2,h);
 if(o.kind==='win'){
 put(s,e,y0+CQB_SILL/2,CQB_SILL);
 const head=h-CQB_SILL-CQB_WINH;
-if(head>0.04) put(s,e,y0+CQB_SILL+CQB_WINH+head/2,head);
+if(head>0.04){
+  const lintel=put(s,e,y0+CQB_SILL+CQB_WINH+head/2,head);
+  if(o.onLintel) o.onLintel(lintel);
+}
 } else {
 const lh=Math.min(CQB_LINTEL,Math.max(0,h-2.05));
-if(lh>0.05) put(s,e,y0+h-lh/2,lh);
+if(lh>0.05){
+  const lintel=put(s,e,y0+h-lh/2,lh);
+  if(o.onLintel) o.onLintel(lintel);
+}
 if(o.nav!==false){
 const q=(axis==='x')?L(o.c,at):L(at,o.c);
 NAV_CLEARS.push({x:q[0],z:q[1],r:Math.min(2.4,Math.max(1.0,o.w*0.5+0.5))});
@@ -529,7 +633,10 @@ opts=opts||{};
 const n=Math.max(1,opts.n||Math.round(span/3.4));
 const seg=span/n, ww=Math.min(opts.winW||1.4,seg*0.62);
 const wins=[];
-for(let k=0;k<n;k++) wins.push((k+0.5)*seg-span/2);
+for(let k=0;k<n;k++){
+  const c=(k+0.5)*seg-span/2;
+  wins.push(opts.onLintel&&k===0?{c,onLintel:opts.onLintel}:c);
+}
 _cqbWallOpen(mat,L,ry,axis,off,-span/2,span/2,y0,fh,t,null,null,wins,ww,gs);
 }
 // 内隔断: 落地门洞 + 门楣
@@ -599,7 +706,7 @@ if(!wallGs.length) return;
 const check=()=>{
 if(wallGs.every(g=>g.dead)&&!wallGs[0]._collapsed){
 wallGs[0]._collapsed=true;
-for(const um of upperMeshes){ try{ if(um&&um.geometry){ spawnWallDebris(um,x,z); world.remove(um); } }catch(_){} }
+for(const um of upperMeshes){ try{ if(um&&um.geometry){ spawnWallDebris(um,x,z); removeStructureMesh(um); } }catch(_){} }
 for(let k=0;k<4;k++) spawnP(PT.dirt,x+rand(-3,3),g0+rand(0.5,5),z+rand(-3,3),rand(-3,3),rand(1,5),rand(-3,3),rand(0.7,1.4),2.6,rand(0.8,1.6),0.9,2);
 rubblePile(x+rand(-3,3),z+rand(-3,3),3.2);
 AudioSys.explosion(Math.hypot(x-camera.position.x,z-camera.position.z)*(strength||0.6));
@@ -644,7 +751,7 @@ const shaftWallZ0=shZ0, shaftWallZ1=shZ1;
 const cwX=-Math.min(1.0,w*0.11);       // 走廊西界
 const ceX= Math.min(1.0,w*0.11);       // 走廊东界
 // 外墙: 正门 + 两窗 / 背门 + 窗 / 两侧窗 + 西侧落地破口
-_cqbWallOpen(MAT.plaster,L,ry,'x', d/2,-w/2,w/2,g0,fh,t,[0],[1.4],[-w*0.32,w*0.32],1.4,wallGs);
+_cqbWallOpen(MAT.plaster,L,ry,'x', d/2,-w/2,w/2,g0,fh,t,[{c:0,onLintel:m=>districtAwning(m,3)}],1.4,[-w*0.32,w*0.32],1.4,wallGs);
 _cqbWallOpen(MAT.plaster,L,ry,'x',-d/2,-w/2,w/2,g0,fh,t,[-w*0.3],[1.25],[w*0.28],1.4,wallGs);
 _cqbWallOpen(MAT.plaster,L,ry,'z',-w/2,-d/2,d/2,g0,fh,t,[d*0.5],[1.9],[-d*0.3,-d*0.78],1.4,wallGs);   // 西侧落地破口(前室) + 后室两窗
 _cqbWallOpen(MAT.plaster,L,ry,'z', w/2,-d/2,d/2,g0,fh,t,null,null,[d*0.3,-d*0.3],1.4,wallGs);
@@ -665,7 +772,7 @@ for(let f=2;f<=floors;f++){
 const by=g0+fh*(f-1);
 _cqbSlab(L,ry,{x0:-w/2,x1:w/2,z0:-d/2,z1:d/2},[hole],by,MAT.wood,0.2,upperMeshes);
 // 上层外墙: 四面留可探出射击的窗洞
-_cqbWallWins(MAT.brick,L,ry,'x', w, d/2,by,fh,t,wallGs,{winW:1.6});
+_cqbWallWins(MAT.brick,L,ry,'x', w, d/2,by,fh,t,wallGs,{winW:1.6,onLintel:m=>districtShutters(m,x<0?0:1)});
 _cqbWallWins(MAT.brick,L,ry,'x', w,-d/2,by,fh,t,wallGs,{winW:1.6});
 _cqbWallWins(MAT.brick,L,ry,'z', d,-w/2,by,fh,t,wallGs,{winW:1.5});
 _cqbWallWins(MAT.brick,L,ry,'z', d, w/2,by,fh,t,wallGs,{winW:1.5});
@@ -732,7 +839,7 @@ _cqbStairShaft(L,ry,shaft,g0,g0+fh,MAT.woodDark);
 for(let f=2;f<=floors;f++){
 const by=g0+fh*(f-1);
 _cqbSlab(L,ry,{x0:-w/2,x1:w/2,z0:-d/2,z1:d/2},[hole],by,MAT.wood,0.2,upperMeshes);
-_cqbWallWins(MAT.brick,L,ry,'x', w, d/2,by,fh,t,wallGs,{n:2,winW:1.2});
+_cqbWallWins(MAT.brick,L,ry,'x', w, d/2,by,fh,t,wallGs,{n:2,winW:1.2,onLintel:m=>districtShutters(m,z<0?1:0)});
 _cqbWallWins(MAT.brick,L,ry,'x', w,-d/2,by,fh,t,wallGs,{n:2,winW:1.2});
 _cqbWallWins(MAT.brick,L,ry,'z', d,-w/2,by,fh,t,wallGs,{n:2,winW:1.2});
 _cqbWallWins(MAT.brick,L,ry,'z', d, w/2,by,fh,t,wallGs,{n:2,winW:1.2});
@@ -766,7 +873,8 @@ const shZ0=-IZ+0.85, shZ1=shZ0+shDepth;
 const shaft={x0:shX0,x1:shX1,z0:shZ0,z1:shZ1};
 const hole={x0:shX0,x1:shX1,z0:shZ0,z1:shZ1};
 // 临街面: 大橱窗(窗台0.6) + 侧门
-_cqbWallOpen(MAT.plaster,L,ry,'x', d/2,-w/2,w/2,g0,fh,t,[w*0.3],[1.3],[0],6.0,wallGs);
+const shopStyle=(Math.round(x/19)+2*Math.round(z/19)+24)%3;
+_cqbWallOpen(MAT.plaster,L,ry,'x', d/2,-w/2,w/2,g0,fh,t,[w*0.3],1.3,[{c:0,w:6,onLintel:m=>districtAwning(m,shopStyle)}],6.0,wallGs);
 // 后墙: 背门 + 窗
 _cqbWallOpen(MAT.plaster,L,ry,'x',-d/2,-w/2,w/2,g0,fh,t,[-w*0.3],[1.25],[w*0.22],1.4,wallGs);
 // 两侧: 西侧落地破口 + 东侧窗

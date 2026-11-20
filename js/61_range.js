@@ -253,22 +253,12 @@ if(typeof showDeploy==='function'){
   };
 }
 
-// ② 免费主武器: 部署时临时把目标枪视为「已拥有」，结束后立刻还原（绝不写 META）
+// ② 免费武器由部署入口直接从靶场选择读取。
 if(typeof deployPlayer==='function'){
   const _origDeploy=deployPlayer;
   deployPlayer=function(){
     if(!rangeActive()) return _origDeploy.apply(this,arguments);
-    const want=rangeWeapon();
-    const savedPrimary=META.loadout.primary;
-    const savedOwned=ownedCount;
-    META.loadout.primary=want;
-    ownedCount=function(k){ return (k===want)?1:savedOwned.apply(this,arguments); };
-    let r;
-    try{ r=_origDeploy.apply(this,arguments); }
-    finally{
-      ownedCount=savedOwned;
-      META.loadout.primary=savedPrimary;
-    }
+    const r=_origDeploy.apply(this,arguments);
     try{ rangeAfterDeploy(); }catch(e){ console.warn('[range] afterDeploy failed',e); }
     return r;
   };

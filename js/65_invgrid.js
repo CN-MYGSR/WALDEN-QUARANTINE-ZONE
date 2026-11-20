@@ -113,12 +113,17 @@ const INVGRID=(()=>{
       const p=cfg.layout[k]; if(!p) continue;
       const d=dims(k,p.rot);
       const n=(byKey[k]&&byKey[k].n)||1;
-      const t=document.createElement('div');
+      const t=document.createElement(cfg.id==='arGrid'?'button':'div');
       const kind=(typeof itemKind==='function')?itemKind(k):'misc';
       t.className='invTile k-'+kind+((selected&&selected.gid===cfg.id&&selected.key===k)?' sel':'');
       t.dataset.key=k; t.dataset.gid=cfg.id;
       const nm=invName(k);
       const ds=invDesc(k);
+      if(cfg.id==='arGrid'){
+        t.type='button';
+        t.setAttribute('aria-label',nm+' ×'+n);
+        t.setAttribute('aria-pressed',String(t.classList.contains('sel')));
+      }
       t.dataset.name=(nm+' '+ds).toLowerCase();
       t.style.left=(p.x*cell)+'px'; t.style.top=(p.y*cell)+'px';
       t.style.width=(d.w*cell-2)+'px'; t.style.height=(d.h*cell-2)+'px';
@@ -153,7 +158,7 @@ const INVGRID=(()=>{
       drag={gid:cfg.id,key:key,x0:ev.clientX,y0:ev.clientY,moved:false,
             rot:(cfg.layout[key]&&cfg.layout[key].rot)||0,
             gx:Math.floor((ev.clientX-tr.left)/cell), gy:Math.floor((ev.clientY-tr.top)/cell)};
-      try{ g.setPointerCapture(ev.pointerId); }catch(e){}
+      try{ (cfg.id==='arGrid'?t:g).setPointerCapture(ev.pointerId); }catch(e){}
     });
     g.addEventListener('dblclick',ev=>{
       const t=ev.target&&ev.target.closest?ev.target.closest('.invTile'):null;
@@ -162,7 +167,11 @@ const INVGRID=(()=>{
     });
     // 触屏/鼠标: 点物品选中; 再点空格移动
     g.addEventListener('click',ev=>{
-      if(ev.target&&ev.target.closest&&ev.target.closest('.invTile')) return;
+      const tile=ev.target.closest?.('.invTile');
+      if(tile){
+        if(cfg.id==='arGrid') cfg.onSelect(tile.dataset.key);
+        return;
+      }
       const c=cellAt(g,ev.clientX,ev.clientY); if(!c||!selected) return;
       const dst=grids.get(c.gid); if(!dst) return;
       if(selected.gid===c.gid){ if(dst.cfg.onMove) dst.cfg.onMove(selected.key,c.x,c.y,0); }
@@ -397,8 +406,7 @@ function lootTakeToBag(key,x,y,rot){
   if(ref.grid) delete ref.grid[key];
   RUN.grid=RUN.grid||{pack:{},chest:{}};
   if(INVGRID.fitsAt('lootBag',key,x,y,rot)) INVGRID.moveIn('lootBag',key,x,y,rot);
-  RUN.searches=(RUN.searches||0)+1;
-  if(typeof addXP==='function') addXP(6);
+  recordLootPickup();
   showScorePop('拿取: '+itemLabel(key));
   if(!Object.keys(ref.loot).length){
     ref.searched=true;
@@ -493,6 +501,37 @@ function renderLootPanelGrid(){
 // 军械库「仓库 / 战利品」— 网格版 (其他页签保持原列表)
 // =====================================================================
 let ARMORY_GRID_SEL=null;
+function armoryTileKey(e){
+  const tile=e.target.closest('.invTile');
+  if(!tile||e.altKey||e.ctrlKey||e.metaKey) return;
+  if(e.code==='KeyR'){
+    e.preventDefault(); e.stopPropagation();
+    if(e.repeat) return;
+    el('arRotate').click();
+    el('arGridHost').querySelector('.sel').focus();
+    return;
+  }
+  const step={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
+  if(!step) return;
+  e.preventDefault(); e.stopPropagation();
+  const origin=tile.getBoundingClientRect();
+  const cx=origin.left+origin.width/2, cy=origin.top+origin.height/2;
+  let best=null, bestAligned=false, bestDistance=Infinity;
+  for(const candidate of e.currentTarget.querySelectorAll('.invTile')){
+    const rect=candidate.getBoundingClientRect();
+    if(!rect.width) continue;
+    const dx=rect.left+rect.width/2-cx, dy=rect.top+rect.height/2-cy;
+    if(dx*step[0]+dy*step[1]<=0) continue;
+    // 同一行或列优先；空格和搜索隐藏的物品都可跳过。
+    const aligned=step[0] ? rect.top<origin.bottom&&rect.bottom>origin.top
+                          : rect.left<origin.right&&rect.right>origin.left;
+    const distance=dx*dx+dy*dy;
+    if(!best||(aligned&&!bestAligned)||(aligned===bestAligned&&distance<bestDistance)){
+      best=candidate; bestAligned=aligned; bestDistance=distance;
+    }
+  }
+  if(best) best.focus();
+}
 function renderArmoryGrid(tab){
   const list=el('arList');
   if(!list) return;
@@ -514,17 +553,38 @@ function renderArmoryGrid(tab){
   const rows=Math.max(10,INVGRID.extent(keys,layout,10)+2);
   list.innerHTML='<div id="arDetail" class="invDetail"></div><div id="arGridHost" class="invHost"></div>'
     +(isOwned?'':'<div class="center" style="margin-top:10px"><button class="bigBtn" id="sellAllLoot">全部卖出 ('+formatMoney(keys.reduce((a,k)=>a+META.loot[k]*itemSellPrice(k),0))+')</button></div>');
+  const host=el('arGridHost');
+  function selectItem(k){
+    if(!k||ARMORY_GRID_SEL===k) return;
+    ARMORY_GRID_SEL=k;
+    INVGRID.setSelected('arGrid',k);
+    for(const t of host.querySelectorAll('.invTile')){
+      const active=t.dataset.key===k;
+      if(t.classList.contains('sel')===active) continue;
+      t.classList.toggle('sel',active);
+      t.setAttribute('aria-pressed',String(active));
+    }
+    renderArmoryDetail(tab,k);
+  }
   INVGRID.setSelected('arGrid',ARMORY_GRID_SEL);
-  INVGRID.render(el('arGridHost'),{
+  INVGRID.render(host,{
     id:'arGrid',cols:10,rows:rows,layout:layout,
     items:keys.map(k=>({key:k,n:isOwned?ownedCount(k):META.loot[k]})),
     selected:ARMORY_GRID_SEL,
-    onSelect:function(k){ ARMORY_GRID_SEL=k; renderArmoryGrid(tab); },
+    onSelect:selectItem,
     onMove:function(k,x,y,rot){
       if(INVGRID.moveIn('arGrid',k,x,y,rot)){ if(isOwned) saveMeta(); renderArmoryGrid(tab); }
     }
   });
-  const k=ARMORY_GRID_SEL;
+  host.addEventListener('focusin',e=>selectItem(e.target.dataset.key));
+  host.addEventListener('keydown',armoryTileKey);
+  renderArmoryDetail(tab,ARMORY_GRID_SEL);
+  const sa=el('sellAllLoot'); if(sa) sa.onclick=sellAllLoot;
+  if(typeof shopApplyFilter==='function') shopApplyFilter();
+  list.scrollTop=arScroll;
+}
+function renderArmoryDetail(tab,k){
+  const isOwned=tab==='warehouse';
   const n=isOwned?ownedCount(k):(META.loot[k]|0);
   const isAmmo=!!(typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[k]);
   const isPlate=!!(typeof PLATE_DEFS!=='undefined'&&PLATE_DEFS[k]);
@@ -543,9 +603,6 @@ function renderArmoryGrid(tab){
     const rb=el('arRotate');
     if(rb) rb.onclick=function(){ if(INVGRID.rotate('arGrid',k)){ if(isOwned) saveMeta(); renderArmoryGrid(tab); } else showScorePop('旋转后放不下'); };
   }
-  const sa=el('sellAllLoot'); if(sa) sa.onclick=sellAllLoot;
-  if(typeof shopApplyFilter==='function') shopApplyFilter();
-  list.scrollTop=arScroll;
 }
 
 // 包在 48_shopsearch 的 renderArmory 外层: 先让原逻辑渲染, 再把仓库/战利品换成网格

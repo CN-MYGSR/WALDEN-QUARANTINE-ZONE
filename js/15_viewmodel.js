@@ -102,19 +102,37 @@ VM.root.updateMatrixWorld(true);
 if(!acc.hit||!isFinite(acc.z)) return null;
 return -(VM_ADS_MIN_CLEAR+acc.z);
 }
+const vmTeamGear=[];
+function disposeVmGun(gun){
+// 枪模构造器创建各部件的几何和局部材质，vmMats 与纹理还供场景人物共用。
+const shared=new Set(Object.values(vmMats));
+const owned=new Set();
+gun.traverse(part=>{
+  if(!part.isMesh) return;
+  owned.add(part.geometry);
+  if(!shared.has(part.material)) owned.add(part.material);
+});
+for(const resource of owned) resource.dispose();
+}
 function vmEquip(key,team){
 VM.key=key;
+const previousGun=VM.gunParts&&VM.gunParts.gun;
 VM.inner.clear();
 VM.inner.scale.setScalar(1);
 VM.inner.add(VM.muzzleFlash); VM.inner.add(VM.muzzleLight);
 VM.gunParts=buildGunModel(key);
 // 双摄像机: 在目镜位置挂一块采样镜内 RT 的平面 (放下枪也一直渲染)
 if(typeof SCOPE!=='undefined'&&SCOPE.attachLens) SCOPE.attachLens(VM.gunParts,key);
+if(previousGun) disposeVmGun(previousGun);
 VM.inner.add(VM.gunParts.gun);
-VM.arms=buildArms(team);
+const gear=vmTeamGear[team]||(vmTeamGear[team]={arms:buildArms(team),nade:buildNadeModel(team)});
+VM.arms=gear.arms;
+VM.arms.L.visible=VM.arms.R.visible=true;
+if(VM.arms.L.userData.wrap) VM.arms.L.userData.wrap.visible=false;
 VM.inner.add(VM.arms.L); VM.inner.add(VM.arms.R);
-VM.nadeM=buildNadeModel(team); VM.nadeM.visible=false; VM.inner.add(VM.nadeM);
-VM.knifeM=buildKnife(); VM.knifeM.visible=false; VM.inner.add(VM.knifeM);
+VM.nadeM=gear.nade; VM.nadeM.visible=false; VM.inner.add(VM.nadeM);
+if(!VM.knifeM) VM.knifeM=buildKnife();
+VM.knifeM.visible=false; VM.inner.add(VM.knifeM);
 if(!VM.bandageM) VM.bandageM=buildBandage();
 VM.bandageM.visible=false; VM.inner.add(VM.bandageM);
 if(!VM.grabitemM) VM.grabitemM=buildGrabItem();

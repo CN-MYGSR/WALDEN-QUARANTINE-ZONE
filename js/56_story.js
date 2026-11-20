@@ -105,7 +105,7 @@ const STORY_CHAPTERS=[
   ],
   reward:{money:6400, xp:820} },
 
-{ id:'s6', no:6, name:'灯亮着，就走', map:'port',
+{ id:'s6', no:6, name:'灯亮着，就走', map:'port', requiresPass:true,
   tag:'港区 · 出海',
   brief:'你手里有三样东西：样本、记录、航单。\n现在只剩最后一件事——离开瓦尔登。\n港口有一张撤离通行证在流通。拿到它，带上船，**从港口登船离开禁区**。\n封锁线不会为你打开第二次。',
   obj:[
@@ -320,6 +320,8 @@ deployPlayer=function(){ const r=_storyOrigDeployPlayer.apply(this,arguments); s
   if(_pi<0||!STORY_CHAPTERS[_pi]) return;
   // ⚠️ 地图不匹配就别进场 (玩家可能切了图): 清掉标记并放弃 —— 否则会被反复强制进场
   if(typeof CAMPAIGN!=='undefined'&&CAMPAIGN.id!==STORY_CHAPTERS[_pi].map){ storyClearPending(); return; }
+  // 终章需要玩家亲自选择是否携带消耗性的船票。
+  if(STORY_CHAPTERS[_pi].requiresPass) return;
   let n=0;
   const t=setInterval(()=>{
     if(++n>150){ clearInterval(t); return; }   // 最多等 ~12s 就放弃
@@ -346,7 +348,8 @@ function storyOnRaidEnd(extracted){
   SRAID.ended=true;
   const ch=SRAID.ch, i=SRAID.idx;
   const all=storyObjectivesMet();
-  const ok=!!(extracted&&all);
+  const needsPass=ch.requiresPass&&!passUsable();
+  const ok=!!(extracted&&all&&!needsPass);
   let msg='';
   if(ok){
     if(!STORY.done[ch.id]) STORY.done[ch.id]=true;
@@ -363,6 +366,7 @@ function storyOnRaidEnd(extracted){
     else setTimeout(()=>{ if(typeof showScorePop==='function') showScorePop('全部章节完成 · 你离开瓦尔登了'); },2200);
   } else {
     const miss=SRAID.obj.filter(o=>o.type!=='extract'&&!o.met).map(o=>o.label);
+    if(needsPass) miss.push('持撤离通行证在港口登船');
     msg=extracted?('剧情未达成 · 还差：'+miss.join('、')):'剧情失败 · 任务中断';
     if(typeof showScorePop==='function') showScorePop(msg);
   }
@@ -409,7 +413,7 @@ function storyRenderPanel(){
     const rw=c.reward||{};
     h+='<div class="scRw">奖励：'+(rw.money?('¥'+formatMoney(rw.money)):'—')+(rw.xp?(' · '+rw.xp+' XP'):'')+'</div>';
     h+= un
-      ? '<button class="bigBtn scBtn" data-story="'+i+'">'+(done?'再 打 一 次':'开 始 行 动')+'</button>'
+      ? '<button class="bigBtn scBtn" data-story="'+i+'">'+(done?'再 打 一 次':'开 始 行 动')+(c.requiresPass?'（部署时选择撤离通行证）':'')+'</button>'
       : '<button class="bigBtn scBtn" disabled style="opacity:.45">需先完成第 '+(c.no-1)+' 章</button>';
     h+='</div>';
   });

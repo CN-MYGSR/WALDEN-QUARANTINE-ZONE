@@ -26,7 +26,7 @@ const SUITES = [
     /胸挂定义|56式|Commando|WARTECH|背包 16|正确拒绝|小件还能塞|胸挂下拉|装备槽位|^无$/m,
   ]],
   ['仓库', '_warehouse_probe.js', '_warehouse_probe.txt', [
-    /行数 =|仓库里的胸挂|护甲→|^无$/m,
+    /物品格 =|仓库里的胸挂|护甲→|^无$/m,
   ]],
   ['尸体掉枪', '_corpse_probe.js', '_corpse_probe.txt', [
     /有枪的尸体|完整链路|背包里的枪|^无$/m,
@@ -44,6 +44,8 @@ report.push('');
 let fail = 0;
 for (const [name, script, outFile, greps] of SUITES) {
   const t0 = Date.now();
+  const output = path.join(ROOT, '_tools', outFile);
+  const previous = fs.statSync(output, { bigint: true, throwIfNoEntry: false });
   let crashed = '';
   try {
     execFileSync(process.execPath, [path.join(ROOT, '_tools', script), URL], {
@@ -54,21 +56,27 @@ for (const [name, script, outFile, greps] of SUITES) {
   }
   const secs = Math.round((Date.now() - t0) / 1000);
   report.push('======== ' + name + '  (' + secs + 's) ' + crashed);
-  let txt = '';
-  try { txt = fs.readFileSync(path.join(ROOT, '_tools', outFile), 'utf8'); } catch (e) { txt = ''; }
-  if (!txt) { report.push('  ❌ 没有输出文件'); fail++; report.push(''); continue; }
-  const lines = txt.split('\n');
+  const current = fs.statSync(output, { bigint: true, throwIfNoEntry: false });
+  if (!current || (previous && current.mtimeNs === previous.mtimeNs && current.ino === previous.ino && current.size === previous.size)) {
+    report.push('  ❌ 本轮没有生成报告', '');
+    fail++;
+    continue;
+  }
+  const lines = fs.readFileSync(output, 'utf8').trim().split(/\r?\n/);
   const picked = lines.filter(l => greps.some(g => g.test(l)));
   report.push(picked.length ? picked.map(l => '  ' + l.trim()).join('\n') : '  （没有匹配到关键行）');
-  // 异常行
-  const idx = lines.findIndex(l => /^=== 异常/.test(l));
-  if (idx >= 0) {
-    const rest = lines.slice(idx + 1).filter(Boolean);
-    if (rest.length && rest[0].trim() !== '无') { report.push('  ⚠️ 异常: ' + rest.slice(0, 4).join(' | ')); fail++; }
-  }
+  // 两类探针分别在末尾输出异常段落，或在每一轮输出“异常 = …”。
+  const footer = lines.findIndex(l => /^=== 异常/.test(l));
+  const checks = (footer >= 0 ? lines.slice(footer + 1) : lines.filter(l => /^\s*异常\s*=/.test(l)).map(l => l.slice(l.indexOf('=') + 1)))
+    .map(l => l.trim()).filter(Boolean);
+  const problems = checks.filter(l => l !== '无').concat(lines.filter(l => /\bEXC\b/.test(l)));
+  if (!checks.length) problems.push('缺少异常检查结果');
+  if (problems.length) report.push('  ⚠️ ' + problems.slice(0, 4).join(' | '));
+  if (crashed || problems.length || !picked.length) fail++;
   report.push('');
 }
 
 report.push(fail ? ('⚠️ 有 ' + fail + ' 项需要关注') : '✅ 全部通过');
 fs.writeFileSync(path.join(ROOT, '_tools', '_full_regression.txt'), report.join('\n') + '\n', 'utf8');
 console.log(report.join('\n'));
+process.exitCode = fail ? 1 : 0;

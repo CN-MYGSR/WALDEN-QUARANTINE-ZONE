@@ -13,12 +13,13 @@
 // =====================================================================
 
 async function __wfBoot(){
-  // 1. 等 Loader 就绪 (Loader 脚本同步加载, 一般瞬间可用)
+  // 已收到脚本下载错误时直接启动离线模式，仍允许已下载的 Loader 异步注册。
+  const loader=document.getElementById('workshopLoader');
   for(let i = 0; i < 200; i++){
-    if(typeof window.VibeHubWorkshop !== 'undefined') break;
+    if(window.VibeHubWorkshop||!loader||loader.dataset.failed) break;
     await new Promise(r => setTimeout(r, 10));
   }
-  if(typeof window.VibeHubWorkshop === 'undefined'){
+  if(!window.VibeHubWorkshop){
     console.error('[workshop] Loader 未就绪, 直接启动游戏');
     if(typeof window._wfBoot === 'function') window._wfBoot();
     return;

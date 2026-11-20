@@ -1,6 +1,6 @@
 'use strict';
-function updateFlags(dt){
-if(GAMEMODE==='extract') return;
+function updateFlags(dt,elapsed=dt){
+if(GAMEMODE==='extract'||!player.deployed) return;
 let owned=[0,0];
 for(const f of FLAGS){
 // 攻防: 只有当前目标点可占; 破袭/征服: 双方均可正常占点(破袭占点提供前线出生点)
@@ -75,7 +75,7 @@ const d=owned[0]-owned[1];
 if(d>0) tickets[1]=Math.max(0,tickets[1]-dt*d*0.10);
 else if(d<0) tickets[0]=Math.max(0,tickets[0]-dt*(-d)*0.10);
 }
-matchTime-=dt;
+matchTime-=elapsed;
 if(tickets[0]<=0||tickets[1]<=0||matchTime<=0){
 endMatch();
 }

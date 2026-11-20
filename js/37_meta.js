@@ -77,6 +77,8 @@ function itemDesc(key){
 function itemSellPrice(key){ return Math.max(1,Math.floor((ITEM_PRICES[key]||0)*0.45)); }
 function itemPrice(key){ return ITEM_PRICES[key]||0; }
 function metaLoadoutDefault(){ return { primary:'m1911', secondary:'', armor:'armor1', helmet:'helm1', headset:'hs_tep300', pack:'packSmall', chest:'', meds:['','',''], foods:['',''], nvg:'', pass:false }; }
+const SAFETY_WEAPON='m1911';
+const XP_PER_LEVEL=1000;
 function metaDefault(){
  return {
   seeded:true,
@@ -90,6 +92,7 @@ function metaDefault(){
   questProg:{},
   questDone:{},
   prestige:0,
+  stats:{kills:0,deaths:0},
   scavT:0,
   loadout:metaLoadoutDefault()
  };
@@ -102,8 +105,11 @@ function normalizeMeta(m){
  if(!m.loot||typeof m.loot!=='object') m.loot={};
  if(!Array.isArray(m.insurance)) m.insurance=[];
  if(typeof m.xp!=='number'||m.xp<0) m.xp=0;
+ if(!m.stats||typeof m.stats!=='object') m.stats={};
+ for(const k of ['kills','deaths']) if(!Number.isSafeInteger(m.stats[k])||m.stats[k]<0) m.stats[k]=0;
  // 任务系统迁移: 等级/任务进度/重生次数
  if(typeof m.level!=='number'||m.level<1) m.level=1;
+ if(m.xp>=XP_PER_LEVEL){ m.level+=Math.floor(m.xp/XP_PER_LEVEL); m.xp%=XP_PER_LEVEL; }
  if(!m.questProg||typeof m.questProg!=='object') m.questProg={};
  if(!m.questDone||typeof m.questDone!=='object'||Array.isArray(m.questDone)) m.questDone={};
  if(typeof m.prestige!=='number'||m.prestige<0) m.prestige=0;
@@ -167,7 +173,6 @@ const RUN={kills:0,searches:0,loot:{},extracting:false,failComp:0,autoKit:null,l
 // 设计: 失败补偿 500 是净收入, 不依赖战利品带回; 同时兜底发放一把最廉价手枪,
 //       避免玩家卖光装备后陷入"无武器 → 打不过 → 更没钱"的死亡螺旋。
 const FAIL_COMPENSATION=500;        // 单局失败固定补贴
-const SAFETY_WEAPON='m1911';        // 无枪时的保底武器
 const SAFETY_WEAPON_MAG=2;          // 保底发放时附带弹匣数
 const SAFETY_ARMOR='armor1';
 const SAFETY_HELMET='helm1';
@@ -236,9 +241,15 @@ function runLootValue(){
  for(const k in RUN.loot) v+=itemSellPrice(k)*RUN.loot[k];
  return v;
 }
-function mergeRunLoot(){
- for(const k in RUN.loot) META.loot[k]=(META.loot[k]||0)+RUN.loot[k];
+function extractedLoot(){
+ const loot={...RUN.loot};
+ for(const k of RUN.secure||[]) loot[k]=(loot[k]||0)+1;
+ return loot;
+}
+function mergeRunLoot(loot=extractedLoot()){
+ for(const k in loot) META.loot[k]=(META.loot[k]||0)+loot[k];
  RUN.loot={};
+ RUN.secure=[];
  saveMeta();
 }
 function formatMoney(n){ return Number(n||0).toLocaleString('zh-CN'); }

@@ -41,6 +41,22 @@ return `<filter id="${id}" x="-5%" y="-5%" width="110%" height="110%">`+
 `<feColorMatrix in="t" type="matrix" values="0 0 0 0 0.5, 0 0 0 0 0.5, 0 0 0 0 0.5, 0.8 0.8 0.8 0 0" result="g"/>`+
 `</filter>`;
 }
+// A one-pixel albedo keeps each surface its own colour while its local scan decodes.
+function surfaceMap(file, tileMeters, base, colorSpace = THREE.SRGBColorSpace) {
+  const texture = makeTex(1, 1, ctx => {
+    ctx.fillStyle = base;
+    ctx.fillRect(0, 0, 1, 1);
+  });
+  texture.userData.tileMeters = tileMeters;
+  texture.colorSpace = colorSpace;
+  const image = new Image();
+  image.onload = () => {
+    texture.image = image;
+    texture.needsUpdate = true;
+  };
+  image.src = 'assets/materials/' + file + '.webp';
+  return texture;
+}
 const TEX = {};
 // ---------- 草地: 斑块底噪 + 草叶簇 ----------
 TEX.grass=(function(){
@@ -98,134 +114,12 @@ patches+
 pebbles;
 return svgTex(384,384,body,8,8,'#7a6a4e');
 })();
-// ---------- 砖墙: 错缝砖 + 灰浆槽 + 缺角风化 ----------
-TEX.brick=(function(){
-const R=texRng(41);
-const W=512,H=512,bw=84,bh=40; let rows='';
-for(let y=0,ri=0;y<H;y+=bh,ri++){
-const off=ri%2? -bw/2:0;
-for(let x=off;x<W;x+=bw){
-const rr=120+R()*38, gg=72+R()*26, bb=52+R()*20;
-const dk=`rgb(${(rr*0.62)|0},${(gg*0.62)|0},${(bb*0.62)|0})`;
-const lt=`rgb(${Math.min(255,rr*1.18)|0},${Math.min(255,gg*1.18)|0},${Math.min(255,bb*1.18)|0})`;
-rows+=`<g><rect x="${x+2}" y="${y+2}" width="${bw-4}" height="${bh-4}" fill="rgb(${rr|0},${gg|0},${bb|0})"/>`+
-`<rect x="${x+2}" y="${y+2}" width="${bw-4}" height="3" fill="${lt}" opacity="0.5"/>`+
-`<rect x="${x+2}" y="${y+bh-5}" width="${bw-4}" height="3" fill="${dk}" opacity="0.6"/>`+
-`<rect x="${x+2}" y="${y+2}" width="3" height="${bh-4}" fill="${lt}" opacity="0.35"/>`;
-if(R()<0.3){ const cx2=x+4+R()*(bw-14), cy2=y+4+R()*(bh-12); rows+=`<circle cx="${cx2.toFixed(0)}" cy="${cy2.toFixed(0)}" r="${(2+R()*4).toFixed(0)}" fill="${dk}" opacity="0.45"/>`; }
-if(R()<0.16){ rows+=`<path d="M${x+2} ${y+2} l ${6+R()*9} 0 l ${-(6+R()*9)} ${5+R()*7} z" fill="rgb(58,38,30)" opacity="0.75"/>`; }
-rows+=`</g>`;
-}
-}
-let streaks='';
-for(let i=0;i<10;i++){
-const x=R()*W, l=30+R()*90;
-streaks+=`<rect x="${x.toFixed(0)}" y="0" width="${(3+R()*8).toFixed(0)}" height="${l.toFixed(0)}" fill="#2e2018" opacity="${(0.06+R()*0.1).toFixed(2)}"/>`;
-}
-const body=
-`<defs>${svgGrain('bn','0.16','3',9)}</defs>`+
-`<rect width="512" height="512" fill="#5c4032"/>`+rows+
-`<rect width="512" height="512" filter="url(#bn)" opacity="0.16" style="mix-blend-mode:multiply"/>`+streaks;
-return svgTex(512,512,body,2,1.4,'#8a5a44');
-})();
-// ---------- 灰泥墙: 泛黄底 + 水渍 + 裂纹 + 底部露砖 ----------
-TEX.plaster=(function(){
-const R=texRng(51); const W=512,H=512;
-let stains='';
-for(let i=0;i<7;i++){
-const x=R()*W, y=H*0.35+R()*H*0.6, r=18+R()*46;
-stains+=`<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${r.toFixed(0)}" ry="${(r*(0.6+R()*0.5)).toFixed(0)}" fill="#7c5f47" opacity="${(0.14+R()*0.22).toFixed(2)}"/>`;
-}
-for(let i=0;i<5;i++){
-const x=R()*W, w2=8+R()*20, l=40+R()*130;
-stains+=`<rect x="${x.toFixed(0)}" y="0" width="${w2.toFixed(0)}" height="${l.toFixed(0)}" fill="#6e6250" opacity="${(0.08+R()*0.12).toFixed(2)}"/>`;
-}
-let cracks='';
-for(let i=0;i<6;i++){
-let x=R()*W, y=R()*H*0.5, d=`M${x.toFixed(0)} ${y.toFixed(0)}`;
-for(let k=0;k<5;k++){ x+=(R()-0.5)*44; y+=14+R()*30; d+=` L${x.toFixed(0)} ${y.toFixed(0)}`; }
-cracks+=`<path d="${d}" stroke="#4d4438" stroke-width="${(1+R()*1.2).toFixed(1)}" fill="none" opacity="${(0.4+R()*0.3).toFixed(2)}"/>`;
-}
-// 底部破损露砖块
-let exposed='';
-for(let i=0;i<4;i++){
-const x=R()*W, y=H*0.72+R()*H*0.22, w2=30+R()*70, h2=20+R()*36;
-exposed+=`<g><ellipse cx="${(x+w2/2).toFixed(0)}" cy="${(y+h2/2).toFixed(0)}" rx="${(w2*0.62).toFixed(0)}" ry="${(h2*0.62).toFixed(0)}" fill="#6f5b49"/>`;
-for(let yy=0;yy<h2;yy+=12){
-for(let xx=((yy/12)|0)%2?-11:0;xx<w2;xx+=22){
-exposed+=`<rect x="${(x+xx).toFixed(0)}" y="${(y+yy).toFixed(0)}" width="20" height="10" fill="rgb(${118+R()*30|0},${70+R()*18|0},${52+R()*14|0})"/>`;
-}
-}
-exposed+=`</g>`;
-}
-const body=
-`<defs>${svgGrain('pn','0.045','5',15)}${svgGrain('pn2','0.4','2',8)}</defs>`+
-`<rect width="512" height="512" fill="#b0a891"/>`+
-`<rect width="512" height="512" filter="url(#pn)" opacity="0.20" style="mix-blend-mode:multiply"/>`+
-`<rect width="512" height="512" filter="url(#pn2)" opacity="0.07" style="mix-blend-mode:overlay"/>`+
-stains+exposed+cracks;
-return svgTex(512,512,body,2,1.5,'#b0a891');
-})();
-// ---------- 石墙: 乱石砌块 + 凹缝 ----------
-TEX.stone=(function(){
-const R=texRng(61); const W=512,H=512; let blocks='';
-for(let y=0,ri=0;y<H;y+=52,ri++){
-let x=ri%2? -30:0;
-while(x<W){
-const w2=60+R()*70, base=122+R()*36;
-const c=`rgb(${base|0},${(base*0.97)|0},${(base*0.9)|0})`;
-const dk=`rgb(${(base*0.6)|0},${(base*0.58)|0},${(base*0.54)|0})`;
-const lt=`rgb(${Math.min(255,base*1.16)|0},${Math.min(255,base*1.13)|0},${Math.min(255,base*1.08)|0})`;
-blocks+=`<g><rect x="${(x+3).toFixed(0)}" y="${y+3}" width="${(w2-6).toFixed(0)}" height="46" rx="4" fill="${c}"/>`+
-`<rect x="${(x+3).toFixed(0)}" y="${y+3}" width="${(w2-6).toFixed(0)}" height="4" rx="2" fill="${lt}" opacity="0.55"/>`+
-`<rect x="${(x+3).toFixed(0)}" y="${y+45}" width="${(w2-6).toFixed(0)}" height="4" rx="2" fill="${dk}" opacity="0.6"/>`;
-if(R()<0.4){ blocks+=`<ellipse cx="${(x+w2*0.5).toFixed(0)}" cy="${y+24}" rx="${(w2*0.24).toFixed(0)}" ry="10" fill="${R()<0.5?dk:lt}" opacity="0.16"/>`; }
-blocks+=`</g>`;
-x+=w2;
-}
-}
-const body=
-`<defs>${svgGrain('stn','0.14','4',22)}</defs>`+
-`<rect width="512" height="512" fill="#55534b"/>`+blocks+
-`<rect width="512" height="512" filter="url(#stn)" opacity="0.16" style="mix-blend-mode:multiply"/>`;
-return svgTex(512,512,body,2,1.5,'#8d8a80');
-})();
-// ---------- 木板: 竖板 + 木纹 + 节疤 + 钉孔 ----------
-TEX.wood=(function(){
-const R=texRng(71); const W=512,H=512; let planks='';
-for(let x=0;x<W;x+=64){
-const rr=95+R()*32, gg=rr*0.74, bb=rr*0.5;
-planks+=`<rect x="${x+2}" y="0" width="60" height="${H}" fill="rgb(${rr|0},${gg|0},${bb|0})"/>`;
-for(let i=0;i<7;i++){
-const yy=R()*H;
-planks+=`<path d="M${x+2} ${yy.toFixed(0)} C ${x+18} ${(yy+(R()-0.5)*22).toFixed(0)}, ${x+44} ${(yy+(R()-0.5)*22).toFixed(0)}, ${x+62} ${(yy+(R()-0.5)*30).toFixed(0)}" stroke="rgba(52,36,20,0.5)" stroke-width="${(0.8+R()*1.2).toFixed(1)}" fill="none"/>`;
-}
-if(R()<0.6){
-const ky=R()*H;
-planks+=`<ellipse cx="${(x+14+R()*36).toFixed(0)}" cy="${ky.toFixed(0)}" rx="${(3+R()*4).toFixed(0)}" ry="${(4+R()*6).toFixed(0)}" fill="#3f2d1a" opacity="0.8"/>`;
-}
-planks+=`<circle cx="${x+10}" cy="14" r="1.8" fill="#2c2014"/><circle cx="${x+52}" cy="14" r="1.8" fill="#2c2014"/>`+
-`<circle cx="${x+10}" cy="${H-14}" r="1.8" fill="#2c2014"/><circle cx="${x+52}" cy="${H-14}" r="1.8" fill="#2c2014"/>`;
-planks+=`<rect x="${x}" y="0" width="2" height="${H}" fill="#33241463"/><rect x="${x+62}" y="0" width="2" height="${H}" fill="#33241463"/>`;
-}
-const body=
-`<defs>${svgGrain('wn','0.02 0.4','4',33)}</defs>`+
-`<rect width="512" height="512" fill="#6e5638"/>`+planks+
-`<rect width="512" height="512" filter="url(#wn)" opacity="0.18" style="mix-blend-mode:multiply"/>`;
-return svgTex(512,512,body,1.5,1.5,'#6e5638');
-})();
-// ---------- 深色木纹 ----------
-TEX.woodDark=(function(){
-const R=texRng(81); let grain='';
-for(let i=0;i<26;i++){
-grain+=`<path d="M0 ${(R()*256).toFixed(0)} C 76 ${(R()*256).toFixed(0)}, 180 ${(R()*256).toFixed(0)}, 256 ${(R()*256).toFixed(0)}" stroke="rgba(${30+R()*30|0},${24+R()*20|0},${12+R()*14|0},0.6)" stroke-width="${(1+R()*2).toFixed(1)}" fill="none"/>`;
-}
-const body=
-`<defs>${svgGrain('wdn','0.3 0.04','3',12)}</defs>`+
-`<rect width="256" height="256" fill="#4a3a24"/>`+grain+
-`<rect width="256" height="256" filter="url(#wdn)" opacity="0.22" style="mix-blend-mode:multiply"/>`;
-return svgTex(256,256,body,1,1,'#4a3a24');
-})();
+// Scale is the measured width of the photographed patch, in metres.
+TEX.brick = surfaceMap('red_brick_03', 1, '#77564b');
+TEX.plaster = surfaceMap('damaged_plaster', 3.7, '#aea297');
+TEX.stone = surfaceMap('japanese_stone_wall', 1.9, '#827e72');
+TEX.wood = surfaceMap('weathered_brown_planks', 1.8, '#705b4b');
+TEX.woodDark = TEX.wood;
 // ---------- 沙袋: 错缝袋体 + 缝线 + 织物噪声 ----------
 TEX.sandbag=(function(){
 const R=texRng(91); const W=256,H=256; let bags='';
@@ -349,47 +243,11 @@ const body=`<rect width="128" height="128" fill="#2e2f2a"/>`+t;
 return svgTex(128,128,body,1,4,'#2e2f2a');
 })();
 // ---------- CQB: 铁锈 (集装箱/废弃车体) ----------
-TEX.rust=(function(){
-const R=texRng(71); let p='';
-// 锈斑块
-for(let i=0;i<70;i++){
-const x=R()*256,y=R()*256,r=6+R()*36;
-const c=['#6d4426','#7d5029','#5a3820','#8a5f33','#4a2f1c'][(R()*5)|0];
-p+=`<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${r.toFixed(0)}" ry="${(r*(0.4+R()*0.7)).toFixed(0)}" fill="${c}" opacity="${(0.18+R()*0.42).toFixed(2)}"/>`;
-}
-// 流锈痕迹
-for(let i=0;i<26;i++){
-const x=R()*256,w2=1+R()*3,h2=16+R()*70;
-p+=`<rect x="${x.toFixed(0)}" y="${(R()*256).toFixed(0)}" width="${w2.toFixed(1)}" height="${h2.toFixed(0)}" fill="#542f18" opacity="${(0.1+R()*0.28).toFixed(2)}"/>`;
-}
-// 焊接缝(竖)
-let seams='';
-for(let i=0;i<4;i++){ const x=24+i*64; seams+=`<rect x="${x}" y="0" width="3" height="256" fill="#3a2a1e" opacity="0.5"/>`; }
-const body=
-`<defs>${svgGrain('rst','0.22','4',41)}</defs>`+
-`<rect width="256" height="256" fill="#5e4a38"/>`+p+seams+
-`<rect width="256" height="256" filter="url(#rst)" opacity="0.3" style="mix-blend-mode:multiply"/>`;
-return svgTex(256,256,body,2,2,'#5e4a38');
-})();
+TEX.rust = surfaceMap('rusty_metal_04', 2, '#806d60');
 // ---------- CQB: 混凝土 (隔离墩/路障) ----------
-TEX.concrete=(function(){
-const R=texRng(83); let p='';
-for(let i=0;i<90;i++){
-const x=R()*256,y=R()*256,r=3+R()*22;
-p+=`<ellipse cx="${x.toFixed(0)}" cy="${y.toFixed(0)}" rx="${r.toFixed(0)}" ry="${(r*(0.5+R()*0.6)).toFixed(0)}" fill="${R()<0.5?'#8e8a82':'#a5a098'}" opacity="${(0.12+R()*0.26).toFixed(2)}"/>`;
-}
-// 裂纹
-let cr='';
-for(let i=0;i<10;i++){
-const x=R()*256,y=R()*256;
-cr+=`<path d="M${x.toFixed(0)} ${y.toFixed(0)} l${(R()*30-15).toFixed(0)} ${(R()*30-15).toFixed(0)} l${(R()*24-12).toFixed(0)} ${(R()*24-12).toFixed(0)}" stroke="#5a564e" stroke-width="1.2" fill="none" opacity="0.55"/>`;
-}
-const body=
-`<defs>${svgGrain('cnc','0.3','4',57)}</defs>`+
-`<rect width="256" height="256" fill="#948f86"/>`+p+cr+
-`<rect width="256" height="256" filter="url(#cnc)" opacity="0.22" style="mix-blend-mode:multiply"/>`;
-return svgTex(256,256,body,1,1,'#948f86');
-})();
+TEX.concrete = surfaceMap('concrete_wall_006', 2, '#89867d');
+TEX.corrugated = surfaceMap('worn_corrugated_iron', 1.8, '#737777');
+TEX.corrugatedNormal = surfaceMap('worn_corrugated_iron_normal', 1.8, '#8080ff', THREE.NoColorSpace);
 // ---------- CQB: 碎玻璃 (地面贴片/窗面) ----------
 TEX.glassCrack=(function(){
 const R=texRng(97); let shards='';
@@ -419,7 +277,7 @@ brick: new THREE.MeshLambertMaterial({map:TEX.brick}),
 plaster: new THREE.MeshLambertMaterial({map:TEX.plaster}),
 stone: new THREE.MeshLambertMaterial({map:TEX.stone}),
 wood: new THREE.MeshLambertMaterial({map:TEX.wood}),
-woodDark: new THREE.MeshLambertMaterial({map:TEX.woodDark}),
+woodDark: new THREE.MeshLambertMaterial({map:TEX.woodDark,color:0x92877e}),
 sandbag: new THREE.MeshLambertMaterial({map:TEX.sandbag}),
 metal: new THREE.MeshLambertMaterial({map:TEX.metal}),
 metalDark: new THREE.MeshLambertMaterial({color:0x3a3d38}),
@@ -433,10 +291,12 @@ tentA: new THREE.MeshLambertMaterial({color:0x5e6244}),
 tentB: new THREE.MeshLambertMaterial({color:0x565a3e}),
 craterRim: new THREE.MeshLambertMaterial({color:0x5d5344}),
 // ---- CQB 破旧街道材质 (阴暗街区) ----
-containerRust: new THREE.MeshLambertMaterial({map:TEX.rust}),          // 生锈集装箱壁
+containerRust: new THREE.MeshPhongMaterial({
+  map:TEX.corrugated, normalMap:TEX.corrugatedNormal, normalScale:new THREE.Vector2(0.6,0.6),
+  color:0xc6a48b, specular:0x394249, shininess:16
+}),
 containerTop: new THREE.MeshLambertMaterial({color:0x5a5248}),         // 箱顶加强框
-containerDoor: new THREE.MeshLambertMaterial({map:TEX.rust,color:0xa89c8e}), // 舱门(略亮)
-carRust: new THREE.MeshLambertMaterial({map:TEX.rust,color:0x8e8a84}), // 废弃车体
+carRust: new THREE.MeshLambertMaterial({map:TEX.rust,color:0xe3ddd3}), // 废弃车体
 concreteBarrier: new THREE.MeshLambertMaterial({map:TEX.concrete}),    // 混凝土隔离墩
 cardboard: new THREE.MeshLambertMaterial({color:0x8a7a62}),            // 纸箱
 woodPallet: new THREE.MeshLambertMaterial({color:0x6b5f4a}),           // 托盘
@@ -445,6 +305,8 @@ glassCrack: new THREE.MeshLambertMaterial({map:TEX.glassCrack,transparent:true,o
 glassGround: new THREE.MeshLambertMaterial({map:TEX.glassCrack,transparent:true,opacity:0.34,depthWrite:false}), // 地面碎玻璃
 puddle: new THREE.MeshLambertMaterial({color:0x2e3a3e,transparent:true,opacity:0.82}), // 积水
 };
+MAT.containerDoor = MAT.containerRust.clone();
+MAT.containerDoor.color.set(0xaabbb3);
 // 战役环境主题着色: 地面/树叶/屋顶随战场变化 (雪地/废墟/江南/黄土)
 MAT.grass.color.set(THEME.ground);
 MAT.leaves.color.set(THEME.leaf);
@@ -463,6 +325,23 @@ MAT.rubble.color.set(0x6e6a63);
 MAT.roof.color.set(0x6e6a63);
 MAT.metalDark.color.set(0x34362f);
 MAT.hedge.color.set(0x5a5c46);
+}
+if (CAMPAIGN.layout === 'cqb') {
+  MAT.pave = new THREE.MeshLambertMaterial({map:surfaceMap('asphalt_04', 4, '#696a69'), color:0xa1a6a9});
+  MAT.roadPaint = new THREE.MeshLambertMaterial({map:surfaceMap('worn_road_paint', 1, '#c6c0af'), color:0xd6b06a});
+}
+if (CAMPAIGN.id === 'bfruins') {
+  MAT.grass.map = surfaceMap('leaf_scattered_gravel', 1.8, '#72665a');
+  const yardRepeat = (MAP_SIZE + 40) / MAT.grass.map.userData.tileMeters;
+  MAT.grass.map.repeat.set(yardRepeat, yardRepeat);
+  MAT.grass.color.set(0xe3e0d7);
+  MAT.plaster.color.set(0xe7e6dc);
+  MAT.brick.color.set(0xe0d4c8);
+  MAT.stone.color.set(0xc1c5c4);
+  MAT.wood.color.set(0xd0c7b7);
+  MAT.woodDark.color.set(0x9f978d);
+  MAT.rubble.map = TEX.concrete;
+  MAT.rubble.color.set(0xb5b4ad);
 }
 // 雪檐房顶覆盖: 雪地战役给屋顶叠加一层带出檐的积雪盖板 (作为屋顶子节点, 随屋顶坍塌一并消失)
 MAT.snowCap=new THREE.MeshLambertMaterial({color:0xedf2f8});

@@ -245,7 +245,7 @@ color:#e8e8e8; font-size:19px; line-height:1.7; letter-spacing:2px; opacity:0; p
 text-shadow:0 2px 10px rgba(0,0,0,.95), 0 0 30px rgba(0,0,0,.8); font-family:"Kaiti","STKaiti","Segoe UI",serif; }
 #fps { position:absolute; right:8px; bottom:4px; color:rgba(255,255,255,.4); font-size:11px; }
 /* ===== 阵亡反馈: 击杀提示 / 击杀回放横幅 / 镜内枪支开关 ===== */
-#killInfo { position:absolute; left:50%; top:15%; transform:translate(-50%,-14px); min-width:330px; max-width:74vw;
+#killInfo { position:absolute; left:50%; top:15%; transform:translate(-50%,-14px); min-width:min(330px,94vw); max-width:74vw;
 padding:13px 20px 11px; background:linear-gradient(180deg,rgba(28,28,28,.9),rgba(12,12,12,.86));
 border:1px solid rgba(226,132,102,.42); border-left:3px solid #e0805c; border-radius:5px;
 color:#e6e6e6; font-size:13px; line-height:1.6; opacity:0; pointer-events:none; z-index:72;
@@ -316,6 +316,13 @@ h1.title { font-size:52px; letter-spacing:10px; color:#e8e8e8; text-shadow:0 2px
 #ctrlHelp b { color:#c5c5c5; font-weight:600; }
 #deployFlex { display:flex; gap:26px; }
 #deployLeft { flex:1.35; } #deployRight { flex:1; }
+#deployActions { margin-top:20px; }
+@media (max-width:600px) {
+  #deploy { align-items:stretch; padding-block:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-bottom)); }
+  #deploy .panel { display:flex; flex-direction:column; max-height:none; padding:12px 16px; overflow:hidden; }
+  #deployFlex { display:block; flex:1; min-height:0; overflow:auto; overscroll-behavior:contain; }
+  #deployActions { flex:none; margin-top:12px; }
+}
 #deployMap { width:100%; border:1px solid rgba(210,210,210,.3); border-radius:4px; background:#1a1a1a; }
 #deathInfo { text-align:center; color:#e88; font-size:16px; margin-bottom:14px; min-height:22px; }
 #respawnTxt { color:#d8d8d8; }
@@ -716,6 +723,8 @@ body.touchui #storyHud { right:8px; top:auto; bottom:104px; width:172px; font-si
   align-items:center; justify-content:center; gap:1px; overflow:hidden; padding:2px;
   font-size:10px; line-height:1.1; cursor:grab; user-select:none; touch-action:none; }
 .invTile.sel { outline:2px solid #ffd77a; outline-offset:-1px; box-shadow:0 0 10px rgba(255,215,122,.45); z-index:3; }
+#arGridHost .invTile { font-family:inherit; }
+#arGridHost .invTile:focus-visible { outline:2px solid #fff; outline-offset:-3px; }
 .invTile .itIco { font-size:16px; line-height:1; }
 .invTile .itName { max-width:100%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:.85; }
 .invTile .itQty { position:absolute; right:3px; bottom:2px; color:#ffd77a; font-size:10px; }

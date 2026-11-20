@@ -219,24 +219,16 @@ questDescOf=function(q){
   return _mapOrigQuestDescOf(q);
 };
 
-// ---- 事件: 搜索容器 (每拿走 1 件物资计 1 次) ----
-const _mapOrigLootTakeSelected=lootTakeSelected;
-lootTakeSelected=function(){
-  const b=RUN.searches||0;
-  const r=_mapOrigLootTakeSelected.apply(this,arguments);
-  const a=RUN.searches||0;
-  if(a>b) questEvent('search',null,a-b);
-  return r;
-};
 // ---- 事件: 撤离 + 带出稀有物资 (结算前取背包快照, 因为完工时 RUN.loot 已被清空) ----
 const _mapOrigFinishRaid=finishRaid;
 finishRaid=function(extracted){
-  const snap=Object.assign({},RUN.loot||{});
+  if(matchOver) return;
+  const snap=extracted?extractedLoot():{};
   const r=_mapOrigFinishRaid(extracted);
-  if(extracted&&CAMPAIGN.id==='lab'){
+  if(extracted){
     questEvent('extract',null,1);
     let n=0;
-    for(const k in snap) if(RARE_LOOT[k]) n+=snap[k];
+    for(const k in snap) if(RARE_LOOT[k]||(CAMPAIGN.id==='airport'&&k==='phone')) n+=snap[k];
     if(n>0) questEvent('rare',null,n);
   }
   return r;

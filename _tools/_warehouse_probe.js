@@ -45,84 +45,33 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   log('  headset=' + await ev(`ownedHeadsetList().join(',')`));
   log('  pack   =' + await ev(`(typeof ownedPackList==='function')?ownedPackList().join(','):'❌ 没有 ownedPackList'`));
 
-  log('\n=== 3. 仓库 tab 现在列出的装备 ===');
-  log('  ' + await ev(`(function(){
-    try{
-      renderArmory('warehouse');
-      var names=[...document.querySelectorAll('#arList .arName')].map(function(e){return e.textContent;});
-      return names.join(' | ') || '（空）';
-    }catch(e){ return 'EXC '+e.message; }
-  })()`));
-  log('  行数 = ' + await ev(`document.querySelectorAll('#arList .arRow').length`));
+  log('\n=== 仓库网格·通过物品详情装备五个槽位 ===');
+  const result = await ev(`(()=>{
+    document.querySelector('[data-p=mArmory]').click();
+    document.querySelector('[data-ar=warehouse]').click();
+    const count=document.querySelectorAll('#arGridHost .invTile').length;
+    const equipped={};
+    for(const [slot,key] of Object.entries({armor:'armor5',helmet:'helm4',headset:'hs_comtac6',pack:'packTT45',primary:'hk416'})){
+      const tile=document.querySelector('#arGridHost .invTile[data-key="'+key+'"]');
+      if(!tile) throw Error('仓库缺少物品 '+key);
+      tile.click();
+      const button=document.querySelector('#arDetail [data-action=equip][data-key="'+key+'"]');
+      if(!button) throw Error('详情缺少装备按钮 '+key);
+      button.click();
+      equipped[slot]=META.loadout[slot];
+      if(equipped[slot]!==key) throw Error('装备后槽位不符 '+slot+' '+equipped[slot]);
+    }
+    return {count,equipped};
+  })()`);
+  if (!result || typeof result !== 'object') { log('  '+result); return finish(1); }
+  const gear = result.equipped;
+  log('  物品格 = '+result.count);
+  log('  护甲→'+gear.armor+' | 头盔→'+gear.helmet+' | 耳机→'+gear.headset+' | 背包→'+gear.pack+' | 主武器→'+gear.primary);
 
-  log('\n=== 4. 装备按钮槽位映射 (原来会把头盔装成主武器) ===');
-  log('  ' + await ev(`(function(){
-    try{
-      const res=[];
-      const before=JSON.stringify(META.loadout);
-      for(const key of ['hk416','armor5','helm4','hs_comtac6','packTT45']){
-        const kind=itemKind(key);
-        const slot=(kind==='armor')?'armor':(kind==='helmet')?'helmet':(kind==='headset')?'headset':(kind==='pack')?'pack':'primary';
-        res.push(key+' ('+kind+') → 槽位 '+slot);
-      }
-      return res.join(' || ');
-    }catch(e){ return 'EXC '+e.message; }
-  })()`));
-
-  log('\n=== 5. 真点一次「装备」按钮 (头盔) ===');
-  log('  ' + await ev(`(function(){
-    try{
-      META.loadout.helmet='helm1';
-      renderArmory('warehouse');
-      var rows=[...document.querySelectorAll('#arList .arRow')];
-      for(var i=0;i<rows.length;i++){
-        var nm=rows[i].querySelector('.arName');
-        if(nm&&nm.textContent.indexOf('FAST MT')>=0){
-          var b=[...rows[i].querySelectorAll('button')].find(function(x){return x.textContent==='装备';});
-          if(b){ b.click(); return '点了 FAST MT 的「装备」· META.loadout.helmet 现在 = '+META.loadout.helmet; }
-          return '没找到装备按钮';
-        }
-      }
-      return '仓库里没找到 FAST MT 行';
-    }catch(e){ return 'EXC '+e.message; }
-  })()`));
-
-  log('\n=== 6. 逐个槽位点一遍 ===');
-  log('  ' + await ev(`(function(){
-    try{
-      const res=[];
-      function clickEquip(namePart){
-        renderArmory('warehouse');
-        var rows=[...document.querySelectorAll('#arList .arRow')];
-        for(var i=0;i<rows.length;i++){
-          var nm=rows[i].querySelector('.arName');
-          if(nm&&nm.textContent.indexOf(namePart)>=0){
-            var b=[...rows[i].querySelectorAll('button')].find(function(x){return x.textContent==='装备';});
-            if(b) b.click();
-            return true;
-          }
-        }
-        return false;
-      }
-      META.loadout.armor='armor1'; META.loadout.helmet='helm1'; META.loadout.headset=''; META.loadout.pack='packSmall'; META.loadout.primary='m1911';
-      clickEquip('Hexatac');  res.push('护甲→'+META.loadout.armor);
-      clickEquip('FAST MT');  res.push('头盔→'+META.loadout.helmet);
-      clickEquip('ComTac');   res.push('耳机→'+META.loadout.headset);
-      clickEquip('Tasmanian');res.push('背包→'+META.loadout.pack);
-      clickEquip('HK416');    res.push('主武器→'+META.loadout.primary);
-      return res.join(' | ');
-    }catch(e){ return 'EXC '+e.message; }
-  })()`));
-
-  log('\n=== 7. 截图 ===');
-  await ev(`(function(){ META.loadout.helmet='helm4'; META.loadout.headset='hs_comtac6'; META.loadout.pack='packTT45'; saveMeta(); return 1; })()`);
-  // 必须先切到军械库面板, 否则截到的是主菜单
-  await ev(`(function(){ var b=[...document.querySelectorAll('.navBtn')].find(function(x){return x.dataset.p==='mArmory';}); if(b) b.click(); return 1; })()`);
-  await sleep(500);
-  await ev(`(function(){ var b=[...document.querySelectorAll('[data-ar]')].find(function(x){return x.dataset.ar==='warehouse';}); if(b) b.click(); return 1; })()`);
+  log('\n=== 仓库截图 ===');
   await sleep(600);
   await shot('smoke-warehouse.png', { x: 180, y: 0, width: 900, height: 620 });
-  // 滚到底, 拍头盔/耳机/背包那几行
+  // 滚到底, 检查网格底部
   await ev(`(function(){ var l=document.getElementById('arList'); if(l) l.scrollTop=l.scrollHeight; return 1; })()`);
   await sleep(400);
   await shot('smoke-warehouse2.png', { x: 180, y: 0, width: 900, height: 620 });

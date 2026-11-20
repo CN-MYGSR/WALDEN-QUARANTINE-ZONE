@@ -659,8 +659,8 @@ function canCarry(key,n){
 const s=itemSizeOf(key)*(n||1);
 const big=bagUsedBig(), small=bagUsedSmall();
 // 大件: 只能占背包的格数
-if(itemSizeOf(key)>CHEST_MAX_SIZE) return (big+s)<=bagPackSlots();
-// 小件: 背包 + 胸挂 合计
+if(itemSizeOf(key)>CHEST_MAX_SIZE && big+s>bagPackSlots()) return false;
+// 无论大小，都要有足够的总容量。
 return (big+small+s)<=(bagPackSlots()+bagChestSlots());
 }
 function addLootToBag(key,n){
@@ -734,10 +734,10 @@ fb.firstElementChild.style.background=fv>50?'#d8d8d8':(fv>25?'#e0e0e0':'#e07060'
 // 总血量读数: 当前全身总血量 / 上限(440 + 护甲胸甲加成)
 const ht=el('hpTotal');
 if(ht){
-if(idle||!p.alive||!p.body){ ht.textContent=BODY_TOTAL_HP+' / '+BODY_TOTAL_HP; ht.className=''; }
+if(idle||!p.alive||!p.body){ setHudText(ht,BODY_TOTAL_HP+' / '+BODY_TOTAL_HP); ht.className=''; }
 else{
 const cur=Math.ceil(bodyHpTotal(p)), mx=bodyHpMax(p);
-ht.textContent=cur+' / '+mx;
+setHudText(ht,cur+' / '+mx);
 const r=mx>0?cur/mx:0;
 ht.className=r>0.8?'':(r>0.45?'hurt':'bad');
 }
@@ -752,7 +752,7 @@ const bleed=(p.bleedHeavy||0)+(p.bleedLight||0)>0?'<span style="color:#e07060">�
 const frac=(p.fractures&&p.fractures.length)?'<span style="color:#e0e0e0">⬤骨折</span>':'';
 const pk=painPower(p);
 const pkTxt=pk>0?`<span style="color:#9fe0ff">⬤止痛${pk>1.2?'·吗啡':''} ${Math.ceil(p.painT)}s</span>`:(playerInPain(p)?'<span style="color:#ff9c7a">⬤疼痛</span>':'');
-q.innerHTML=`[H] ${med?MED_DEFS[med.key].name+'×'+med.uses:'<span style="opacity:.5">无药品</span>'} · [K] ${fd?FOOD_DEFS[fd.key].name:'<span style="opacity:.5">无食物</span>'}${(p.foodItems&&p.foodItems.length>1)?' [J]换':''} · ${bleed}${frac}${pkTxt}`;
+setHudHTML(q,`[H] ${med?MED_DEFS[med.key].name+'×'+med.uses:'<span style="opacity:.5">无药品</span>'} · [K] ${fd?FOOD_DEFS[fd.key].name:'<span style="opacity:.5">无食物</span>'}${(p.foodItems&&p.foodItems.length>1)?' [J]换':''} · ${bleed}${frac}${pkTxt}`);
 }
 }
 
@@ -989,6 +989,11 @@ LOOT_UI.sel=(LOOT_UI.sel+d+n)%n;
 renderLootPanel();
 AudioSys.click(1400,0.1,0.03);
 }
+function recordLootPickup(){
+ RUN.searches=(RUN.searches||0)+1;
+ addXP(6);
+ questEvent('search',null,1);
+}
 function lootTakeSelected(){
 if(!LOOT_UI.open||!LOOT_UI.ref) return;
 const entries=lootEntries(LOOT_UI.ref);
@@ -998,8 +1003,7 @@ const key=entries[i][0];
 if(addLootToBag(key,1)){
 LOOT_UI.ref.loot[key]--;
 if(LOOT_UI.ref.loot[key]<=0) delete LOOT_UI.ref.loot[key];
-RUN.searches=(RUN.searches||0)+1;
-addXP(6);
+recordLootPickup();
 showScorePop("拿取: "+itemLabel(key));
 const left=Object.keys(LOOT_UI.ref.loot).length;
 if(!left){
@@ -1393,7 +1397,7 @@ return keys;
 }
 function raidDeathPenalty(){
 const lost=[],returned=[];
-if(!RUN.scav){
+if(!RUN.scav&&!usesLoanKit()){
 const insured=!!RUN.insured;
 for(const k of equipKeysOfLoadout()){
 if(!ownedCount(k)) continue;
@@ -1423,18 +1427,25 @@ META.insurance=[];
 saveMeta();
 return n;
 }
-// 玩家死亡 (撤离模式) = 撤离失败: 装备/背包丢失, 安全箱保留, 保险赔付待领取
-// 额外: 结算失败补偿 +500, 并保证不会因卖光装备而无法再开局
+// 在死亡画面开始时写档，避免关页逃过扣装；超时与直接结算走同一入口。
+function settleRaidLoss(){
+ if(RUN.lossSettled||CAMPAIGN.rangeOnly) return;
+ RUN.lossSettled=true;
+ META.stats.kills+=RUN.kills||0;
+ META.stats.deaths+=player.deaths||0;
+ raidDeathPenalty();
+ if(!usesLoanKit()){
+  RUN.failComp=grantFailCompensation(Math.min(200,(RUN.kills||0)*40));
+  RUN.autoKit=ensureSafetyKit('fail');
+ }
+}
 function onPlayerRaidDeath(){
-if(GAMEMODE!=='extract'||matchOver) return;
+if(GAMEMODE!=='extract'||matchOver||RUN.deathTimer) return;
 if(typeof bagPanelClose==='function') bagPanelClose();
-raidDeathPenalty();
-// ===== 失败补偿 =====
-// 击杀数少量加成, 让"虽败犹荣"也有回报(每杀 +40, 上限 +200)
-const bonus=Math.min(200,(RUN.kills||0)*40);
-RUN.failComp=grantFailCompensation(bonus);
-RUN.autoKit=ensureSafetyKit('fail');
-setTimeout(()=>{
+settleRaidLoss();
+if(RUN.timeout){ finishRaid(false); return; }
+RUN.deathTimer=setTimeout(()=>{
+RUN.deathTimer=0;
 if(!matchOver&&typeof finishRaid==='function') finishRaid(false);
 },2600);
 }
@@ -1450,16 +1461,7 @@ function xpNextNeed(xp){
 const lv=xpLevel(xp);
 return LEVEL_XP[lv]||null;
 }
-function addXP(n){
-if(!n) return;
-if(RUN.scav) n=Math.round(n*0.5);
-const before=xpLevel(META.xp||0);
-META.xp=(META.xp||0)+n;
-const after=xpLevel(META.xp);
-if(after>before) showScorePop("等级提升 · Lv"+after);
-saveMeta();
-return after;
-}
+function addXP(n){ if(n) gainXP(RUN.scav?Math.round(n*0.5):n); return META.level; }
 function itemLevelReq(key){
 if(ARMOR_DEFS[key]) return [1,2,3,5,7,9][ARMOR_DEFS[key].level-1]||1;
 if(PACK_DEFS[key]) return PACK_DEFS[key].tier||1;
@@ -1477,7 +1479,7 @@ return 9;
 }
 return 1;
 }
-function playerLevel(){ return xpLevel(META.xp||0); }
+function playerLevel(){ return META.level||1; }
 
 // ---------- 部署: 背包/药品/食物/保险/NVG ----------
 function buildDeployConsumables(){

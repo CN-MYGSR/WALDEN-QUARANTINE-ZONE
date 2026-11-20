@@ -1,15 +1,21 @@
 'use strict';
+document.addEventListener('visibilitychange',()=>{
+  lastT=performance.now();
+  fpsAcc=0; fpsN=0;
+});
 function loop(){
 requestAnimationFrame(loop);
 if(document.hidden) return;
 const now=performance.now();
-let dt=Math.min((now-lastT)/1000,0.05);
+const elapsed=Math.max(0,(now-lastT)/1000);
+const dt=Math.min(elapsed,0.05);
 lastT=now;
 nowT=now/1000;
-fpsAcc+=1/Math.max(dt,0.001); fpsN++;
-if(fpsN>=30){ fpsShow=Math.round(fpsAcc/fpsN); fpsAcc=0; fpsN=0; el('fps').textContent=fpsShow+' FPS'; }
+fpsAcc+=elapsed; fpsN++;
+if(fpsAcc>=0.5){ fpsShow=Math.round(fpsN/fpsAcc); fpsAcc=0; fpsN=0; setHudText(el('fps'),fpsShow+' FPS'); }
 // 过场动画: 播放期间冻结游戏世界, 直接渲染过场镜头
 if(CUT.active){
+sun.shadow.autoUpdate=true;
 updateCutscene(dt);
 if(cutPlaying()){
 if(SKY&&CUT.kind!=='boat') SKY.position.copy(camera.position);
@@ -92,8 +98,8 @@ updateNades(dt);
 updateParticles(dt);
 updateTracers(dt);
 updateCasings(dt);
-updateFlags(dt);
-if(typeof updateExtraction==='function') updateExtraction(dt);
+updateFlags(dt,elapsed);
+if(typeof updateExtraction==='function') updateExtraction(elapsed);
 // 联机: 广播自身状态 / 房主广播 NPC 快照 (见 55_net.js)
 if(typeof netTick==='function') netTick(dt);
 if(flashTimer>0){ flashTimer-=dt; if(flashTimer<=0) flashLight.intensity=0; }
@@ -120,7 +126,7 @@ renderer.render(vmScene,vmCamera);
 });
 if(!player.alive&&player.deployed&&!matchOver){
 respawnCd=Math.max(0,respawnCd-dt);
-el('respawnTxt').textContent=respawnCd>0?`(${Math.ceil(respawnCd)})`:'';
+setHudText(el('respawnTxt'),respawnCd>0?`(${Math.ceil(respawnCd)})`:'');
 const btn=el('deployBtn');
 btn.disabled=respawnCd>0;
 if(nowT%0.5<0.1) drawDeployMap();

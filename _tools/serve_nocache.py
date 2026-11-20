@@ -15,6 +15,8 @@ os.chdir(ROOT)
 
 
 class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
+    protocol_version = 'HTTP/1.1'
+
     def end_headers(self):
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
@@ -31,6 +33,7 @@ class NoCacheHandler(http.server.SimpleHTTPRequestHandler):
 class ThreadedServer(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
+    request_queue_size = 128
 
 with ThreadedServer(('127.0.0.1', PORT), NoCacheHandler) as httpd:
     print('serving %s at http://127.0.0.1:%d/  (no-cache, threaded)' % (ROOT, PORT))

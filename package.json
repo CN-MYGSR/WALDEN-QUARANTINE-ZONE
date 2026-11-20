@@ -26,7 +26,8 @@
       "index.html",
       "css/**/*",
       "js/**/*",
-      "vendor/**/*"
+      "vendor/**/*",
+      "assets/**/*"
     ],
     "win": {
       "target": [

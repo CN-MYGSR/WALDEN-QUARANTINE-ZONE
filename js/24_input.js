@@ -407,7 +407,7 @@ if(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open){
   const _tab=(typeof isKey==='function')?isKey(e,'bag'):(_c==='Tab');
   if(_tab){
     e.preventDefault(); e.stopImmediatePropagation();
-    if(typeof toggleBagPanel==='function') toggleBagPanel();
+    if(!e.repeat&&typeof toggleBagPanel==='function') toggleBagPanel();
     return;
   }
   if(_c==='Escape'){
@@ -437,7 +437,12 @@ if(player&&player.ads&&(e.code==='BracketLeft'||e.code==='BracketRight')&&typeof
     return;
   }
 }
-if(isKey(e,'bag')){ e.preventDefault(); if(typeof toggleBagPanel==='function') toggleBagPanel(); return; }
+if(isKey(e,'bag')){
+  if(!player.deployed||!player.alive||matchOver||document.querySelector('.screen:not(.hidden)')) return;
+  e.preventDefault();
+  if(!e.repeat&&typeof toggleBagPanel==='function') toggleBagPanel();
+  return;
+}
 if(isKey(e,'score')){ document.getElementById('scoreboard').style.display='block'; updateScoreboard(); }
 // 药品轮盘: 和背包一样放在 pointerLocked 检查之前 —— 退出指针锁定(暂停菜单)时也得能按开
 if(e.code==='Escape'&&typeof medWheelIsOpen==='function'&&medWheelIsOpen()){ e.preventDefault(); closeMedWheel(); return; }

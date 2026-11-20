@@ -10,5 +10,9 @@ window._wfBoot = function(){
   try { applyQuality(); }   catch(e){ console.error('[boot] applyQuality', e); }
   try { initMenuUI(); }     catch(e){ console.error('[boot] initMenuUI', e); }
   try { initArmoryUI(); }   catch(e){ console.error('[boot] initArmoryUI', e); }
-  try { loop(); }           catch(e){ console.error('[boot] loop', e); }
+  // 先让浏览器绘制可操作的菜单，再提交第一帧的大场景。
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    lastT=performance.now();
+    loop();
+  }));
 };

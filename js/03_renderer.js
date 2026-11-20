@@ -62,7 +62,15 @@ sun.shadow.camera.left=-60; sun.shadow.camera.right=60;
 sun.shadow.camera.top=60; sun.shadow.camera.bottom=-60;
 sun.shadow.camera.far=400; sun.shadow.bias=-0.0012; sun.shadow.normalBias=0.02;
 scene.add(sun); scene.add(sun.target);
+let nextMenuShadow=0;
 function updateSunShadow(){
+// 菜单只有缓慢绕场的镜头。复用阴影时也保留对应的光源矩阵。
+sun.shadow.autoUpdate=player.deployed||el('menu').classList.contains('hidden');
+if(!sun.shadow.autoUpdate){
+  if(sun.shadow.map&&nowT<nextMenuShadow) return;
+  sun.shadow.needsUpdate=true;
+  nextMenuShadow=nowT+1/12;
+}
 // 阴影视锥跟随相机, 按纹素网格对齐减少闪烁
 const texel=SHADOW_RANGE*2/sun.shadow.mapSize.x;
 const cx=Math.round(camera.position.x/texel)*texel;

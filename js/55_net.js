@@ -27,8 +27,7 @@ const NET={
   peerId:'',
   enabled:false,
   joining:false,
-  autoT:0,          // 自动找房倒计时
-  autoTried:false,
+  matchAttempt:null,
   remote:{},        // peerId -> Bot 代理
   lastSend:0,
   lastNpc:0,
@@ -67,11 +66,16 @@ async function netJoinRoom(code){
   if(NET.room) await netLeave();
   return await netJoin(code,false);
 }
-async function netJoin(code,asHost){
+async function netJoin(code,asHost,attempt){
   if(NET.joining) return false;
-  NET.joining=true;
+  const joining=attempt||{};
+  NET.joining=joining;
   try{
     const room=await VIBE.client.room.join(code,{ topology:'host' });
+    if(attempt&&!netMatchActive(attempt)){
+      if(room!==NET.room) try{ await room.leave(); }catch(e){}
+      return false;
+    }
     NET.room=room; NET.roomId=code; NET.peerId=room.peerId; NET.isHost=!!room.isHost;
     NET.enabled=true; NET.err='';
     room.onMessage(netOnMessage);
@@ -86,10 +90,11 @@ async function netJoin(code,asHost){
     netRenderLobby();
     return true;
   }catch(e){
+    if(attempt&&!netMatchActive(attempt)) return false;
     NET.err=(e&&e.message)||String(e);
     netSetMsg('加入失败：'+NET.err);
     return false;
-  }finally{ NET.joining=false; }
+  }finally{ if(NET.joining===joining) NET.joining=false; }
 }
 async function netLeave(){
   const r=NET.room;
@@ -101,19 +106,18 @@ async function netLeave(){
 }
 
 // ---------------- 自动找房（部署时，上限 30s） ----------------
-async function netAutoMatch(){
-  if(!VIBE.client||!VIBE.user||NET.room) return false;
-  const t0=nowT;
-  for(let i=0;i<10;i++){                       // 每 3s 试一次，最多 ~30s
+function netMatchActive(attempt){
+  return NET.matchAttempt===attempt&&Date.now()<attempt.deadline;
+}
+async function netAutoMatch(attempt){
+  while(netMatchActive(attempt)){
     try{
-      const id=await VIBE.client.rooms.quickJoin({ filter:function(r){ return r && r.open && (r.players|0) < (r.max|0) && r.slug===WORK_SLUG; } });
-      if(id){ const ok=await netJoin(id,false); if(ok) return true; }
+      const id=await VIBE.client.rooms.quickJoin({ filter:r=>r&&r.open&&(r.players|0)<(r.max|0)&&r.slug===WORK_SLUG });
+      if(!netMatchActive(attempt)) return;
+      if(id&&await netJoin(id,false,attempt)) return;
     }catch(e){}
-    if(nowT-t0>NET_CFG.autoMatchMs/1000) break;
-    await new Promise(function(res){ setTimeout(res,3000); });
+    if(netMatchActive(attempt)) await new Promise(resolve=>setTimeout(resolve,Math.min(3000,attempt.deadline-Date.now())));
   }
-  netSetMsg('30 秒内没找到开放房间 · 本局用 NPC 代替队友');
-  return false;
 }
 
 // ---------------- 大厅 UI ----------------
@@ -153,12 +157,13 @@ function netRenderLobby(){
 // ---------------- 远端玩家代理 ----------------
 function netRemoteCount(){ let n=0; for(const k in NET.remote) n++; return n; }
 function netEnsureRemote(peerId,name){
-  if(NET.remote[peerId]) return NET.remote[peerId];
+  const previous=NET.remote[peerId];
+  if(previous&&previous.mesh) return previous;
   let b=null;
   try{
     // ⚠️ cls 必须传数字 0，不能传 null —— setClass 会走 TEAM_FACTION[team].cls[cls]，
     //    传 null 会变成 cls[null] → undefined → 构造抛错（踩过）
-    b=new Bot(player.team,0,name||'玩家');
+    b=new Bot(player.team,0,name||(previous&&previous.name)||'玩家');
     b.netRemote=true; b.netPeerId=peerId;
     b.isPlayer=false; b.inSquad=true;
     b.squadGroup=9;                       // 独立编组 → unitBlocks 不会把它和 AI 队友当同单位
@@ -181,7 +186,9 @@ function netDropRemote(peerId){
   try{
     const i=soldiers.indexOf(b);
     if(i>=0) soldiers.splice(i,1);
-    if(b.mesh){ try{ scene.remove(b.mesh.root); }catch(e){} }
+    const ci=combatants.indexOf(b);
+    if(ci>=0) combatants.splice(ci,1);
+    releaseRaidActor(b);
     if(player.alive&&player.deployed&&!matchOver) netSpawnReplacement();
   }catch(e){}
 }
@@ -193,7 +200,9 @@ function netSpawnReplacement(){
     const x=player.pos.x+Math.sin(ang)*r, z=player.pos.z+Math.cos(ang)*r;
     const b=new Bot(player.team,0);   // cls 必须传数字, 传 null 会在 setClass 里抛错
     b.inSquad=true; b.squadGroup=1;
-    b.spawn(findFreeSpawn(x,z));
+    b.spawn();
+    const [sx,sz]=findFreeSpawn(x,z);
+    b.pos.set(sx,standHeight(sx,sz,10),sz);
     // ⚠️ 同上: 构造函数已入列, 不要再 push
     if(typeof assignUnit==='function'){ try{ assignUnit(b); }catch(e){} }
     showScorePop('队友退出 · AI 已顶替');
@@ -422,7 +431,6 @@ function netAllyAiTarget(){
 
 // 开局补位: 玩家阵营固定 4 人, 真人先占, 其余 AI 补足
 function netAfterStart(){
-  NET.autoTried=false;                 // 下一局可以再自动找房
   if(!NET.enabled||!NET.room) return;
   const peers=(NET.room.peers?NET.room.peers():[]).filter(function(p){return p.open;});
   for(const p of peers){ netEnsureRemote(p.id,null); }
@@ -446,22 +454,30 @@ function netShowSearching(on,t){
   const tt=document.getElementById('netSearchT');
   if(tt) tt.textContent=t!=null?(' '+t+'s'):'';
 }
-function netHookDeploy(){
-  const btn=document.getElementById('deployBtn');
-  if(!btn||btn._netHooked) return;
-  btn._netHooked=true;
-  const orig=btn.onclick;
-  btn.onclick=async function(ev){
-    // 只在「已登录 + 还没进房 + 本局还没试过」时找房
-    if(VIBE.user&&!NET.room&&!NET.autoTried&&!matchOver){
-      NET.autoTried=true;
-      let left=Math.round(NET_CFG.autoMatchMs/1000);
-      netShowSearching(true,left);
-      const iv=setInterval(function(){ left--; netShowSearching(true,Math.max(0,left)); },1000);
-      try{ await netAutoMatch(); }finally{ clearInterval(iv); netShowSearching(false); }
-    }
-    if(typeof orig==='function') return orig.call(this,ev);
-  };
+function netResetDeploy(){
+  if(NET.matchAttempt) NET.matchAttempt.finish(false);
+}
+function netPrepareDeployment(){
+  if(NET.matchAttempt) return false;
+  if(!VIBE.user||!VIBE.client||NET.room||
+    (typeof storyPendingIdx==='function'&&storyPendingIdx()>=0)||CAMPAIGN.rangeOnly) return null;
+  const attempt={deadline:Date.now()+NET_CFG.autoMatchMs};
+  NET.matchAttempt=attempt;
+  return new Promise(resolve=>{
+    const update=()=>netShowSearching(true,Math.max(0,Math.ceil((attempt.deadline-Date.now())/1000)));
+    const timer=setTimeout(()=>attempt.finish(true),NET_CFG.autoMatchMs);
+    const countdown=setInterval(update,1000);
+    attempt.finish=proceed=>{
+      if(NET.matchAttempt!==attempt) return;
+      NET.matchAttempt=null;
+      if(NET.joining===attempt) NET.joining=false;
+      clearInterval(countdown); clearTimeout(timer);
+      netShowSearching(false);
+      resolve(proceed);
+    };
+    update();
+    netAutoMatch(attempt).then(()=>attempt.finish(true),()=>attempt.finish(true));
+  });
 }
 
 window.addEventListener('load',function(){
@@ -471,7 +487,6 @@ window.addEventListener('load',function(){
     const lg=document.getElementById('vhLogin'), lo=document.getElementById('vhLogout');
     if(lg) lg.onclick=vibeLogin;
     if(lo) lo.onclick=vibeLogout;
-    netHookDeploy();
   },0);
   // 主循环挂钩在 30_main.js 里 (每帧 netTick(dt))，这里不再自建 rAF
 });

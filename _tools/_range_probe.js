@@ -117,7 +117,8 @@ function mk(opts){
   const a = mk({ active: true, store: { sf_rangeWpn: 'awm' } });
   t('默认武器读 localStorage', a.rangeWeapon() === 'awm', a.rangeWeapon());
   a.getDeploy()();
-  t('部署时用的是选中的枪 (awm)', a.seenPrimary() === 'awm', a.seenPrimary());
+  // 真实部署入口的选枪由 raid_regression 覆盖，此处验证靶场包装不会临时改写正式配装。
+  t('部署期间正式仓库仍装备原本的枪', a.seenPrimary() === 'm1911', a.seenPrimary());
   t('部署后 META.loadout.primary 已还原', a.META.loadout.primary === 'm1911', a.META.loadout.primary);
   t('部署后 ownedCount 已还原 (不是临时桩)', a.META.owned.awm === undefined);
   // 还原后再调 ownedCount 应回到真实值

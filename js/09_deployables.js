@@ -148,6 +148,7 @@ if(s.isPlayer) AudioSys.hurt();
 }
 
 // 架设机枪: 每个旗点一挺, 交替面向两侧基地 (通用)
+buildMapSection('emplacements',()=>{
 FLAGS.forEach((f,i)=>{
 const tgt=BASES[i%2];
 const face=Math.atan2(f.x-tgt.x,f.z-tgt.z);
@@ -157,5 +158,6 @@ if(FLAGS.length>=3){
 const fm=FLAGS[Math.floor(FLAGS.length/2)];
 mg42(fm.x+rand(-14,14),fm.z+rand(-14,14),rand(0,TAU));
 }
+});
 buildOccupancy();
 buildSpatialIndex();

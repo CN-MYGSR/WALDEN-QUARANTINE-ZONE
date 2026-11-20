@@ -74,7 +74,7 @@
 })();
 </script>
 <title>BF Urban Infantry · 无载具巷战</title>
-<link rel="stylesheet" href="css/style.css?v=20261030k">
+<link rel="stylesheet" href="css/style.css?v=20261121a">
 </head>
 <body>
 <div id="ui">
@@ -383,7 +383,7 @@
 <canvas id="deployMap" width="300" height="300"></canvas>
 </div>
 </div>
-<div class="center" style="margin-top:20px"><button class="bigBtn" id="deployBtn">部 署 <span id="respawnTxt"></span></button>
+<div class="center" id="deployActions"><button class="bigBtn" id="deployBtn">部 署 <span id="respawnTxt"></span></button>
 <div id="netSearch" class="hidden">正在寻找开放房间…<span id="netSearchT"></span><br><span class="netSub">30 秒内没找到就用 AI 代替队友</span></div>
 <button class="bigBtn" id="resumeBtn" style="display:none">返 回 战 斗</button></div>
 </div>
@@ -413,87 +413,87 @@
 <script src="js/00b_elo.js?v=20261030k"></script>
 <script src="js/01_data.js?v=20261030k"></script>
 <script src="js/02_audio.js?v=20261115a"></script>
-<script src="js/03_renderer.js?v=20261030k"></script>
-<script src="js/04_textures.js?v=20261030k"></script>
+<script src="js/03_renderer.js?v=20261121a"></script>
+<script src="js/04_textures.js?v=20261121a"></script>
 <script src="js/05_terrain.js?v=20261030k"></script>
 <script src="js/06_collision.js?v=20261030k"></script>
-<script src="js/07_props.js?v=20261030k"></script>
-<script src="js/07b_batch.js?v=20261030k"></script>
-<script src="js/07c_buildings.js?v=20261030k"></script>
+<script src="js/07_props.js?v=20261121a"></script>
+<script src="js/07b_batch.js?v=20261121a"></script>
+<script src="js/07c_buildings.js?v=20261121a"></script>
 <script src="js/07d_lab.js?v=20261030k"></script>
 <script src="js/07e_port.js?v=20261030k"></script>
 <script src="js/07f_airport.js?v=20261030k"></script>
 <script src="js/07g_anvil.js?v=20261030k"></script>
 <script src="js/07h_range.js?v=20261030k"></script>
-<script src="js/08_world.js?v=20261030k"></script>
-<script src="js/09_deployables.js?v=20261030k"></script>
+<script src="js/08_world.js?v=20261121a"></script>
+<script src="js/09_deployables.js?v=20261121a"></script>
 <script src="js/10_nav.js?v=20261030k"></script>
 <script src="js/11_particles.js?v=20261030k"></script>
 <script src="js/12_weather_fx.js?v=20261030k"></script>
 <script src="js/13_weapons_data.js?v=20261116b"></script>
 <script src="js/14_gunmodels.js?v=20261116h"></script>
 <script src="js/14b_weapon_mods.js?v=20261120a"></script>
-<script src="js/15_viewmodel.js?v=20261118a"></script>
+<script src="js/15_viewmodel.js?v=20261121a"></script>
 <script src="js/15c_flashlight.js?v=20261120a"></script>
-<script src="js/16_soldier.js?v=20261030k"></script>
+<script src="js/16_soldier.js?v=20261121a"></script>
 <script src="js/17_ragdoll.js?v=20261119a"></script>
 <script src="js/18_ballistics.js?v=20261119a"></script>
-<script src="js/19_bot.js?v=20261119a"></script>
+<script src="js/19_bot.js?v=20261121a"></script>
 <script src="js/20_explosives.js?v=20261119a"></script>
 <script src="js/22_emplacements.js?v=20261030k"></script>
 <script src="js/23_player.js?v=20261030k"></script>
-<script src="js/24_input.js?v=20261119b"></script>
-<script src="js/25_player_update.js?v=20261030k"></script>
+<script src="js/24_input.js?v=20261121a"></script>
+<script src="js/25_player_update.js?v=20261121a"></script>
 <script src="js/26_camera.js?v=20261030k"></script>
-<script src="js/27_gamemode.js?v=20261115a"></script>
-<script src="js/28_hud.js?v=20261116b"></script>
-<script src="js/29_menus.js?v=20261119b"></script>
+<script src="js/27_gamemode.js?v=20261121a"></script>
+<script src="js/28_hud.js?v=20261121a"></script>
+<script src="js/29_menus.js?v=20261121a"></script>
 <script src="js/30c_cutscene.js?v=20261030k"></script>
-<script src="js/30_main.js?v=20261115c"></script>
+<script src="js/30_main.js?v=20261121a"></script>
 <script src="js/31_touch.js?v=20261116c"></script>
 <script src="js/34_nvg.js?v=20261116c"></script>
-<script src="js/37_meta.js?v=20261116c"></script>
-<script src="js/38_tarkov.js?v=20261119b"></script>
-<script src="js/35_extraction.js?v=20261030k"></script>
-<script src="js/39_quests.js?v=20261030k"></script>
+<script src="js/37_meta.js?v=20261121a"></script>
+<script src="js/38_tarkov.js?v=20261121a"></script>
+<script src="js/35_extraction.js?v=20261121a"></script>
+<script src="js/39_quests.js?v=20261121a"></script>
 <script src="js/40_raidshop.js?v=20261115i"></script>
 <script src="js/41_raidloot.js?v=20261116b"></script>
 <script src="js/42_shake.js?v=20261030k"></script>
-<script src="js/43_maps.js?v=20261030k"></script>
+<script src="js/43_maps.js?v=20261121a"></script>
 <script src="js/45_elo_bots.js?v=20261030k"></script>
 <script src="js/44_deathcam.js?v=20261030k"></script>
-<script src="js/46_throwables.js?v=20261030k"></script>
+<script src="js/46_throwables.js?v=20261121a"></script>
 <script src="js/47_units.js?v=20261119a"></script>
 <script src="js/48_shopsearch.js?v=20261115d"></script>
 <!-- VibeHub Workshop 接入点 (2026-09-13):
      32_boot 只挂 window._wfBoot, 不立即启动; 49_mod_api 建立 modApi;
      Loader 暴露 VibeHubWorkshop; 50_workshop_boot 在 beforeStart 之后才调 _wfBoot -->
-<script src="js/32_boot.js?v=20261030k"></script>
+<script src="js/32_boot.js?v=20261121a"></script>
 <script src="js/49_mod_api.js?v=20261030k"></script>
-<script src="https://gamesvibe.app/workshop/loader/v1.js"></script>
-<script type="module" src="js/50_workshop_boot.js?v=20261030k"></script>
+<script defer id="workshopLoader" src="https://gamesvibe.app/workshop/loader/v1.js" onerror="this.dataset.failed='1'"></script>
+<script type="module" src="js/50_workshop_boot.js?v=20261121a"></script>
 <!-- 设置扩展: 键位自定义 + 手机端按钮布局 (依赖 24_input 的键位映射层与 31_touch 的按钮) -->
 <script src="js/51_settings.js?v=20261030k"></script>
 <!-- 开发者控制台: 按 \ (Backslash) 或 F2 开关 (不写进作品简介/版本日志) -->
 <script src="js/52_devconsole.js?v=20261030k"></script>
 <!-- 药品轮盘: 依赖 38_tarkov(MED_DEFS/RUN) 与 40_raidshop(useLootFromBag), 所以放在最后 -->
 <!-- VibeHub SDK: 必须用绝对地址（游戏页在 vibeapps 域，相对路径会 404） -->
-<script src="https://vibe.lumigrav.space/sdk/v3/vibehub.js"></script>
+<script async src="https://vibe.lumigrav.space/sdk/v3/vibehub.js"></script>
 <script src="js/53_medwheel.js?v=20261030k"></script>
-<script src="js/54_vibe.js?v=20261030k"></script>
-<script src="js/55_net.js?v=20261030k"></script>
-<script src="js/56_story.js?v=20261115h"></script>
+<script src="js/54_vibe.js?v=20261121a"></script>
+<script src="js/55_net.js?v=20261121a"></script>
+<script src="js/56_story.js?v=20261121a"></script>
 <script src="js/57_downed.js?v=20261119a"></script>
 <script src="js/58_vault.js?v=20261030k"></script>
 <script src="js/59_screenfx.js?v=20261030k"></script>
 <script src="js/60_falldmg.js?v=20261030k"></script>
-<script src="js/61_range.js?v=20261030k"></script>
+<script src="js/61_range.js?v=20261121a"></script>
 <!-- 双摄像机镜内渲染: 主相机 + 目镜 RT, 关镜后镜片仍在渲染 (见 63_scope) -->
-<script src="js/63_scope.js?v=20261118a"></script>
+<script src="js/63_scope.js?v=20261121a"></script>
 <!-- 配音: 英文语音 + 中文字幕 (assets/vo/manifest.json) -->
 <script src="js/64_voice.js?v=20261115a"></script>
 <!-- 网格库存: 仓库 / 背包 / 物资容器 (见 65_invgrid) -->
-<script src="js/65_invgrid.js?v=20261116c"></script>
+<script src="js/65_invgrid.js?v=20261121a"></script>
 <!-- 每张地图的 BOSS: 街区守备不攻击 BOSS, 其他地图会围剿 (见 66_boss) -->
 <script src="js/66_boss.js?v=20261119a"></script>
 </body>

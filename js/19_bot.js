@@ -84,8 +84,18 @@ this.maxBandages=cls===2?6:2;
 this.bandages=this.maxBandages;
 }
 const kind=gunKindOf(this.wpnKey);
-if(kind!==this.gunKind||this.wgKey!==this.wpnKey){
-if(this.gun) this.mesh.gunG.remove(this.gun);
+// The ragdoll takes its gun with it. A respawn with the same loadout
+// still needs a new gun, and must leave the old one on the body.
+const onCurrentBody=this.gun&&this.gun.parent===this.mesh.gunG;
+if(!onCurrentBody||kind!==this.gunKind||this.wgKey!==this.wpnKey){
+if(onCurrentBody){
+ this.mesh.gunG.remove(this.gun);
+ this.gun.traverse(part=>{
+  if(!part.isMesh)return;
+  part.geometry.dispose();
+  if(part.material.userData.perSoldier)part.material.dispose();
+ });
+}
 this.gunKind=kind; this.wgKey=this.wpnKey;
 this.gun=worldGunModel(kind,this.team,this.wpnKey);
 this.mesh.gunG.add(this.gun);

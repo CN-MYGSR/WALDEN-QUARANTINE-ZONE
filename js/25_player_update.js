@@ -441,11 +441,7 @@ if(_ck&&typeof CHEST_DEFS!=='undefined'&&CHEST_DEFS[_ck]) _chestK=_ck;
 }catch(e){}
 // ⚠️ 还要比对 armorKey 与胸挂 —— 只在换阵营时重建的话, 换了护甲/胸挂模型不会更新
 if(player.mesh&&player.meshTeam===player.team&&player.meshArmor===(player.armorKey||'')&&player.meshChest===_chestK) return;
-if(player.mesh){
-if(player.mesh.tag&&player.mesh.tag.material.map) player.mesh.tag.material.map.dispose();
-if(player.mesh.tag) player.mesh.tag.material.dispose();
-scene.remove(player.mesh.root);
-}
+if(player.mesh) releaseRaidActor(player);
 player.mesh=buildSoldierMesh(player.team,'',player.armorKey,_chestK);
 player.meshTeam=player.team;
 player.meshArmor=player.armorKey||'';

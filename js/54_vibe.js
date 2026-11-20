@@ -38,7 +38,8 @@ async function vibeBoot(){
     return;
   }
   try{
-    VIBE.client=await VibeHub.init({ work: WORK_SLUG });
+    // 本地也是静态游戏服务器；登录与联机请求应使用项目配置的平台后端。
+    VIBE.client=await VibeHub.init({ work: WORK_SLUG, apiBase:'https://vibe.lumigrav.space' });
     VIBE.user=VIBE.client.user||null;
     VIBE.ready=true;
     // 规范要求: 监听 onAuthChange 同步 UI，并在 init 后先读 user 渲染初始状态
@@ -89,16 +90,14 @@ function vibeLogout(){
 // ---------------- 战绩(存在玩家自己的存档里) ----------------
 // 规范: 玩家存档用 vibe.save；读取后必须做版本兼容（SDK 不自动迁移）
 function vibeStatSnapshot(){
-  let kd=0;
-  try{
-    const k=(RUN&&RUN.kills)||0, d=(RUN&&RUN.deaths)||0;
-    kd=d>0?k/d:k;
-  }catch(e){}
+  const live=player.deployed&&!matchOver&&!RUN.lossSettled&&!CAMPAIGN.rangeOnly;
+  const kills=META.stats.kills+(live?RUN.kills||0:0);
+  const deaths=META.stats.deaths+(live?player.deaths||0:0);
   return {
     v:2,
-    kd:Math.round(kd*100)/100,
-    kills:((META&&META.stats&&META.stats.kills)||0)+((RUN&&RUN.kills)||0),
-    deaths:((META&&META.stats&&META.stats.deaths)||0)+((RUN&&RUN.deaths)||0),
+    kd:Math.round(kills/Math.max(1,deaths)*100)/100,
+    kills,
+    deaths,
     wallet:Math.round((META&&META.wallet)||0),
     stash:Math.round(vibeStashValue()),
     updated:Date.now(),
@@ -211,8 +210,9 @@ function vibeRenderBoard(){
   const orig=window.finishRaid;
   if(typeof orig!=='function') return;
   window.finishRaid=function(extracted){
+    if(matchOver||(extracted&&RUN.deathTimer)) return;
     const r=orig.apply(this,arguments);
-    try{ vibeSyncSave(); vibeSubmitScore(); }catch(e){}
+    if(!CAMPAIGN.rangeOnly){ try{ vibeSyncSave(); vibeSubmitScore(); }catch(e){} }
     return r;
   };
 })();

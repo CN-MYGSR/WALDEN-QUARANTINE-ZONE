@@ -6,7 +6,7 @@ function startExtraction(){
  showScorePop('正在撤离...');
 }
 function updateExtraction(dt){
- if(GAMEMODE!=='extract'||matchOver){
+ if(GAMEMODE!=='extract'||matchOver||RUN.deathTimer||CAMPAIGN.rangeOnly){
   const hud=document.getElementById('extractHud');
   if(hud) hud.classList.add('hidden');
   return;
@@ -58,29 +58,26 @@ function updateExtraction(dt){
 function finishRaid(extracted){
  if(matchOver) return;
  matchOver=true;
+ clearTimeout(RUN.deathTimer); RUN.deathTimer=0;
  // 剧情模式: 判定本章成败并推进 (必须在 mergeRunLoot 之前 —— 目标要读 RUN.loot 里的样本/文件)
  if(typeof storyOnRaidEnd==='function'){ try{ storyOnRaidEnd(extracted); }catch(e){ console.error('[story] onRaidEnd failed:',e); } }
- const lootSnapshot={...RUN.loot};
- const lootValue=runLootValue();
- const lootTotal=runLootTotal();
- if(extracted) mergeRunLoot();
+ const lootSnapshot=extracted?extractedLoot():{...RUN.loot};
+ const lootValue=Object.entries(lootSnapshot).reduce((v,[k,n])=>v+itemSellPrice(k)*n,0);
+ const lootTotal=Object.values(lootSnapshot).reduce((v,n)=>v+n,0);
+ if(extracted&&!CAMPAIGN.rangeOnly){
+  META.stats.kills+=RUN.kills||0;
+  META.stats.deaths+=player.deaths||0;
+  mergeRunLoot(lootSnapshot);
+ } else if(!extracted) settleRaidLoss();
  // ELO 动态难度: 结算本局评分。撤离成功/阵亡/超时都收口到这里, 是唯一的评分入口。
  // lootValue 必须在 mergeRunLoot() 之前取 (成功后 RUN.loot 会被清空)。
- const eloRes=(typeof eloApplyRaid==='function')?eloApplyRaid(extracted,lootValue):null;
+ const eloRes=(!CAMPAIGN.rangeOnly&&typeof eloApplyRaid==='function')?eloApplyRaid(extracted,lootValue):null;
  // 必须在消耗前记录: 持证人在「港口」登船 = 离开瓦尔登隔离禁区, 解锁结局并可重生。
  // 通行证是一张"船票", 只在港口有效; 别的地图持证撤离同样只是普通结算。
  const hadPass=extracted&&typeof passUsable==='function'?passUsable():false;
  // 只有真正用上了那张船票才消耗 (见 39_quests 的 PASS_MAP)
  if(extracted&&hadPass&&typeof consumeExtractionPass==='function') consumeExtractionPass();
  RUN.hadPass=hadPass;
- // ===== 失败补偿 =====
- // 兜底: 若未经 onPlayerRaidDeath 路径(如超时未撤离), 在此补发一次。
- // 用 RUN.failComp 作为"本局是否已发放"的标记, 避免与阵亡路径重复发放。
- if(!extracted&&!RUN.failComp){
-  const bonus=Math.min(200,(RUN.kills||0)*40);
-  RUN.failComp=grantFailCompensation(bonus);
- }
- if(!extracted&&typeof ensureSafetyKit==='function') ensureSafetyKit('fail');
  if(document.exitPointerLock) document.exitPointerLock();
  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
  const end=document.getElementById('end');

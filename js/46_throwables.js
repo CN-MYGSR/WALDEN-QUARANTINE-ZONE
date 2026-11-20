@@ -219,7 +219,7 @@ const _tFinishRaid=finishRaid;
 finishRaid=function(extracted){
  const r=_tFinishRaid.apply(this,arguments);
  try{
-  if(extracted===true&&typeof RUN!=='undefined'&&RUN.throwables&&typeof player!=='undefined'&&player){
+  if(extracted===true&&!usesLoanKit()&&typeof RUN!=='undefined'&&RUN.throwables&&typeof player!=='undefined'&&player){
    syncThrowablesFromPlayer(player);
    let back=0;
    for(const k of THROW_KEYS){

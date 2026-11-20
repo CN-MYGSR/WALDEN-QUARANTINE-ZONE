@@ -24,13 +24,16 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await new Promise(r => ws.on('open', r));
   const rpc = (me, pa) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method: me, params: pa || {} })); });
   await rpc('Page.enable'); await rpc('Runtime.enable');
+  // This local deployment test supplies its own stalled SDK response below.
+  await rpc('Network.enable');
+  await rpc('Network.setBlockedURLs',{urls:['*://gamesvibe.app/*','*://vibe.lumigrav.space/*']});
   const ev = async e => { const o = await rpc('Runtime.evaluate', { expression: e, returnByValue: true }); if (o.result && o.result.exceptionDetails) return 'EXC:' + ((o.result.exceptionDetails.exception || {}).description || '').split('\n')[0]; return o.result && o.result.result ? o.result.result.value : String(o); };
 
+  await rpc('Page.addScriptToEvaluateOnNewDocument',{source:"localStorage.setItem('sf_campaign','0'); localStorage.removeItem('bf_meta_v1')"});
   await rpc('Page.navigate', { url: URL });
-  await sleep(14000);
-  await ev(`localStorage.setItem('sf_campaign','0'); localStorage.removeItem('bf_meta_v1');`);
-  await rpc('Page.navigate', { url: URL });
-  await sleep(15000);
+  const ready="typeof el==='function' && typeof el('startBtn').onclick==='function' && typeof el('deployBtn').onclick==='function'";
+  for(let i=0;i<200 && await ev(ready)!==true;i++) await sleep(150);
+  if(await ev(ready)!==true) throw new Error('部署界面初始化超时');
 
   log('=== 0) 初始 ===');
   log('soldiers/bots 数 (应 0) : ' + await ev(`soldiers.length`) + ' / ' + await ev(`combatants.length`));
@@ -80,7 +83,19 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   log('玩家仍存活 : ' + await ev(`player.alive`));
 
   log('');
-  log('=== 4) 异常 ===');
+  log('=== 4) 阵亡后经军械库重选当前地图 ===');
+  await ev("player.die(null,true)");
+  for(let i=0;i<100 && await ev("matchOver && !el('end').classList.contains('hidden')")!==true;i++) await sleep(150);
+  if(await ev("matchOver")!==true) throw new Error('阵亡未结算 '+errs.join(', '));
+  await ev("el('armoryBtn').click(); document.querySelector('#mArmory .backBtn').click(); document.querySelector('[data-p=mPlay]').click(); el('mapRow').querySelector('.mapCard.sel').click()");
+  if(await ev("!el('deploy').classList.contains('hidden') && !el('deployBtn').disabled && !el('respawnTxt').textContent && respawnCd===0")!==true) throw new Error('新局沿用了上局的重生冷却');
+  // 已登录但 SDK 请求一直不返回；用缩短的同一超时验证回退和重复点击。
+  await ev("VIBE.user={name:'探针'}; VIBE.client={rooms:{quickJoin:()=>new Promise(()=>{})}}; NET_CFG.autoMatchMs=150; el('deployBtn').click(); el('deployBtn').click()");
+  for(let i=0;i<60 && await ev('player.alive && player.deployed')!==true;i++) await sleep(150);
+  if(await ev("player.alive && player.deployed && el('netSearch').classList.contains('hidden')")!==true) throw new Error('匹配超时后未进入对局');
+  log('冷却已清空，匹配超时后成功部署');
+
+  log('=== 异常 ===');
   log(errs.length ? errs.slice(0, 10).join('\n') : '无');
-  finish(0);
+  finish(errs.length ? 1 : 0);
 })().catch(e => { log('FATAL ' + e.message); finish(1); });

@@ -165,10 +165,12 @@ void main(){
   // vmEquip 建好枪模后调用: 在目镜位置挂一块采样 RT 的平面
   function attachLens(parts,key){
     ensureMat();
+    if(st.lens) st.lens.removeFromParent();
     st.lens=null;
+    st.gun=null;
     const L=parts&&parts.gun&&parts.gun.userData&&parts.gun.userData.scopeLens;
     if(!L||modeOf(key||VM.key)!==1) return false;
-    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(1,1),st.mat);
+    const mesh=st.quad||(st.quad=new THREE.Mesh(new THREE.PlaneGeometry(1,1),st.mat));
     mesh.position.copy(L.pos);
     mesh.scale.setScalar(L.r*2);
     mesh.renderOrder=30;

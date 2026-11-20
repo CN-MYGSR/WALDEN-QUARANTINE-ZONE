@@ -4,7 +4,16 @@
 // 等玩家选好出生点、按下「部署」, 才真正建局并落地。这样部署界面不用等建局。
 // _pendingRaid 保证一局只建一次 —— 从暂停菜单(≡)再进部署界面、再点部署不会重建整局。
 let _pendingRaid=false;
-function armRaidStart(){ _pendingRaid=true; }
+function armRaidStart(){
+_pendingRaid=true;
+// 结算会冻结上一局剩余的重生冷却；军械库返回同图时不会重载页面。
+respawnCd=0;
+player.deathCamDur=0; player.deathCamT=0; player.deathRag=null;
+el('deployBtn').disabled=false;
+el('respawnTxt').textContent='';
+el('deathQuote').style.opacity=0;
+if(typeof netResetDeploy==='function') netResetDeploy();
+}
 function consumeRaidStart(){ if(!_pendingRaid) return false; _pendingRaid=false; startMatch(); return true; }
 
 // ELO 动态难度读数 (主菜单「撤离部署」面板)。数据源: 00b_elo.js 的 ELO / EFF_DIFF。
@@ -223,13 +232,18 @@ try{ localStorage.setItem('bf_arsenal_key',PLAYER_ARSENAL_KEY); }catch(e){}
 refreshArsenalStats();
 };
 }
-el('deployBtn').onclick=()=>{
-if(respawnCd>0||matchOver) return;
+el('deployBtn').onclick=async()=>{
+if(player.alive||respawnCd>0||matchOver) return;
 // 剧情专用地图只能从主菜单「剧情模式」进入
 if(typeof storyMapBlocked==='function'&&storyMapBlocked()){
 if(typeof showScorePop==='function') showScorePop('剧情地图只能在剧情模式进入 —— 请先选一张沙盒地图');
 return;
 }
+if(_pendingRaid&&typeof netPrepareDeployment==='function'){
+ const waiting=netPrepareDeployment();
+ if(waiting===false||(waiting&&!await waiting)) return;
+}
+if(player.alive||matchOver||el('deploy').classList.contains('hidden')) return;
 consumeRaidStart();      // 首次部署 → 在这里建局; 之后从暂停菜单再进来则什么都不做
 deployPlayer();
 };
@@ -347,13 +361,17 @@ c.fillStyle=s.team===0?'#7da8e8':'#e8907d';
 c.beginPath(); c.arc(px,py,2,0,TAU); c.fill();
 }
 }
+function usesLoanKit(){
+ return !!CAMPAIGN.rangeOnly||(typeof SRAID!=='undefined'&&SRAID.live);
+}
 function deployPlayer(){
 const p=player;
+const loan=usesLoanKit();
 // 保底: 玩家可能已卖光所有武器。绝不中断部署, 而是补发一把手枪让其能正常开局。
-if(!ownedWeaponList().length&&typeof ensureSafetyKit==='function'){
+if(!loan&&!ownedWeaponList().length&&typeof ensureSafetyKit==='function'){
 ensureSafetyKit('deploy');
 }
-if(!ownedWeaponList().length){ showScorePop('仓库中没有可用武器 · 请前往军械库购买'); return; }
+if(!loan&&!ownedWeaponList().length){ showScorePop('仓库中没有可用武器 · 请前往军械库购买'); return; }
 let sx,sz;
 if(selectedSpawn===-1||typeof selectedSpawn==='string'){ sx=BASES[p.team].x; sz=BASES[p.team].z; }
 else {
@@ -406,11 +424,11 @@ p.limbs={head:100,arms:100,torso:100,legs:100};
 p.stamina=1; p.suppressV=0; p.bloom=0;
 p.ads=false; p.holdBreath=false; VM.adsBlend=0;
 p.yaw=Math.atan2(-sx,-sz); p.pitch=0;
-let primaryKey=META.loadout.primary;
+let primaryKey=loan?(CAMPAIGN.rangeOnly?rangeWeapon():'m4'):META.loadout.primary;
 // SCAV 拾荒者: 主武器由 ensureScavLoadout() 每局随机, 不走仓库校验 (随机到的枪不需要玩家拥有)
-const _scavL=(typeof ensureScavLoadout==='function')?ensureScavLoadout():null;
+const _scavL=(!loan&&typeof ensureScavLoadout==='function')?ensureScavLoadout():null;
 if(_scavL) primaryKey=_scavL.primary;
-if(!_scavL&&(!primaryKey||ownedCount(primaryKey)<=0)){
+if(!loan&&!_scavL&&(!primaryKey||ownedCount(primaryKey)<=0)){
  primaryKey=ownedCount('m1911')>0?'m1911':firstOwnedWeapon();
  // 保底: 玩家可能已卖光所有武器。此处补发一把手枪, 绝不因无武器而中断部署。
  if(!primaryKey&&typeof ensureSafetyKit==='function'){
@@ -443,7 +461,10 @@ p.onMortar=null; p.mortarPlaced=false; p.buildCount=6; p.buildSel=0; p.pendingBu
 p.nadeIsAT=false; p.nadeHeld=false; p.nadeIsSmoke=false; p.nadeIsFlash=false;
  p.onVehicle=null; p.onMG=null; p.onAT=null; p.onAA=null; p.tankView=false; p.planeView=false; p.braced=false;
 ensurePlayerBody();
-if(typeof applyDeployLoadout==='function') applyDeployLoadout();
+if(loan){
+ RUN.medItems=[]; RUN.foodItems=[]; RUN.throwables=null; RUN.insured=false;
+ RUN.passBrought=!!(SRAID.live&&SRAID.ch.requiresPass&&META.loadout.pass&&hasPass());
+} else if(typeof applyDeployLoadout==='function') applyDeployLoadout();
 if(typeof initRaidBody==='function') initRaidBody(p,{armor:p.armorDef});
 document.getElementById('deathQuote').style.opacity='0';
 document.getElementById('heatWrap').style.display='none';
@@ -462,9 +483,8 @@ startDeployCut();
 //    数组清空后模型仍留在场景里, 变成「站着不动、收不到任何 AI 指令」的雕像。
 //    (2026-09-19 用户反馈: 重开对局后部分 NPC 无指令输入输出)
 // 注: 玩家工事(BUILDS)/迫击炮/物资箱的 mesh 直接挂在 world 上、没有单独句柄, 这里清不掉。
-function clearRaidActors(){
- for(const s of soldiers){
-  if(!s||!s.mesh||!s.mesh.root) continue;
+function releaseRaidActor(s){
+  if(!s||!s.mesh||!s.mesh.root) return;
   try{
    const root=s.mesh.root;
    // 名牌: 每人一张独立 canvas 贴图 → 必须释放
@@ -483,7 +503,9 @@ function clearRaidActors(){
    scene.remove(root);
   }catch(e){}
   s.mesh=null;
- }
+}
+function clearRaidActors(){
+ for(const s of soldiers) releaseRaidActor(s);
  soldiers.length=0;
  if(typeof RAG!=='undefined'&&RAG.list) while(RAG.list.length) removeRagdoll(RAG.list[0]);
  if(typeof DEBRIS!=='undefined'&&DEBRIS.list) while(DEBRIS.list.length) removeDebrisEntry(DEBRIS.list.shift());
@@ -497,6 +519,8 @@ if(typeof storyMapBlocked==='function'&&storyMapBlocked()){
 }
 // 新的一局: 允许 applyDeployLoadout 发放带入的弹药盒(重生时不重复)
 RUN._loadoutApplied=false;
+clearTimeout(RUN.deathTimer); RUN.deathTimer=0; RUN.lossSettled=false;
+RUN.secure=[]; RUN.grid={pack:{},chest:{}};
 clearRaidActors();
 // 剧情模式: 装载本章目标与事件 (没走剧情时是 no-op)
 if(typeof storyApplyChapter==='function') storyApplyChapter();
