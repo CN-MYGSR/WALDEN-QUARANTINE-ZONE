@@ -119,11 +119,23 @@ const LASER={ beam:null, dot:null, zero:30, maxLen:70 };
 })();
 const _lzFrom=new THREE.Vector3(), _lzTo=new THREE.Vector3(), _lzDir=new THREE.Vector3();
 const _lzAxis=new THREE.Vector3(0,0,-1);
+const _lzEmitter=new THREE.Vector3(), _lzRaycaster=new THREE.Raycaster(), _lzNdc=new THREE.Vector2();
 function laserHide(){ if(LASER.beam) LASER.beam.visible=false; if(LASER.dot) LASER.dot.visible=false; }
 function updateLaserBeam(){
-  const f=camForward(), r=camRight();
-  const k=1-VM.adsBlend*0.7;   // 开镜时枪口向中间收拢
+  const f=camForward();
+  const parts=VM.gunParts;
+  if(parts&&parts.gun&&parts.laserEmit){
+    _lzEmitter.copy(parts.laserEmit);
+    parts.gun.localToWorld(_lzEmitter);
+    _lzEmitter.project(vmCamera);
+    _lzNdc.set(_lzEmitter.x,_lzEmitter.y);
+    _lzRaycaster.setFromCamera(_lzNdc,camera);
+    _lzRaycaster.ray.at(0.32,_lzFrom);
+  } else {
+    const r=camRight();
+    const k=1-VM.adsBlend*0.7;   // 开镜时枪口向中间收拢
   _lzFrom.set(camera.position.x+r.x*0.13*k, camera.position.y-0.085*k, camera.position.z+r.z*0.13*k);
+  }
   _lzTo.set(camera.position.x+f.x*LASER.zero, camera.position.y+f.y*LASER.zero, camera.position.z+f.z*LASER.zero);
   _lzDir.copy(_lzTo).sub(_lzFrom).normalize();
   // 落点: 打到世界就停在表面, 没打到就拉到最大射程

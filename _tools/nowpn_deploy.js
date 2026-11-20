@@ -1,5 +1,5 @@
 // 极端用例: 卖光所有武器后仍能正常部署(不应静默失败)
-const http=require('http'),fs=require('fs'),path=require('path'),WS=require('ws'),{spawn}=require('child_process');
+const http=require('http'),fs=require('fs'),path=require('path'),WS=require('./ws'),{spawn}=require('child_process');
 const PORT=9355;
 function findChrome(){for(const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe','C:/Program Files/Microsoft/Edge/Application/msedge.exe']){try{if(fs.existsSync(c))return c;}catch(e){}}return null;}
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));

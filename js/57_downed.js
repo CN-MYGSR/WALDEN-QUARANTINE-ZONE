@@ -24,7 +24,7 @@ const DOWN_BLEED=0.22;    // 倒地后每点伤害折算成多少秒的额外流
 function isDowned(s){ return !!(s&&s.downed); }
 function canBeRescued(s){ return !!(s&&s.alive&&s.downed&&s.downT>0); }
 // ⚠️ 爆头不给倒地机会 —— 否则「永远打不死」会毁掉交火节奏
-function canGoDown(s,isHead){ return !s.downed&&!isHead&&!matchOver; }
+function canGoDown(s,isHead){ return !s.downed&&!isHead&&!matchOver&&!s.isBoss; }   // BOSS 不倒地
 function downName(s){ return s.isPlayer?'你':(s.name||'队友'); }
 
 function goDown(s,attacker){
@@ -39,7 +39,6 @@ function goDown(s,attacker){
   if(s.onAA){ s.onAA.user=null; s.onAA=null; }
   s.onVehicle=null; s.chuting=false;
   if(typeof VM!=='undefined'&&VM){ VM.adsBlend=0; VM.root.visible=true; }
-  try{ document.getElementById('scopeOv').style.display='none'; }catch(e){}
   try{ document.getElementById('heatWrap').style.display='none'; }catch(e){}
   if(s.isPlayer){
     if(typeof showScorePop==='function') showScorePop('你被击倒 · '+DOWN_MAX_T+' 秒内等队友来救');

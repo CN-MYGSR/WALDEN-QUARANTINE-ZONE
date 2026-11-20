@@ -1,7 +1,7 @@
 // 动态状态最坏情况扫描: 移动摆动 / 鼠标急转拖拽 / 侧身 / 后坐 / 腾空 / 组合。
 // 之前所有测试都只测了"静态收敛后的 ADS 姿态", 覆盖不到实战中枪体扫过准星的情况。
 // 做法: 直接设定各状态量后用 dt=0 调用 updateViewModel 冻结姿态, 再渲染两次求差得到枪体掩码。
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9393;
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -291,7 +291,7 @@ function storyCrateBonus(out){
 function storyApplyKit(){
   if(!SRAID.live||typeof player==='undefined'||!player) return;
   const p=player;
-  const mk=k=>{ const md=(typeof moddedDef==='function'&&moddedDef(k))||WPN_DEFS[k]; return {key:k,def:md,mag:md.mag,reserve:md.reserve}; };
+  const mk=k=>{ const md=(typeof moddedDef==='function'&&moddedDef(k))||WPN_DEFS[k]; return {key:k,def:md,mag:0,reserve:0,ammo:''}; };
   try{
     if(WPN_DEFS.m4&&WPN_DEFS.m1911){
       p.slots=[mk('m4'),mk('m1911')];
@@ -405,6 +405,7 @@ function storyRenderPanel(){
     h+='<div class="scBrief">'+String(c.brief||'').replace(/\n/g,'<br>')+'</div>';
     h+='<div class="scObj">目标：'+c.obj.map(o=>o.label).join(' ／ ')+'</div>';
     h+='<div class="scKit">配装：M4 + M1911 · 手雷×2 · 医疗包×2 · 手术包×1 · 全景夜视仪（自动配备，无需选择 · 按 N 开关夜视）</div>';
+    h+='<button class="optBtn scPlay" data-brief="'+(i+1)+'">▶ 播 放 简 报（英文配音）</button>';
     const rw=c.reward||{};
     h+='<div class="scRw">奖励：'+(rw.money?('¥'+formatMoney(rw.money)):'—')+(rw.xp?(' · '+rw.xp+' XP'):'')+'</div>';
     h+= un
@@ -416,6 +417,10 @@ function storyRenderPanel(){
   box.innerHTML=h;
   box.querySelectorAll('[data-story]').forEach(b=>{
     b.onclick=()=>{ if(typeof AudioSys!=='undefined'&&AudioSys.click) AudioSys.click(1400,0.18,0.03); storyStart(parseInt(b.dataset.story,10)); };
+  });
+  // 简报配音: 中文原文已经显示在卡片里, 这里只放英文语音, 不再叠加字幕
+  box.querySelectorAll('[data-brief]').forEach(b=>{
+    b.onclick=(ev)=>{ if(ev&&ev.stopPropagation) ev.stopPropagation(); if(typeof VO!=='undefined') VO.playBrief(parseInt(b.dataset.brief,10)); };
   });
   const rb=document.getElementById('storyResetBtn');
   if(rb) rb.onclick=()=>{ if(confirm('重置剧情进度？只清剧情章节，仓库与货币不动。')){ storyReset(); storyRenderPanel(); } };

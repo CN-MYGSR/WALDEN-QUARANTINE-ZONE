@@ -2,7 +2,7 @@
 // 检查: ① 开打后单位真的按 4 人切分 ② 余数进不足编单位 ③ 同单位互不锁定
 //      ④ 跨单位正常锁定 ⑤ 同单位互相 damage() 不掉血 ⑥ 控制台无异常
 // 结果写入 _tools/unit_live.txt
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9453, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

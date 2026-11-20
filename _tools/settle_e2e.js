@@ -1,6 +1,6 @@
 // 撤离结算 E2E: 真实走完「部署 → 撤离 → 结算画面 → 局外存档」, 验证 ELO 结算行真的渲染出来
 // 用法: node _tools/settle_e2e.js [campaignIdx]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9452, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }

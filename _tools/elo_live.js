@@ -1,6 +1,6 @@
 // 运行时注入验证: 真实部署后, 检查**敌方** bot 是否带上了 ELO 乘区, 友军是否完全不受影响
 // 用法: node _tools/elo_live.js [campaignIdx] [rating]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9422, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 const RATING = parseInt(process.argv[3] || '1900', 10);

@@ -2,7 +2,7 @@
 // 检查: ① 页面加载无异常 ② 物品 API/市集上架 ③ 部署面板投掷物行
 //      ④ 3/4/5 快捷键真的能进入投掷状态 ⑤ 闪光弹能投出并致盲
 // 结果写入 _tools/throw_live.txt, 截图写到 outputs/
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9451, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

@@ -25,22 +25,24 @@ const AMMO_SHOP_ENABLED = true;
 const AMMO_SHOP_MODES   = ['extract'];
 // 打开弹药商店的快捷键(e.code); 默认 'KeyO'
 const AMMO_SHOP_KEY     = 'KeyO';
-// 口径中文名(仅展示用)
-const AMMO_CAL_NAME = { pistol:'手枪弹', smg:'冲锋枪弹', rifle:'步枪弹', mg:'机枪弹', sniper:'狙击/步枪弹', heavy:'重型弹药' };
-// 弹药包价格表: 不同弹药包 = 不同口径 + 不同发数 + 不同价格
-//   id      唯一键
-//   cal     适用口径(由 weapon 的 snd/type/pistol/rocket 推导, 见 ammoCaliberOf)
-//   rounds  满额发数(默认值, 取值范围 1 ~ 500)
-//   price   满额价格(默认值, 单位: 作战货币, 取值范围 1 ~ 999999)
-//   注: 备弹上限不足时按实发量折算价格 price*实发/rounds, 不会浪费
-const AMMO_PACK_DEFS = [
- { id:'ap_pistol', name:'手枪弹匣包',   cal:'pistol', rounds:21, price:350,  icon:'🔫' },
- { id:'ap_smg',    name:'冲锋枪弹药箱', cal:'smg',    rounds:60, price:900,  icon:'📦' },
- { id:'ap_rifle',  name:'步枪弹药箱',   cal:'rifle',  rounds:60, price:1200, icon:'📦' },
- { id:'ap_mg',     name:'机枪弹链箱',   cal:'mg',     rounds:80, price:1600, icon:'🔗' },
- { id:'ap_sniper', name:'狙击弹药盒',   cal:'sniper', rounds:15, price:1000, icon:'🎯' },
- { id:'ap_heavy',  name:'重型弹药筒',   cal:'heavy',  rounds:5,  price:2400, icon:'💥' }
+// 弹种等级: 0 RIP / 1 普通 / 2 M855 / 3 M995 / 4 AP
+// pen 0-4 决定穿透能力; armorMul 影响护甲耐久损耗, dmgMul 是肉体伤害倍率
+const AMMO_TIERS = [
+ { id:'ammo_rip',  name:'RIP 弹',  short:'RIP',  tier:0, pen:0, dmgMul:1.35, armorMul:0.25, rounds:30, price:120, weight:0.40, icon:'🟥', desc:'0 级 · 几乎不穿甲，软组织伤害极高' },
+ { id:'ammo_std',  name:'普通弹',   short:'普通', tier:1, pen:1, dmgMul:1.00, armorMul:1.00, rounds:30, price:180, weight:0.45, icon:'⬜', desc:'1 级 · 标准全金属被甲弹，通用' },
+ { id:'ammo_m855', name:'M855 弹', short:'M855', tier:2, pen:2, dmgMul:1.05, armorMul:1.30, rounds:30, price:320, weight:0.50, icon:'🟦', desc:'2 级 · 钢芯穿甲，对 1–2 级护甲有效' },
+ { id:'ammo_m995', name:'M995 弹', short:'M995', tier:3, pen:3, dmgMul:1.12, armorMul:1.70, rounds:30, price:520, weight:0.55, icon:'🟪', desc:'3 级 · 钨芯穿甲，对 3 级护甲有效' },
+ { id:'ammo_ap',   name:'AP 弹',   short:'AP',   tier:4, pen:4, dmgMul:1.20, armorMul:2.20, rounds:20, price:780, weight:0.60, icon:'🟨', desc:'4 级 · 高硬度穿甲弹，专打重甲' }
 ];
+const AMMO_TIER_BY_ID={};
+for(const t of AMMO_TIERS) AMMO_TIER_BY_ID[t.id]=t;
+// 口径中文名(仅展示用)
+const AMMO_CAL_NAME = { '*':'通用' };
+// 弹药包价格表: 0–4 级通用弹种, 任何武器都能装填
+const AMMO_PACK_DEFS = AMMO_TIERS.map(t=>({
+ id:t.id, name:t.name, cal:'*', rounds:t.rounds, price:t.price, icon:t.icon,
+ tier:t.tier, pen:t.pen, dmgMul:t.dmgMul, short:t.short
+}));
 
 // ==================== 极简事件总线(对局生命周期) ====================
 // 目的: 让"拾取/使用/购买"这些动作可以对 OnMatchStart / OnMatchEnd / OnPlayerDeath
@@ -286,12 +288,15 @@ function currentAmmoWeapon(){
  const p = (typeof player!=='undefined') ? player : null;
  return (p && p.curW && p.curW.def) ? p.curW : null;
 }
-// 报价: 口径是否匹配 + 实发量 + 应付金额
+// 报价: 0–4 级通用弹, 检查备弹余量与弹种混装
+function ammoNameOf(key){
+  try{ return (typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[key])?AMMO_DEFS[key].name:key; }catch(e){ return key; }
+}
 function ammoQuote(pk, w){
  if(!w) return { ok:false, reason:'当前没有可装填的武器', give:0, price:pk.price, cur:0, cap:0 };
- const cal = ammoCaliberOf(w.key);
- if(cal !== pk.cal)
-  return { ok:false, reason:`口径不符 · ${pk.name}适用于${AMMO_CAL_NAME[pk.cal]}, 当前「${w.def.name}」使用${AMMO_CAL_NAME[cal]}`,
+ // 备弹/弹匣里已有别的弹种: 不允许混装, 先打空再换
+ if(w.ammo && ((w.reserve||0)>0 || (w.mag||0)>0) && w.ammo!==pk.id)
+  return { ok:false, reason:`枪里/备弹是「${ammoNameOf(w.ammo)}」，先打空再换 ${pk.name}`,
            give:0, price:pk.price, cur:w.reserve||0, cap:w.def.reserve||0 };
  const cap  = w.def.reserve || 0;
  const room = Math.max(0, cap - (w.reserve||0));
@@ -319,10 +324,11 @@ function buyAmmoPack(id){
  }
  META.wallet = wallet - q.price;      // 扣费
  w.reserve = Math.min(q.cap, (w.reserve||0) + q.give);  // 发货(不超过备弹上限)
+ if(!w.ammo) w.ammo = pk.id;                           // 空枪第一次装填时确定弹种
  RUN.ammoSpent  = (RUN.ammoSpent||0)  + q.price;       // 局内统计(RUN 不持久化)
  RUN.ammoRounds = (RUN.ammoRounds||0) + q.give;
  if(typeof saveMeta==='function') saveMeta();
- raidOk(`买入 ${pk.icon} ${pk.name} · <b>+${q.give}</b> 发 · 支出 <b>¥${formatMoney(q.price)}</b>`
+ raidOk(`买入 ${pk.icon} ${pk.name} (T${pk.tier}) · <b>+${q.give}</b> 发 · 支出 <b>¥${formatMoney(q.price)}</b>`
        +` · 「${w.def.name}」备弹 <b>${w.reserve}/${q.cap}</b> · 余额 ¥${formatMoney(META.wallet)}`);
  if(typeof AudioSys!=='undefined' && AudioSys.metalSlide) AudioSys.metalSlide(0.3,0.15,500,900);
  emitRaidEvent('OnAmmoPurchased', { id:id, rounds:q.give, price:q.price });
@@ -407,21 +413,21 @@ function renderAmmoShop(){
  if(!AMMO_UI.open || !ammoShopCanOpen()){ pnl.classList.add('hidden'); return; }
  pnl.classList.remove('hidden');
  const w = currentAmmoWeapon();
- const cal = w ? ammoCaliberOf(w.key) : 'rifle';
  const g = id => ((typeof el==='function') ? el(id) : document.getElementById(id));
  const stat = g('ammoShopStat');
- if(stat) stat.innerHTML = `当前武器 <b>${w ? w.def.name : '无'}</b> · ${AMMO_CAL_NAME[cal]}`
+ if(stat) stat.innerHTML = `当前武器 <b>${w ? w.def.name : '无'}</b>`
+   + ` · 弹种 <b>${w && w.ammo ? ammoNameOf(w.ammo) : '空'}</b>`
    + ` · 备弹 <b>${w ? (w.reserve||0) : 0}/${w ? (w.def.reserve||0) : 0}</b>`
    + ` · 余额 <b>¥${formatMoney((typeof META!=='undefined') ? (META.wallet||0) : 0)}</b>`;
  if(AMMO_UI.sel >= AMMO_PACK_DEFS.length) AMMO_UI.sel = 0;
  let rows = '';
  AMMO_PACK_DEFS.forEach((pk,i)=>{
   const q = ammoQuote(pk, w);
-  const match = (pk.cal === cal) && !!w;
-  let info = AMMO_CAL_NAME[pk.cal];
+  const match = !!w;
+  let info = `T${pk.tier} · 穿甲 ${pk.pen}`;
   if(match && q.ok) info += ` · 实发 ${q.give} 发`;
   else if(match && !q.ok) info += ` · ${q.reason}`;
-  else if(!match) info += ` · 当前武器不适用`;
+  else info += ' · 当前没有武器';
   rows += `<div class="lootRow ammoRow${i===AMMO_UI.sel?' sel':''}${match?'':' cant'}" data-ap="${pk.id}">`
         + `<span class="lrMark">${i===AMMO_UI.sel?'▸':' '}</span>`
         + `<span class="lrName">${pk.icon} ${pk.name} <span style="opacity:.6">满额 ${pk.rounds} 发</span></span>`
@@ -432,7 +438,7 @@ function renderAmmoShop(){
  const list = g('ammoShopList');
  if(list) list.innerHTML = rows;
  const hint = g('ammoShopHint');
- if(hint) hint.innerHTML = `<b>↑/↓</b> 选择 · <b>F</b>/<b>Enter</b> 购买 · <b>1-6</b> 直购 · <b>Esc</b> 关闭`
+ if(hint) hint.innerHTML = `<b>↑/↓</b> 选择 · <b>F</b>/<b>Enter</b> 购买 · <b>1-5</b> 直购 · <b>Esc</b> 关闭`
    + ` · 从作战货币实时扣费, 购买后立即发放到当前武器备弹`;
  if(list && !list._ammoBound){
   list._ammoBound = true;

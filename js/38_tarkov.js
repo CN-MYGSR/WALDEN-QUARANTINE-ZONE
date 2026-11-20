@@ -114,20 +114,22 @@ if(META.loadout.nvg&&!NVG_DEFS[META.loadout.nvg]) META.loadout.nvg='';
 
 // ---------- 物品通用属性 (统一 API: 武器/护甲/医疗/食物/杂物/背包/NVG) ----------
 function itemSizeOf(key){
-if(WPN_DEFS[key]) return 6;
-if(ARMOR_DEFS[key]) return 4;
-if(HELMET_DEFS[key]) return 3;
+if(PLATE_DEFS[key]) return PLATE_DEFS[key].size||2;
+if(WPN_DEFS[key]) return WPN_DEFS[key].pistol?2:8;   // 长枪 4×2 · 手枪/副武器 1×2
+if(ARMOR_DEFS[key]) return 12;                       // 护甲 3×4
+if(HELMET_DEFS[key]) return 4;                       // 头盔 2×2
 if(HEADSET_DEFS[key]) return 2;
 if(CHEST_DEFS[key]) return CHEST_DEFS[key].size||3;
 if(NVG_DEFS[key]) return NVG_DEFS[key].size||2;
 if(MED_DEFS[key]) return 1;
 if(FOOD_DEFS[key]) return 1;
 if(MISC_DEFS[key]) return MISC_DEFS[key].size||1;
-if(PACK_DEFS[key]) return PACK_DEFS[key].size||5;
+if(PACK_DEFS[key]) return 6;                         // 背包 2×3
 return 1;
 }
 function itemWeightOf(key){
-if(WPN_DEFS[key]){ const d=WPN_DEFS[key]; return d.pistol?1.1:Math.round((2.6+(d.dmg||20)*0.05)*10)/10; }
+if(PLATE_DEFS[key]) return PLATE_DEFS[key].weight||3;
+if(WPN_DEFS[key]){ const base=WPN_DEFS[key], d=(typeof moddedDef==="function"&&moddedDef(key))||base; return Math.max(0.5,(base.pistol?1.1:Math.round((2.6+(base.dmg||20)*0.05)*10)/10)+(d.modWeight||0)); }
 if(ARMOR_DEFS[key]) return ARMOR_DEFS[key].weight||3;
 if(HELMET_DEFS[key]) return HELMET_DEFS[key].weight||2;
 if(HEADSET_DEFS[key]) return HEADSET_DEFS[key].weight||0.4;
@@ -140,6 +142,7 @@ if(PACK_DEFS[key]) return PACK_DEFS[key].weight||1;
 return 0.5;
 }
 function itemPriceOf(key){
+if(PLATE_DEFS[key]) return PLATE_DEFS[key].price||0;
 if(MED_DEFS[key]) return MED_DEFS[key].price;
 if(FOOD_DEFS[key]) return FOOD_DEFS[key].price;
 if(MISC_DEFS[key]) return MISC_DEFS[key].price;
@@ -149,6 +152,7 @@ if(NVG_DEFS[key]) return NVG_DEFS[key].price;
 return ITEM_PRICES[key]||0;
 }
 function itemLabel(key){
+if(PLATE_DEFS[key]) return PLATE_DEFS[key].name;
 if(MED_DEFS[key]) return MED_DEFS[key].name;
 if(FOOD_DEFS[key]) return FOOD_DEFS[key].name;
 if(MISC_DEFS[key]) return MISC_DEFS[key].name;
@@ -163,6 +167,7 @@ if(WPN_DEFS[key]||ARMOR_DEFS[key]||HELMET_DEFS[key]||HEADSET_DEFS[key]) return M
 return 15;
 }
 function itemDescOf(key){
+if(PLATE_DEFS[key]){ const d=PLATE_DEFS[key]; return d.desc+' · 防护等级 '+d.level+' · 占 '+d.size+' 格 · 重 '+d.weight+'kg'; }
 if(MED_DEFS[key]){ const d=MED_DEFS[key]; return d.desc+" · 使用 "+d.utime+"s"+(d.uses>1?" · "+d.uses+" 次":""); }
 if(FOOD_DEFS[key]){ const d=FOOD_DEFS[key]; return d.desc+" · 水+"+d.water+" 食+"+d.food+" · 食用 "+d.utime+"s"; }
 if(MISC_DEFS[key]) return "物资 · 占 "+MISC_DEFS[key].size+" 格 · 重 "+MISC_DEFS[key].weight+"kg · "+MISC_DEFS[key].desc;
@@ -177,6 +182,7 @@ return d?`${d.mode} · 伤害 ${d.dmg} · 弹匣 ${d.mag} / 备弹 ${d.reserve}`
 }
 // 覆盖 37_meta 版本: 全物品统一名称/分类/价格/描述
 function itemName(key){
+if(PLATE_DEFS[key]) return PLATE_DEFS[key].name;
 if(WPN_DEFS[key]) return WPN_DEFS[key].name;
 if(ARMOR_DEFS[key]) return ARMOR_DEFS[key].name;
 if(HELMET_DEFS[key]) return HELMET_DEFS[key].name;
@@ -190,6 +196,7 @@ if(NVG_DEFS[key]) return NVG_DEFS[key].name;
 return '未知物品';
 }
 function itemKind(key){
+if(PLATE_DEFS[key]) return 'plate';
 if(WPN_DEFS[key]) return 'weapon';
 if(ARMOR_DEFS[key]) return 'armor';
 if(HELMET_DEFS[key]) return 'helmet';
@@ -205,6 +212,7 @@ return 'misc';
 function itemPrice(key){ return ITEM_PRICES[key]||itemPriceOf(key); }
 function itemDesc(key){ return itemDescOf(key); }
 function itemIconOf(key){
+if(PLATE_DEFS[key]) return '▣';
 const k=itemKind(key);
 if(k==='armor') return '🛡';
 if(k==='helmet') return '🪖';
@@ -223,6 +231,7 @@ return '📦';
 const TRADE_KEYS=[
 ...Object.keys(FOOD_DEFS),
 ...Object.keys(MED_DEFS),
+...Object.keys(PLATE_DEFS),
 'cig','screwdriver','wrench','disinfectant','creditcard','radio','detonator','phone','dogtag','coffee','gasoline','battery','tools','chip','watch','satphone','docs','gpu','keycard','ledx',
 'packSmall','packAssault','packRaid','packTT45','chest56','chestBH','chestMK3',
 'nvg','nvg_pano','nvg_thermal','pass'
@@ -243,10 +252,10 @@ p.maxHp=BODY_TOTAL_HP+bonus;
 p.hp=p.maxHp;
 p.limbs={head:100,arms:100,torso:100,legs:100};
 p.armorDur=armor.hp||0; p.armorMax=armor.hp||0;
-p.armorResist=armor.resist||0;
+p.armorResist=(armor.resist||0)*0.35;   // 无插板 = 凯夫拉, 减伤很低
  // 头盔: 独立耐久, 只吃头部伤害
  p.helmetDur=(p.helmetDef&&p.helmetDef.hp)||0; p.helmetMax=p.helmetDur;
- p.helmetResist=(p.helmetDef&&p.helmetDef.resist)||0;
+ p.helmetResist=(p.helmetDef&&p.helmetDef.resist||0)*0.6;
 p.bleedLight=0; p.bleedHeavy=0; p.fractures=[]; p.blacked={};
 p.painT=0; p.painPow=0; p.medUseT=0; p.medSel="";
 p.hydration=100; p.satiety=100; p.stimT=0;
@@ -311,18 +320,43 @@ if(!p.alive||matchOver) return;
 if(!p.body) initRaidBody(p,{armor:p.armorDef||{level:0}});
 let target=tarkovPartOf(part,isHead);
 let dmg=Math.max(1,amt);
-if((target==="thorax"||target==="stomach")&&p.armorDur>0&&p.armorResist>0){
-const absorb=dmg*p.armorResist;
-dmg-=absorb;
-p.armorDur=Math.max(0,p.armorDur-absorb*1.25);
-if(p.armorDur<=0&&!p._armorBroke){ p._armorBroke=true; showScorePop("防弹衣已报废"); }
+// 弹种穿深决定穿透概率, 护甲耐久独立衰减至破损
+const _am=(attacker&&attacker._lastAmmo&&(typeof nowT==='undefined'||nowT-(attacker._lastAmmoT||-99)<0.3))
+  ? attacker._lastAmmo : null;
+
+const _pen=_am?(_am.pen==null?(_am.tier|0):_am.pen):1;
+const _armorMul=_am?clamp(_am.armorMul||1,0.2,2.5):1;
+if(target==="thorax"||target==="stomach"){
+  if(p.plateLevel>0&&(p.plateDur==null||p.plateDur>0)){
+    const chance=clamp(0.22+(_pen-p.plateLevel+1)*0.19,0.08,0.88);
+    const pen=Math.random()<chance;
+    if(p.plateDur==null) p.plateDur=p.plateMax||120;
+    p.plateDur=Math.max(0,p.plateDur-dmg*0.12*_armorMul*(pen?0.72:1.18)*(p.plateBreakMul||1));
+    dmg*=pen?0.82:0.20;
+    if(p.plateDur<=0){ p.plateLevel=0; showScorePop('插板已破碎 · 只剩凯夫拉'); }
+  } else if(p.armorDur>0&&p.armorResist>0){
+    // 无插板 = 凯夫拉, 减伤很低
+    const absorb=dmg*p.armorResist*clamp(1-_pen*0.16,0.25,1);
+    dmg-=absorb;
+    p.armorDur=Math.max(0,p.armorDur-absorb*1.25);
+    if(p.armorDur<=0&&!p._armorBroke){ p._armorBroke=true; showScorePop("防弹衣已报废"); }
+  }
  }
- // 头盔: 只吃头部伤害, 耐久单独计算 (打光后头部恢复全额伤害)
- if(target==="head"&&p.helmetDur>0&&p.helmetResist>0){
-  const absorb=dmg*p.helmetResist;
-  dmg-=absorb;
-  p.helmetDur=Math.max(0,p.helmetDur-absorb*1.3);
-  if(p.helmetDur<=0&&!p._helmetBroke){ p._helmetBroke=true; showScorePop("头盔已报废"); }
+ // 头部: 面罩展开时按 3 级面罩结算; 收起走头盔凯夫拉/钢壳
+ if(target==="head"){
+  if(p.faceDown&&p.faceLevel>0&&(p.faceDur==null||p.faceDur>0)){
+    const chance=clamp(0.22+(_pen-p.faceLevel+1)*0.19,0.08,0.88);
+    const pen=Math.random()<chance;
+    if(p.faceDur==null) p.faceDur=p.faceMax||60;
+    p.faceDur=Math.max(0,p.faceDur-dmg*0.14*_armorMul*(pen?0.8:1.15)*(p.faceBreakMul||1));
+    dmg*=pen?0.84:0.24;
+    if(p.faceDur<=0){ p.faceLevel=0; showScorePop('面罩已破碎'); }
+  } else if(p.helmetDur>0&&p.helmetResist>0){
+    const absorb=dmg*p.helmetResist*clamp(1-_pen*0.16,0.25,1);
+    dmg-=absorb;
+    p.helmetDur=Math.max(0,p.helmetDur-absorb*1.3);
+    if(p.helmetDur<=0&&!p._helmetBroke){ p._helmetBroke=true; showScorePop("头盔已报废"); }
+  }
  }
 damageBodyPart(target,dmg,attacker,isHead);
 p.lastDmgT=nowT;
@@ -334,6 +368,36 @@ if(attacker&&attacker.pos){
 const a=Math.atan2(attacker.pos.x-p.pos.x,attacker.pos.z-p.pos.z);
 addDirHit(a);
 }
+}
+function toggleHeadgear(){
+const hg=(typeof RUN!=='undefined'&&RUN)?RUN.headGear:'';
+if(hg==='face'){ if(typeof toggleFaceShield==='function') toggleFaceShield(); return; }
+if(typeof NVG!=='undefined') NVG.toggle();
+}
+// 触屏按钮文案: 本局选面罩就显示"面罩", 选夜视就显示"夜视"
+function syncHeadgearUI(){
+const b=document.getElementById('tNvg'); if(!b) return;
+const face=!!(typeof RUN!=='undefined'&&RUN&&RUN.headGear==='face');
+const lbl=b.querySelector('.tLbl'), ico=b.querySelector('.tIco');
+if(lbl&&lbl.textContent!==(face?'面罩':'夜视')) lbl.textContent=face?'面罩':'夜视';
+if(ico) ico.textContent=face?'▣':'◐';
+b.title=face?'展开/收起面罩':'开关夜视仪';
+}
+function toggleFaceShield(){
+const p=player;
+if(!p||!p.alive||!p.deployed) return;
+const h=HELMET_DEFS[p.helmetKey];
+if(!h||!h.faceShield){ showScorePop('当前头盔没有面罩'); return; }
+if(RUN.headGear!=='face'){ showScorePop('本局未选择面罩 · 部署时勾选面罩'); return; }
+const down=!RUN.faceDown;
+// 面罩展开前先关掉夜视仪 (NVG.toggle 会检查 RUN.faceDown, 所以必须先关)
+if(down&&typeof NVG!=='undefined'&&NVG.active&&NVG.active()){
+  try{ NVG.toggle(); }catch(e){}
+}
+RUN.faceDown=down;
+p.faceDown=down;
+if(typeof syncHeadgearUI==='function') syncHeadgearUI();
+showScorePop(down?'面罩展开 · 头部防弹提升 · 夜视仪不可用':'面罩收起 · 夜视仪恢复可用');
 }
 function damageBodyPart(key,dmg,attacker,isHead){
 const p=player,b=p.body;
@@ -581,6 +645,10 @@ if(L.primary) w+=itemWeightOf(L.primary);
 if(L.secondary) w+=itemWeightOf(L.secondary);
 if(L.armor) w+=itemWeightOf(L.armor);
 if(L.pack) w+=itemWeightOf(L.pack);
+if(L.helmet) w+=itemWeightOf(L.helmet);
+if(L.plate) w+=itemWeightOf(L.plate);
+if(L.headset) w+=itemWeightOf(L.headset);
+if(L.chest) w+=itemWeightOf(L.chest);
 }
 if(player.medItems){ for(const m of player.medItems) w+=itemWeightOf(m.key); }
 if(player.foodItems){ for(const m of player.foodItems) w+=itemWeightOf(m.key); }
@@ -948,6 +1016,7 @@ renderLootPanel();
 renderRaidBag();
 }
 function renderLootPanel(){
+if(typeof renderLootPanelGrid==='function') return renderLootPanelGrid();
 const pnl=el('lootPanel');
 if(!pnl) return;
 if(!LOOT_UI.open||!LOOT_UI.ref){ pnl.classList.add('hidden'); return; }
@@ -988,25 +1057,44 @@ return false;
 // ===================== 背包面板 (Tab) =====================
 // 目的: 1) 背包信息统一收进面板, 不再有左下角常驻 HUD 遮挡状态栏
 //       2) 提供"丢弃物资"机制, 解决只能拿不能扔导致背包塞满的问题
-const BAG_UI={open:false,sel:0};
+const BAG_UI={open:false,sel:0,key:null};
+// 关闭背包后恢复指针锁定 (背包打开期间主动解锁鼠标用于拖拽/旋转)
+function bagRelockPointer(){
+if(typeof TOUCHUI!=='undefined'&&TOUCHUI) return;
+if(!player.alive||!player.deployed||matchOver) return;
+if(typeof lockPointer==='function') lockPointer();
+}
 function bagEntryKeys(){ return Object.keys(RUN.loot).filter(k=>RUN.loot[k]>0); }
 function toggleBagPanel(){
 if(!player.alive||matchOver) return;
 BAG_UI.open=!BAG_UI.open;
 if(typeof bagDisarmDropAll==='function') bagDisarmDropAll();   // 开关面板都清掉"待确认"状态
-if(BAG_UI.open){ BAG_UI.sel=0; lootPanelClose(); }
+if(BAG_UI.open){ BAG_UI.sel=0; BAG_UI.key=bagEntryKeys()[0]||null; lootPanelClose(); }
 renderRaidBag();   // 内部会同步刷新面板, 并隐藏/恢复左下角常驻背包 HUD
-if(BAG_UI.open) AudioSys.click(900,0.2,0.04); else AudioSys.click(600,0.16,0.04);
+if(BAG_UI.open){
+// 打开背包: 释放按键状态 → 取消开镜 → 退出指针锁定, 让鼠标能拖拽/旋转物品
+if(typeof releaseAllInputs==='function') releaseAllInputs();
+player.ads=false;
+try{ if(document.exitPointerLock) document.exitPointerLock(); }catch(e){}
+AudioSys.click(900,0.2,0.04);
+} else {
+if(typeof releaseAllInputs==='function') releaseAllInputs();
+bagRelockPointer();
+AudioSys.click(600,0.16,0.04);
+}
 }
 function bagPanelClose(){
 if(!BAG_UI.open) return;
 BAG_UI.open=false;
+if(typeof releaseAllInputs==='function') releaseAllInputs();
+bagRelockPointer();
 renderRaidBag();   // 内部会隐藏面板并恢复常驻 HUD
 }
 function bagSelMove(d){
 if(!BAG_UI.open) return;
 const ks=bagEntryKeys(); if(!ks.length) return;
 BAG_UI.sel=(BAG_UI.sel+d+ks.length)%ks.length;
+BAG_UI.key=ks[BAG_UI.sel];
 renderBagPanel(); AudioSys.click(1400,0.1,0.03);
 }
 // 丢弃选中物: 会从背包移除; 若是武器/护甲则直接回到仓库(避免误丢高价值装备)
@@ -1057,7 +1145,7 @@ showScorePop('背包放不下换下来的「'+itemLabel(old.key)+'」');
 return false;
 }
 const md=(typeof moddedDef==='function'&&moddedDef(key))||WPN_DEFS[key];
-const slot={key:key,def:md,mag:md.mag,reserve:md.reserve};
+const slot={key:key,def:md,mag:0,reserve:0,ammo:''};
 RUN.loot[key]--;
 if(RUN.loot[key]<=0) delete RUN.loot[key];
 if(old&&old.key&&old.key!==key) RUN.loot[old.key]=(RUN.loot[old.key]||0)+1;
@@ -1093,7 +1181,22 @@ return s+' · <b>G</b> 丢弃 1 个 · <b>Shift+G</b> 全部丢弃(装备类放�
 function bagActKey(){
 const ks=bagEntryKeys();
 if(!ks.length) return null;
+if(BAG_UI.key&&RUN.loot[BAG_UI.key]) return BAG_UI.key;
 return ks[Math.min(BAG_UI.sel,ks.length-1)];
+}
+// 触屏/鼠标通用: 原地旋转选中物品(1x2 <-> 2x1 等)
+function bagRotateSelected(){
+if(!player.alive||matchOver) return false;
+const k=bagActKey(); if(!k) return false;
+const gid=(RUN.grid&&RUN.grid.chest[k])?'bagChest':((RUN.grid&&RUN.grid.pack[k])?'bagPack':'');
+if(!gid) return false;                       // 安全箱等非网格条目没有"旋转"概念
+if(typeof INVGRID!=='undefined'&&INVGRID.rotate&&INVGRID.rotate(gid,k)){
+try{ AudioSys.click(1200,0.18,0.04); }catch(e){}
+renderBagPanel();
+return true;
+}
+showScorePop('旋转后放不下');
+return false;
 }
 // "全部丢弃"不可撤销, 手机上一误触就没了 —— 要点两下确认, 3 秒内没点第二下自动取消
 let bagDropAllArmed=false, bagDropAllTimer=0;
@@ -1104,7 +1207,11 @@ if(!box) return;
 const key=bagActKey();
 // 武器不能进安全箱, 但有"装备到快捷栏"的需求 —— 选中武器时把「存入安全箱」换成两个装备键
 const isWpn=!!(key&&typeof WPN_DEFS!=='undefined'&&WPN_DEFS[key]);
+const isAmmo=!!(key&&typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[key]);
+const usable=!!(key&&(isAmmo||((typeof bagUsableKeys==='function')&&bagUsableKeys().indexOf(key)>=0)));
 let html='';
+if(usable) html+=`<button class="bagAct" data-bact="use">${isAmmo?'装填':'使用'}</button>`;
+if(key) html+=`<button class="bagAct" data-bact="rotate">旋转</button>`;
 if(isWpn){
 html+=`<button class="bagAct eq" data-bact="eq0">装备到主武器</button>`
 +`<button class="bagAct eq" data-bact="eq1">装备到副武器</button>`;
@@ -1130,6 +1237,16 @@ bagDisarmDropAll();
 bagEquipWeapon(key,act==='eq0'?0:1);
 return;
 }
+if(act==='use'){
+bagDisarmDropAll();
+if(typeof useLootFromBag==='function') useLootFromBag(key);
+return;
+}
+if(act==='rotate'){
+bagDisarmDropAll();
+bagRotateSelected();
+return;
+}
 if(act==='secure'){
 // 不在这里预判能不能放: 让 secureAdd 自己给出原因(只能放小件 / 安全箱已满)
 if(secureAdd(key)){ bagDisarmDropAll(); AudioSys.click(1000,0.2,0.05); renderBagPanel(); }
@@ -1147,6 +1264,7 @@ return;
 });
 }
 function renderBagPanel(){
+if(typeof renderBagPanelGrid==='function') return renderBagPanelGrid();
 const pnl=el('bagPanel');
 if(!pnl) return;
 if(!BAG_UI.open||!player.alive){ pnl.classList.add('hidden'); return; }
@@ -1233,6 +1351,7 @@ function bagPanelKey(code,shift){
 if(!BAG_UI.open) return false;
 if(code==='ArrowUp'){ bagSelMove(-1); return true; }
 if(code==='ArrowDown'){ bagSelMove(1); return true; }
+if(code==='KeyR'){ bagRotateSelected(); return true; }
 if(code==='KeyG'){ if(shift) bagDropAllOfSelected(); else bagDropSelected(false); return true; }
 // 面板内 1/2 = 把选中的武器装备到主/副武器槽。
 // 选中项不是武器时不消费这两个键, 让它们照常去切枪。
@@ -1368,6 +1487,8 @@ L.meds=Array.isArray(L.meds)?L.meds:['','',''];
 while(L.meds.length<3) L.meds.push('');
 L.foods=Array.isArray(L.foods)?L.foods:['',''];
 while(L.foods.length<2) L.foods.push('');
+L.ammo=Array.isArray(L.ammo)?L.ammo:['',''];
+while(L.ammo.length<2) L.ammo.push('');
 const fill=(sel,cur,kind,allowEmpty,defList)=>{
 if(!sel) return;
 sel.innerHTML='';
@@ -1407,6 +1528,25 @@ if(!s) return;
 fill(s,L.foods[i],'food',true);
 s.onchange=()=>{ L.foods[i]=s.value; saveMeta(); updateConsumSummary(); };
 });
+// 弹药: 从仓库(owned + 战利品)选 2 盒带入局内, 局内按 E 装填
+['ammoSel1','ammoSel2'].forEach((id,i)=>{
+const s=el(id);
+if(!s) return;
+s.innerHTML='';
+const o0=document.createElement('option'); o0.value=''; o0.textContent='— 不带 —'; s.appendChild(o0);
+const ammoKeys=(typeof AMMO_DEFS!=='undefined')?Object.keys(AMMO_DEFS):[];
+for(const k of ammoKeys){
+const n=(META.owned[k]||0)+(META.loot[k]||0);
+if(n<=0) continue;
+const o=document.createElement('option'); o.value=k;
+o.textContent=`${itemLabel(k)} ×${n} · ${AMMO_DEFS[k].rounds}发 · T${AMMO_DEFS[k].tier}`;
+s.appendChild(o);
+}
+const cur=L.ammo[i];
+s.value=(cur&&((META.owned[cur]||0)+(META.loot[cur]||0)>0))?cur:'';
+if(s.selectedIndex<0) s.selectedIndex=0;
+s.onchange=()=>{ L.ammo[i]=s.value; saveMeta(); updateConsumSummary(); };
+});
 // 撤离通行证槽: 仓库里有证才能携带。携带后才算「持证」, 才能在「港口」登船离开禁区。
 const psel=el('passSelect');
 if(psel){
@@ -1438,7 +1578,7 @@ const L=META.loadout;
 const cost=insuranceCost();
 const _scav=!!(TEAM_FACTION[player.team]&&TEAM_FACTION[player.team].scav);
 const _passN=ownedCount('pass');
-sum.innerHTML=`背包: ${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].name:'Flyye MBSS 背包'} (${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].slots:16}格) · 医疗: ${L.meds.filter(Boolean).length||'无'} · 食物: ${L.foods.filter(Boolean).length||'无'}${RUN.insureWanted&&!_scav?` · 保险 ¥${formatMoney(cost)}`:''}`
+sum.innerHTML=`背包: ${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].name:'Flyye MBSS 背包'} (${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].slots:16}格) · 医疗: ${L.meds.filter(Boolean).length||'无'} · 食物: ${L.foods.filter(Boolean).length||'无'} · 弹药: ${(L.ammo||[]).filter(Boolean).length||'无'}盒${RUN.insureWanted&&!_scav?` · 保险 ¥${formatMoney(cost)}`:''}`
  +(_passN>0?(L.pass?'<br><span style="color:#d8b878">撤离通行证：已携带 · 在「港口」登船成功时消耗，解锁结局与重生</span>':'<br><span style="color:#9a9a9a">撤离通行证：未携带 · 带在身上才能在「港口」登船离开禁区</span>'):'')
  +(_scav?'<br><span style="color:#d8d8d8">拾荒者出击 · 主武器每局从二战兵器里随机抽取, 仓库里的主武器不会带出</span>':'');
 }
@@ -1461,15 +1601,32 @@ META.owned[k]--;
 RUN.foodItems.push({key:k});
 }
 }
+// 弹药盒: 每局第一次部署时从仓库扣除并放进背包(之后重生不重复发放)
+L.ammo=Array.isArray(L.ammo)?L.ammo:['',''];
+if(!RUN._loadoutApplied){
+for(const k of L.ammo){
+if(!k||typeof AMMO_DEFS==='undefined'||!AMMO_DEFS[k]) continue;
+if((META.owned[k]||0)>0) META.owned[k]--;
+else if((META.loot[k]||0)>0) META.loot[k]--;
+else continue;
+RUN.loot[k]=(RUN.loot[k]||0)+1;
+}
+RUN._loadoutApplied=true;
+}
 // 2026-09-19: L.nvg 由布尔改为**型号键** ('' = 不带)。老档在 normalizeMeta 里迁移。
 RUN.nvgBrought=false;
 RUN.nvgKey='';
 const primaryKey=L.primary;
 const _nvgWant=(typeof L.nvg==='string')?L.nvg:'';
-if(primaryKey&&getModChoice(primaryKey,'gear')==='gear_nvg'&&_nvgWant&&ownedCount(_nvgWant)>0){
+if(RUN.faceDown&&_nvgWant){
+ if(typeof showScorePop==='function') showScorePop('面罩已展开 · 本局夜视仪不可用');
+}
+if(!RUN.faceDown&&primaryKey&&getModChoice(primaryKey,'gear')==='gear_nvg'&&_nvgWant&&ownedCount(_nvgWant)>0){
 RUN.nvgBrought=true;
 RUN.nvgKey=_nvgWant;
 }
+RUN.headGear=RUN.faceDown?'face':(RUN.nvgBrought?'nvg':'');
+if(typeof syncHeadgearUI==='function') syncHeadgearUI();
 // 撤离通行证: 携带才生效。不在这里扣除 —— 只有真的在港口登船成功才消耗
 // (见 39_quests.consumeExtractionPass; 阵亡时证还在仓库里, 不额外惩罚)。
 RUN.passBrought=!!L.pass&&ownedCount('pass')>0;
@@ -1522,7 +1679,10 @@ setModChoice(key,slot,mid);
 // 改装必须立刻反映到"手上这把枪": 重建视图模型 + 刷新槽位数值。
 // 否则玩家在暂停菜单里改完件回到游戏, 枪还是旧模型(mesh 数不变),
 // 而且 dmg/后坐/弹匣容量 这些属性也仍然是部署时的旧值。
-try{ if(typeof applyModsToLiveWeapon==='function') applyModsToLiveWeapon(key); }catch(e){}
+let live=false;
+try{ if(typeof applyModsToLiveWeapon==='function') live=applyModsToLiveWeapon(key)===true; }catch(e){}
+// 改的是仓库里的枪(没拿在手上)时, 模型要等部署/切枪才重建 —— 明确提示, 避免误以为没生效
+if(!live) showScorePop('改装已保存 · 装备/切到该武器后模型生效');
 renderArmory('workbench');
 return true;
 }
@@ -1560,6 +1720,11 @@ const cur=WORKBENCH_KEY&&ownedCount(WORKBENCH_KEY)>0?WORKBENCH_KEY:(META.loadout
 WORKBENCH_KEY=cur;
 const avail=getModSlots(cur);
 rows+=`<div class="arRow"><div class="arBody"><div class="arName">${itemName(cur)}</div><div class="arDesc">${itemDesc(cur)}</div><div class="arOwned">当前改装: ${modDisplayName(cur)} · 整套市价 ¥${formatMoney(modTotalCost(cur))}</div></div></div>`;
+// 夜视仪占用战术配件槽时, 反射/变倍镜会被 effectiveOptic 强制收起 —— 必须明确告知,
+// 否则玩家会以为"装了镜但模型没变"。
+if(getModChoice(cur,'gear')==='gear_nvg'){
+rows+=`<div class="arRow" style="border-color:#c8a03c"><div class="arBody"><div class="arName" style="color:#e0c070">夜视仪已占用战术配件槽</div><div class="arDesc">反射镜 / 变倍镜会被强制收起，只保留机瞄或夜视瞄具。卸下夜视仪后自动恢复。</div></div></div>`;
+}
 ['optic','muzzle','mag','stock','grip','gear','light'].forEach(slot=>{
 const list=avail[slot]||[];
 if(!list.length) return;
@@ -1569,7 +1734,8 @@ list.forEach(mid=>{
 const m=ALL_MODS[mid];
 const sel=mid===curMid;
 let disabled=false,tip=m.desc||'';
-if(slot==='optic'&&OPTIC_BLOCKED.includes(mid)&&curMid==='gear_nvg'){ disabled=true; tip='夜视仪使用中，光学瞄具不可用'; }
+if(slot==='optic'&&OPTIC_BLOCKED.includes(mid)&&getModChoice(cur,'gear')==='gear_nvg'){ disabled=true; tip='夜视仪占用战术配件槽，光学瞄具暂时不可用'; }
+if(slot==='optic'&&WPN_DEFS[cur]&&WPN_DEFS[cur].scoped){ disabled=true; tip='该武器自带瞄准镜，外置瞄具不生效'; }
 if(slot==='optic'&&mid==='optic_nvg'&&getModChoice(cur,'gear')!=='gear_nvg'){ disabled=true; tip='需先在战术配件槽装入夜视仪'; }
 if(slot==='gear'&&mid==='gear_nvg'&&ownedNvgList().length<=0){ disabled=true; tip='需要仓库拥有夜视仪 (市集可购)'; }
 const costStr=m.cost?` ¥${formatMoney(m.cost)}`:'';

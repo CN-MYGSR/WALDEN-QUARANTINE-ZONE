@@ -17,6 +17,14 @@ function shopApplyFilter(){
   r.style.display=hit?'':'none';
   if(hit) shown++;
  }
+ // 网格库存 (65_invgrid): 用 tile 的 data-name 过滤
+ const tiles=list.querySelectorAll('.invTile');
+ for(const t of tiles){
+  const text=(t.dataset.name||'').toLowerCase();
+  const hit=!q||text.indexOf(q)>=0;
+  t.style.display=hit?'':'none';
+  if(hit) shown++;
+ }
  let empty=list.querySelector('.arEmpty');
  if(!q){ if(empty) empty.remove(); return; }
  if(shown===0){

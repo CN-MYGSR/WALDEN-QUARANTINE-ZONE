@@ -1,6 +1,6 @@
 // 直接量化"中央黑块": 对枪体掩码做连通域分析, 找出包含屏幕正中心(或最接近中心)的那一块,
 // 报告它的像素尺寸、占屏比例、平均亮度 —— 这就是玩家看到的堵住准星的黑色几何。
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9391;
 const OUT = 'D:/Escape from TakeFu/outputs';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }

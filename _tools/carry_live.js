@@ -1,5 +1,5 @@
 // 实测高低姿态切换: 通过真实 InputActions 路径验证
-const http=require('http'); const WS=require('ws');
+const http=require('http'); const WS=require('./ws');
 (async()=>{
 const list=await new Promise(r=>http.get('http://127.0.0.1:9222/json/list',res=>{let d='';res.on('data',c=>d+=c);res.on('end',()=>r(JSON.parse(d)))}));
 const page=list.find(t=>t.type==='page');

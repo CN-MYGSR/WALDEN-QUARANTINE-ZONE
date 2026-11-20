@@ -1,6 +1,6 @@
 // 实验室天花板覆盖探针: 确认整个设施内部都有顶板, 且没有多层共面(会 z-fighting)
 // 用法: node _tools/labceil_probe.js
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9430, URL = 'http://127.0.0.1:8123/index.html';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

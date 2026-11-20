@@ -42,6 +42,8 @@ if(n) setTimeout(()=>showScorePop('保险赔付 · 返还 '+n+' 件装备入库'
 }
 // 主菜单导航
 const showPanel=(id)=>{
+// 离开剧情面板就停掉简报配音, 避免声音跟着菜单跑
+if(typeof VO!=='undefined'&&id!=='mStory') VO.stop();
 el('mHome').classList.toggle('hidden',id!=='mHome');
 // 注意: 用 el(pid) 的存在性判断 —— 主页的「选择战役」面板已删除, 但 _reg.html 等旧副本可能还在,
 // 直接 el(pid).classList 会在元素缺失时抛错并让整个主菜单导航失效。
@@ -223,6 +225,11 @@ refreshArsenalStats();
 }
 el('deployBtn').onclick=()=>{
 if(respawnCd>0||matchOver) return;
+// 剧情专用地图只能从主菜单「剧情模式」进入
+if(typeof storyMapBlocked==='function'&&storyMapBlocked()){
+if(typeof showScorePop==='function') showScorePop('剧情地图只能在剧情模式进入 —— 请先选一张沙盒地图');
+return;
+}
 consumeRaidStart();      // 首次部署 → 在这里建局; 之后从暂停菜单再进来则什么都不做
 deployPlayer();
 };
@@ -231,6 +238,8 @@ document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
 lockPointer();
 };
 renderer.domElement.addEventListener('click',()=>{
+// 背包面板打开时鼠标已解锁, 点画布不能把指针锁回去 (否则无法拖拽物品)
+if(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open) return;
 if(player.alive&&player.deployed&&!pointerLocked&&!matchOver) lockPointer();
 });
 }
@@ -369,10 +378,25 @@ if(headset&&headset.earMuff&&helmetKey==='helm6'){
   headset=null; headsetKey='';
   if(typeof showScorePop==='function') showScorePop('耳罩式耳机与 Altyn 头盔冲突 · 本局未佩戴耳机');
 }
+// 插板: 护甲本身只有凯夫拉; 必须有插板才有等级防护
+const plateKey=(armorKey&&META.loadout.plate&&PLATE_DEFS[META.loadout.plate]&&ownedCount(META.loadout.plate)>0)?META.loadout.plate:'';
+const plate=PLATE_DEFS[plateKey]||null;
+const faceDown=!!(helmet.faceShield&&META.loadout.faceShield);
+RUN.faceDown=faceDown;
+RUN.headGear=faceDown?'face':'';
+if(typeof syncHeadgearUI==='function') syncHeadgearUI();
+p.plateKey=plateKey;
+p.plateLevel=plate?plate.level:0;
+p.plateBreakMul=plate?plate.breakMul:1;
+p.plateDur=plate?(plate.durability||120):0; p.plateMax=p.plateDur;
+p.faceDown=faceDown;
+p.faceLevel=3;                 // 面罩本身是 3 级; 只有展开时才参与结算
+p.faceBreakMul=1;
+p.faceDur=helmet.faceShield?60:0; p.faceMax=p.faceDur;
 // 血量上限 = 全身总血量 440 (+ 高级护甲的胸甲加成), 随后由 initRaidBody 按部位重写
 p.maxHp=(typeof BODY_TOTAL_HP!=='undefined'?BODY_TOTAL_HP:440)+((armor.level>=4)?8:((armor.level>=2)?4:0));
-p.armorKey=armorKey; p.armorDef=armor; p.armorResist=armor.resist;
-p.helmetKey=helmetKey; p.helmetDef=helmet; p.helmetResist=helmet.resist;
+p.armorKey=armorKey; p.armorDef=armor; p.armorResist=armor.resist*0.35;   // 无板=凯夫拉
+p.helmetKey=helmetKey; p.helmetDef=helmet; p.helmetResist=helmet.resist*0.6;
 p.helmetDur=helmet.hp||0; p.helmetMax=helmet.hp||0;
 p.headsetKey=headsetKey; p.headsetDef=headset;
 // 把听力档案交给音频层 (02_audio): 范围 / 放大 / 环境音压制
@@ -381,7 +405,6 @@ p.hp=p.maxHp; p.alive=true; p.deployed=true; p.crouch=false; p.prone=false; p.ch
 p.limbs={head:100,arms:100,torso:100,legs:100};
 p.stamina=1; p.suppressV=0; p.bloom=0;
 p.ads=false; p.holdBreath=false; VM.adsBlend=0;
-document.getElementById('scopeOv').style.display='none';
 p.yaw=Math.atan2(-sx,-sz); p.pitch=0;
 let primaryKey=META.loadout.primary;
 // SCAV 拾荒者: 主武器由 ensureScavLoadout() 每局随机, 不走仓库校验 (随机到的枪不需要玩家拥有)
@@ -401,11 +424,11 @@ if(!_scavL&&(!primaryKey||ownedCount(primaryKey)<=0)){
 let secondaryKey=META.loadout.secondary;
 if(secondaryKey===primaryKey||ownedCount(secondaryKey)<=0) secondaryKey='';
 // 同步 SCAV 本局配装: 背包容量/重量/保险/掉落判定都读 raidLoadout() (见 38_tarkov)
-if(_scavL){ _scavL.primary=primaryKey; _scavL.secondary=secondaryKey; _scavL.armor=armorKey; _scavL.helmet=helmetKey; _scavL.headset=headsetKey; _scavL.pack=META.loadout.pack||'packSmall'; _scavL.chest=META.loadout.chest||''; }
+if(_scavL){ _scavL.primary=primaryKey; _scavL.secondary=secondaryKey; _scavL.armor=armorKey; _scavL.plate=plateKey; _scavL.helmet=helmetKey; _scavL.headset=headsetKey; _scavL.pack=META.loadout.pack||'packSmall'; _scavL.chest=META.loadout.chest||''; }
 const wkeys=[primaryKey,secondaryKey].filter(Boolean);
 p.slots=wkeys.map(k=>{
 const md=moddedDef(k)||WPN_DEFS[k];
-return {key:k,def:md,mag:md.mag,reserve:md.reserve};
+return {key:k,def:md,mag:0,reserve:0,ammo:''};
 });
 p.curSlot=0; p.curW=p.slots[0];
 // 投掷物自费: 这里不再按兵种免费发放, 实际数量由 applyDeployLoadout / deployPlayer 从带入量写入
@@ -467,6 +490,13 @@ function clearRaidActors(){
  if(typeof CORPSES!=='undefined'&&CORPSES.length) CORPSES.length=0;
 }
 function startMatch(){
+// 剧情专用地图只能从主菜单「剧情模式」进入 —— 沙盒不给建局
+if(typeof storyMapBlocked==='function'&&storyMapBlocked()){
+  if(typeof showScorePop==='function') showScorePop('剧情地图只能在剧情模式进入 —— 请先选一张沙盒地图');
+  return;
+}
+// 新的一局: 允许 applyDeployLoadout 发放带入的弹药盒(重生时不重复)
+RUN._loadoutApplied=false;
 clearRaidActors();
 // 剧情模式: 装载本章目标与事件 (没走剧情时是 no-op)
 if(typeof storyApplyChapter==='function') storyApplyChapter();

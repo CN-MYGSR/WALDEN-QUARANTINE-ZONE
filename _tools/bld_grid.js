@@ -2,7 +2,7 @@
 // 用法: node _tools/bld_grid.js <campaignIdx> <kind> [buildingIndex]
 //   kind: shed / warehouse / office / apartment / rowhouse / shopfront
 // 输出: 每层一张网格图 + 该层阻挡体清单(局部坐标/高度区间)
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9419, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 const KIND = process.argv[3] || 'shed';

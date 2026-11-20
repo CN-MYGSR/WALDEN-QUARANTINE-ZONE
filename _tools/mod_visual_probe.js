@@ -2,7 +2,7 @@
 //  1) buildGunModel 在不同改装下是否真的多出几何体
 //  2) 改件后如果不重新 vmEquip, 手上的枪是否还是旧模型
 //  3) 军械库/工坊在局内是否可打开(决定 bug 的触发场景)
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9396;
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

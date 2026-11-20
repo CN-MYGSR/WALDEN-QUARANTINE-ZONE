@@ -13,15 +13,22 @@ const ARMOR_DEFS={
  armor5:{name:'Hexatac HPC 插板背心',level:5,hp:60,resist:0.22,weight:5.0,price:3200,color:0x1f1f1f},
  armor6:{name:'6B43 屏障-Sh 防弹衣',level:6,hp:76,resist:0.26,weight:6.5,price:4800,color:0x2a2f28}
 };
+// 插板: 护甲本身只有凯夫拉, 必须插板才有等级防护
+// level  = 插板防护等级(1-4); breakMul = 被子弹削级的倍率(陶瓷碎得快)
+const PLATE_DEFS={
+ plate_steel:{name:'钢板', level:3, durability:180, breakMul:1.0, weight:4.2, price:650, size:2, desc:'3 级 · 高耐久 · 重量大'},
+ plate_ti:{name:'钛板', level:3, durability:125, breakMul:1.0, weight:2.6, price:950, size:2, desc:'3 级 · 重量轻 · 价格高'},
+ plate_ceramic:{name:'陶瓷板', level:4, durability:95, breakMul:1.3, weight:3.0, price:1300, size:2, desc:'4 级 · 防护最高 · 碎得最快'}
+};
 // 没穿护甲时玩家躯干用的颜色 (2026-09-19 需求: 「没有护具则为游骑兵黄」)
 const RANGER_YELLOW=0xc8a03c;
 const HELMET_DEFS={
- helm1:{name:'SSh-68 钢盔',level:1,hp:15,resist:0.08,weight:1.1,price:380},
- helm2:{name:'PSh-97 头盔',level:2,hp:26,resist:0.12,weight:1.7,price:820},
- helm3:{name:'6B47 头盔',level:3,hp:40,resist:0.16,weight:2.3,price:1450},
- helm4:{name:'FAST MT 头盔',level:4,hp:54,resist:0.20,weight:2.9,price:2500},
- helm5:{name:'Team Wendy EXFIL 头盔',level:5,hp:70,resist:0.25,weight:3.5,price:3900},
- helm6:{name:'Altyn 防弹头盔 + Maska 1Sch 面罩',level:6,hp:90,resist:0.32,weight:4.8,price:6000}
+ helm1:{name:'SSh-68 钢盔',level:1,hp:15,resist:0.08,weight:1.1,price:380,faceShield:true},
+ helm2:{name:'PSh-97 头盔',level:2,hp:26,resist:0.12,weight:1.7,price:820,faceShield:true},
+ helm3:{name:'6B47 头盔',level:3,hp:40,resist:0.16,weight:2.3,price:1450,faceShield:true},
+ helm4:{name:'FAST MT 头盔',level:4,hp:54,resist:0.20,weight:2.9,price:2500,faceShield:true},
+ helm5:{name:'Team Wendy EXFIL 头盔',level:5,hp:70,resist:0.25,weight:3.5,price:3900,faceShield:true},
+ helm6:{name:'Altyn 防弹头盔 + Maska 1Sch 面罩',level:6,hp:90,resist:0.32,weight:4.8,price:6000,faceShield:true}
 };
 // ===== 耳机 (2026-09-19) =====
 // range   = 听力范围(米): 能听到敌人脚步的最大距离 (不戴耳机 = 40m)
@@ -237,6 +244,7 @@ function mergeRunLoot(){
 function formatMoney(n){ return Number(n||0).toLocaleString('zh-CN'); }
 function ownedWeaponList(){ return Object.keys(META.owned).filter(k=>WPN_DEFS[k]&&META.owned[k]>0); }
 function ownedArmorList(){ return Object.keys(META.owned).filter(k=>ARMOR_DEFS[k]&&META.owned[k]>0); }
+function ownedPlateList(){ return Object.keys(META.owned).filter(k=>PLATE_DEFS[k]&&META.owned[k]>0); }
 function ownedHelmetList(){ return Object.keys(META.owned).filter(k=>HELMET_DEFS[k]&&META.owned[k]>0); }
 function ownedHeadsetList(){ return Object.keys(META.owned).filter(k=>HEADSET_DEFS[k]&&META.owned[k]>0); }
 function firstOwnedWeapon(){
@@ -300,7 +308,7 @@ function sellAllLoot(){
  renderArmory(ARMORY_TAB||'loot');
 }
 // 可选槽位允许置空 (下拉里的「不携带 / 不佩戴」), 否则选了完全没反应
-const OPTIONAL_LOADOUT_SLOTS=['secondary','headset','chest','nvg','pass'];
+const OPTIONAL_LOADOUT_SLOTS=['secondary','headset','chest','nvg','pass','plate'];
 function setLoadout(slot,key){
  if(!key&&OPTIONAL_LOADOUT_SLOTS.indexOf(slot)<0) return;
  META.loadout[slot]=key;
@@ -354,6 +362,25 @@ function refreshLoadoutSelects(){
   aSel.value=META.loadout.armor||'';
   aSel.onchange=()=>setLoadout('armor',aSel.value);
  }
+ // 插板: 护甲只有凯夫拉, 必须选一块板才有等级防护
+ const plSel=el('plateSelect');
+ if(plSel){
+  if(!META.loadout.plate||!PLATE_DEFS[META.loadout.plate]||ownedCount(META.loadout.plate)<=0) META.loadout.plate='';
+  plSel.innerHTML='';
+  const _noPlate=document.createElement('option');
+  _noPlate.value=''; _noPlate.textContent='— 无插板（凯夫拉 · 防护较差）—';
+  plSel.appendChild(_noPlate);
+  for(const k of ownedPlateList()){
+   const d=PLATE_DEFS[k];
+   const o=document.createElement('option');
+   o.value=k;
+   o.textContent=`${d.name} · ${d.level}级 · 占 ${d.size} 格 · ¥${formatMoney(itemSellPrice(k))}`;
+   o.selected=k===META.loadout.plate;
+   plSel.appendChild(o);
+  }
+  plSel.value=META.loadout.plate||'';
+  plSel.onchange=()=>{ META.loadout.plate=plSel.value; saveMeta(); refreshLoadoutSelects(); };
+ }
  const hSel=el('helmetSelect');
  if(hSel){
   hSel.innerHTML='';
@@ -365,6 +392,20 @@ function refreshLoadoutSelects(){
   }
   hSel.value=META.loadout.helmet||'';
   hSel.onchange=()=>setLoadout('helmet',hSel.value);
+ }
+ // 面罩: 只有带面罩的头盔可用; 展开后禁夜视
+ const fChk=el('faceShieldChk');
+ if(fChk){
+  const hd=HELMET_DEFS[META.loadout.helmet];
+  const can=!!(hd&&hd.faceShield);
+  const nvgSel=!!META.loadout.nvg;
+  // 面罩与夜视仪二选一: 已选夜视则面罩强制收起/禁用
+  if(nvgSel&&META.loadout.faceShield){ META.loadout.faceShield=false; saveMeta(); }
+  if(!can&&META.loadout.faceShield){ META.loadout.faceShield=false; saveMeta(); }
+  fChk.disabled=!can||nvgSel;
+  fChk.checked=can&&!nvgSel&&!!META.loadout.faceShield;
+  fChk.title=!can?'当前头盔没有面罩':(nvgSel?'本局已选择夜视仪，不能同时戴面罩':'展开后提升头部防弹');
+  fChk.onchange=()=>{ META.loadout.faceShield=can&&!nvgSel&&fChk.checked; if(META.loadout.faceShield) META.loadout.nvg=''; saveMeta(); refreshLoadoutSelects(); };
  }
  const eSel=el('headsetSelect');
  if(eSel){
@@ -418,7 +459,12 @@ function refreshLoadoutSelects(){
    nSel.appendChild(o);
   }
   if(!META.loadout.nvg) nSel.value='';
-  nSel.onchange=()=>setLoadout('nvg',nSel.value);
+  nSel.onchange=()=>{ if(nSel.value){ META.loadout.faceShield=false; } setLoadout('nvg',nSel.value); };
+  const _faceDown=!!(META.loadout.faceShield&&HELMET_DEFS[META.loadout.helmet]&&HELMET_DEFS[META.loadout.helmet].faceShield);
+  if(_faceDown){
+   nSel.disabled=true; nSel.title='面罩展开时不能使用夜视仪';
+   if(META.loadout.nvg){ META.loadout.nvg=''; saveMeta(); nSel.value=''; }
+  } else { nSel.disabled=false; nSel.title=''; }
  }
  const sum=el('loadoutSummary');
  if(sum){
@@ -434,8 +480,11 @@ function refreshLoadoutSelects(){
   const ch=_ch?(_ch.name+' · '+_ch.slots+'格'):'未装备';
   const _nv=(typeof NVG_DEFS!=='undefined')?NVG_DEFS[META.loadout.nvg]:null;
   const nv=_nv?_nv.name:'未携带';
+  const _pl=PLATE_DEFS[META.loadout.plate];
+  const pl=_pl?(_pl.name+' Lv'+_pl.level):'无插板（凯夫拉）';
+  const fs=(META.loadout.faceShield&&HELMET_DEFS[META.loadout.helmet]&&HELMET_DEFS[META.loadout.helmet].faceShield)?'展开（禁夜视）':'收起';
   const _conf=(_hs&&_hs.earMuff&&META.loadout.helmet==='helm6');
-  sum.innerHTML=`<b>主武器:</b> ${p} · <b>副武器:</b> ${s} · <b>防弹衣:</b> ${a} · <b>头盔:</b> ${h} · <b>耳机:</b> ${hs}`
+  sum.innerHTML=`<b>主武器:</b> ${p} · <b>副武器:</b> ${s} · <b>防弹衣:</b> ${a} · <b>插板:</b> ${pl} · <b>头盔:</b> ${h} · <b>面罩:</b> ${fs} · <b>耳机:</b> ${hs}`
    +` · <b>胸挂:</b> ${ch} · <b>夜视:</b> ${nv}`
    +(_conf?'<div style="color:#e0b080;font-size:12px;margin-top:4px">⚠ 该耳机是耳罩式，和 Altyn 头盔冲突 —— 出击时不会生效，请改用 Peltor TEP-300 战术耳塞</div>':'');
    +(scav?'<div style="color:#d8b878;font-size:12px;margin-top:4px">拾荒者出击 · 主武器每局随机, 不带仓库主武器 / 无保险 / 阵亡不掉落仓库装备</div>':'');

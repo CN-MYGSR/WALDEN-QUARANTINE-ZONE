@@ -1,6 +1,6 @@
 'use strict';
 const AudioSys = (() => {
-let ctx=null, master=null, comp=null, noiseBuf=null;
+let ctx=null, master=null, comp=null, noiseBuf=null, duckG=null;
 let inited=false;
 let ambBus=null;   // 环境音总线: 耳机降噪作用在这里 (风/雨/鸟/远处机枪)
 // 听力档案 (由 29_menus 部署时按耳机写入, 见 HEADSET_DEFS)
@@ -14,7 +14,9 @@ ctx = new (window.AudioContext||window.webkitAudioContext)();
 comp = ctx.createDynamicsCompressor();
 comp.threshold.value=-18; comp.ratio.value=6; comp.attack.value=0.002; comp.release.value=0.2;
 master = ctx.createGain(); master.gain.value = SETTINGS.vol;
-comp.connect(master); master.connect(ctx.destination);
+// 音效 duck 通道: 配音播放时只压低 comp(音效/环境), 人声走 master, 不受影响
+duckG = ctx.createGain(); duckG.gain.value = 1;
+comp.connect(duckG); duckG.connect(master); master.connect(ctx.destination);
 ambBus = ctx.createGain(); ambBus.gain.value = HEAR.ambient; ambBus.connect(comp);
 const len = ctx.sampleRate*2;
 noiseBuf = ctx.createBuffer(1,len,ctx.sampleRate);
@@ -23,6 +25,10 @@ for(let i=0;i<len;i++) d[i]=Math.random()*2-1;
 startAmbient();
 }
 function setVol(v){ if(master) master.gain.value=v; }
+function setDuck(k){ if(duckG) duckG.gain.value=clamp(k,0,1); }
+function duckLevel(){ return duckG?duckG.gain.value:1; }
+function ac(){ return ctx; }
+function masterOut(){ return master; }
 function resume(){ if(ctx&&ctx.state==='suspended') ctx.resume(); }
 function noiseSrc(){ const s=ctx.createBufferSource(); s.buffer=noiseBuf; s.loop=true; return s; }
 function spatial(dist, maxD=180, pw=2){
@@ -347,5 +353,5 @@ function setHearing(p){
 HEAR={ range:(p&&p.range)||0, amp:(p&&p.amp)||1, ambient:(p&&p.ambient)||1 };
 if(ambBus) ambBus.gain.value = HEAR.ambient;
 }
-return { init, gunshot, explosion, click, metalSlide, ping, footstep, whizz, ricochet, hurt, hitmarkSnd, nadeBounce, cannon, flakPop, createEngine, setVol, resume, mortarThunk, setHearing };
+return { init, gunshot, explosion, click, metalSlide, ping, footstep, whizz, ricochet, hurt, hitmarkSnd, nadeBounce, cannon, flakPop, createEngine, setVol, setDuck, duckLevel, ac, masterOut, resume, mortarThunk, setHearing };
 })();

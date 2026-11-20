@@ -126,6 +126,7 @@ void main(){
       if(!player||!player.alive) return false;
       if(RUN&&!RUN.nvgBrought) return false;
       if(RUN&&!RUN.nvgKey) return false;      // 没带型号 = 没夜视仪
+      if(RUN&&RUN.faceDown) return false;     // 面罩展开: 夜视仪不可用
       // 剧情配装: 夜视仪由章节直接发放, 不必在工坊给主武器装支架
       // ⚠️ storyNvgGranted() 内部要求 SRAID.live → 沙盒局拿不到 (RUN 字段由 applyDeployLoadout 写)
       if(typeof storyNvgGranted==='function'&&storyNvgGranted()) return true;
@@ -136,6 +137,8 @@ void main(){
   }
 
   function toggle(){
+    if(RUN&&RUN.headGear==='face'){ showScorePop('本局选择的是面罩 · 未携带夜视仪'); return; }
+    if(RUN&&RUN.faceDown){ showScorePop('面罩已展开 · 先收起面罩才能用夜视仪'); return; }
     if(!owned()){ showScorePop('未携带夜视仪 (部署时选一型 + 工坊装入战术配件槽)'); return; }
     init();
     st.active=!st.active;

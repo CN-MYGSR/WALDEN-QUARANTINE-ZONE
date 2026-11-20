@@ -1,6 +1,6 @@
 // 导航地图可视化: 把 NAV 的 2m 通行网格按 4m 降采样打印成 ASCII
 // '#'=占用  '.'=通行且从己方入口可达  'o'=通行但不可达  'B'=基地0 '1'=基地1 'E'=撤离点
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9398, URL = 'http://127.0.0.1:8123/index.html';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

@@ -10,6 +10,12 @@ endD=sr.t;
 const hitP=V3(origin.x+dir.x*sr.t,origin.y+dir.y*sr.t,origin.z+dir.z*sr.t);
 bloodFX(hitP);
 let dmg=def.dmg*(sr.head?def.headMul:1);
+// 弹种: 0 RIP / 1 普通 / 2 M855 / 3 M995 / 4 AP —— 决定肉体伤害与穿甲
+const _AD=(typeof AMMO_DEFS!=='undefined')?AMMO_DEFS:null;
+const _am=_AD?((shooter.isPlayer?_AD[shooter.curW&&shooter.curW.ammo]:_AD[shooter.ammoKey])||_AD.ammo_std):null;
+if(_am) dmg*=(_am.dmgMul||1);
+shooter._lastAmmo=_am;
+shooter._lastAmmoT=(typeof nowT!=='undefined')?nowT:0;
 if(!shooter.isPlayer) dmg*=EFF_DIFF.dmgMul*(shooter.dmgMul||1);
 // 开发者控制台的伤害倍率 (window.DEV 由 52_devconsole 挂上, 正常游玩时不存在)
 else if(window.DEV&&window.DEV.dmgMul!==1) dmg*=window.DEV.dmgMul;
@@ -36,7 +42,7 @@ if(d2<4){ AudioSys.whizz(); player.suppress(0.35); }
 }
 }
 for(const s of soldiers){
-if(!s.alive||s.team===shooter.team) continue;
+if(!s.alive||(s.team===shooter.team&&!(typeof isHostileUnit==='function'&&isHostileUnit(shooter,s)))) continue;
 const relX=s.pos.x-origin.x, relY=s.pos.y+1.4-origin.y, relZ=s.pos.z-origin.z;
 const tp=relX*dir.x+relY*dir.y+relZ*dir.z;
 if(tp>2&&tp<endD+1){
@@ -137,7 +143,7 @@ const block=raycastWorld(V3(p.x,p.y+0.25,p.z),dir,d);
 let dmg=(1-d/9)*135;
 if(block&&block.dist<d-0.5) dmg*=0.25;
 // 同队/同单位不炸伤(自己除外 —— 自伤是设计里保留的); 单位见 47_units
-if(s!==attacker&&(s.team===attacker.team||(typeof unitBlocks==='function'&&unitBlocks(attacker,s)))) dmg*=0.0;
+if(s!==attacker&&((s.team===attacker.team&&!(typeof isHostileUnit==='function'&&isHostileUnit(attacker,s)))||(typeof unitBlocks==='function'&&unitBlocks(attacker,s)))) dmg*=0.0;
 if(attacker&&!attacker.isPlayer&&attacker.dmgMul) dmg*=attacker.dmgMul;
 if(dmg>2){
 s.damage(dmg,attacker,false);
@@ -152,6 +158,6 @@ else if(d2<20) addTrauma(clamp(1.2-d2/22,0.1,0.9));
 }
 for(const s of soldiers){
 if(!s.alive) continue;
-if(Math.hypot(s.pos.x-p.x,s.pos.z-p.z)<40&&attacker.team!==s.team) s.noticeThreat(attacker);
+if(Math.hypot(s.pos.x-p.x,s.pos.z-p.z)<40&&(attacker.team!==s.team||(typeof isHostileUnit==='function'&&isHostileUnit(attacker,s)))) s.noticeThreat(attacker);
 }
 }

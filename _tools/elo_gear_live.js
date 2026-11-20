@@ -1,6 +1,6 @@
 // ELO 装备价值维度 实机冒烟 (headless Chrome + CDP + no-cache 服务器)
 // 检查: ① eloGearValue 估值 ② 廉价/高价装备对难度乘区的影响 ③ eloBox 显示装备 ④ 无异常
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9461, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

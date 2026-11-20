@@ -40,20 +40,30 @@ const AMMO_LOOT_CFG = {
 };
 
 // ---------- 弹药类物品 (可拾取 / 可装填 / 可售卖) ----------
-// cal: 适用口径(与 AMMO_PACK_DEFS 同一套口径, 由 ammoCaliberOf 推导)
-// rounds: 一盒发数; size: 占背包格数; weight: 重量(kg); price: 基础价值(出售价 45%)
-// 数值约为商店弹药包的"半包", 保证"捡到的比买的便宜, 但量更少", 购买入口仍有意义
-const AMMO_DEFS = {
-  ammo_pistol:{ name:"手枪弹药盒",   cal:"pistol", size:1, weight:0.4, price:200, rounds:15, desc:"捡来的散装弹药 · 按 E 装填到当前武器" },
-  ammo_smg:   { name:"冲锋枪弹药盒", cal:"smg",    size:1, weight:0.6, price:330, rounds:30, desc:"捡来的散装弹药 · 按 E 装填到当前武器" },
-  ammo_rifle: { name:"步枪弹药盒",   cal:"rifle",  size:1, weight:0.7, price:420, rounds:30, desc:"捡来的散装弹药 · 按 E 装填到当前武器" },
-  ammo_mg:    { name:"机枪弹药盒",   cal:"mg",     size:2, weight:1.6, price:600, rounds:40, desc:"捡来的散装弹药 · 按 E 装填到当前武器" },
-  ammo_sniper:{ name:"狙击弹药盒",   cal:"sniper", size:1, weight:0.5, price:480, rounds:10, desc:"捡来的散装弹药 · 按 E 装填到当前武器" },
-  ammo_heavy: { name:"重型弹药筒",   cal:"heavy",  size:2, weight:2.4, price:900, rounds:2,  desc:"捡来的散装弹药 · 按 E 装填到当前武器" }
-};
-const AMMO_KEYS_BY_CAL = {};
-for(const _k in AMMO_DEFS){ AMMO_KEYS_BY_CAL[AMMO_DEFS[_k].cal] = _k; }
-function ammoKeyOfCaliber(cal){ return AMMO_KEYS_BY_CAL[cal] || 'ammo_rifle'; }
+// 0–4 级通用弹种: RIP / 普通 / M855 / M995 / AP
+// 定义与局内弹药商店共用 40_raidshop 的 AMMO_TIERS, 保证价格/穿甲/发数一致
+const AMMO_DEFS = {};
+const AMMO_TIER_KEYS = [];
+(function(){
+  const src=(typeof AMMO_TIERS!=='undefined'&&AMMO_TIERS.length)?AMMO_TIERS:[
+    { id:'ammo_rip',  name:'RIP 弹', short:'RIP',  tier:0, pen:0, dmgMul:1.35, armorMul:0.25, rounds:30, price:120, weight:0.40, icon:'🟥', desc:'0 级 · 几乎不穿甲，软组织伤害极高' },
+    { id:'ammo_std',  name:'普通弹',  short:'普通', tier:1, pen:1, dmgMul:1.00, armorMul:1.00, rounds:30, price:180, weight:0.45, icon:'⬜', desc:'1 级 · 标准全金属被甲弹，通用' },
+    { id:'ammo_m855', name:'M855 弹', short:'M855', tier:2, pen:2, dmgMul:1.05, armorMul:1.30, rounds:30, price:320, weight:0.50, icon:'🟦', desc:'2 级 · 钢芯穿甲，对 1–2 级护甲有效' },
+    { id:'ammo_m995', name:'M995 弹', short:'M995', tier:3, pen:3, dmgMul:1.12, armorMul:1.70, rounds:30, price:520, weight:0.55, icon:'🟪', desc:'3 级 · 钨芯穿甲，对 3 级护甲有效' },
+    { id:'ammo_ap',   name:'AP 弹',   short:'AP',   tier:4, pen:4, dmgMul:1.20, armorMul:2.20, rounds:20, price:780, weight:0.60, icon:'🟨', desc:'4 级 · 高硬度穿甲弹，专打重甲' }
+  ];
+  for(const t of src){
+    AMMO_DEFS[t.id]={ name:t.name, short:t.short, cal:'*', size:1, weight:t.weight,
+      price:t.price, rounds:t.rounds, pen:t.pen, dmgMul:t.dmgMul, armorMul:t.armorMul,
+      tier:t.tier, icon:t.icon, desc:t.desc };
+    AMMO_TIER_KEYS.push(t.id);
+  }
+})();
+const AMMO_KEYS_BY_CAL = { '*':'ammo_std' };
+function ammoKeyOfCaliber(){ return 'ammo_std'; }
+function ammoShortOf(key){ const d=AMMO_DEFS[key]; return d?(d.short||d.name):'空'; }
+// 市集可购买 0–4 级弹药
+for(const _ak of AMMO_TIER_KEYS) if(TRADE_KEYS.indexOf(_ak)<0) TRADE_KEYS.push(_ak);
 
 // ==================== 物品 API 扩展: 让弹药走统一通道 ====================
 // 模块: Inventory · 调用入口: 所有既有 item*() 调用点(背包/市集/结算/仓库)
@@ -67,12 +77,12 @@ itemPriceOf  = key => AMMO_DEFS[key] ? (AMMO_DEFS[key].price||0)            : _i
 itemLabel    = key => AMMO_DEFS[key] ? AMMO_DEFS[key].name                  : _iLabel(key);
 itemName     = key => AMMO_DEFS[key] ? AMMO_DEFS[key].name                  : _iName(key);
 itemKind     = key => AMMO_DEFS[key] ? 'ammo'                               : _iKind(key);
-itemIconOf   = key => AMMO_DEFS[key] ? '🔋'                                 : _iIconOf(key);
+itemIconOf   = key => AMMO_DEFS[key] ? (AMMO_DEFS[key].icon||'🔋')          : _iIconOf(key);
 itemSellPrice= key => AMMO_DEFS[key] ? Math.max(15,Math.floor((AMMO_DEFS[key].price||0)*0.45)) : _iSell(key);
 itemDescOf   = key => {
   if(!AMMO_DEFS[key]) return _iDescOf(key);
   const d = AMMO_DEFS[key];
-  return `弹药 · ${d.rounds} 发 · 占 ${d.size} 格 · 重 ${d.weight}kg · ${d.desc}`;
+  return `弹药 · T${d.tier} · 穿甲 ${d.pen} · ${d.rounds} 发 · 占 ${d.size} 格 · 重 ${d.weight}kg · ${d.desc}`;
 };
 
 // ==================== Inventory: 把弹药盒装填进当前武器 ====================
@@ -98,9 +108,9 @@ function loadAmmoFromBag(key){
   if(typeof nowT!=='undefined' && nowT-(p._raidUseCdT||-99) < RAID_USE_CD) return false;
   const w = (p.curW && p.curW.def) ? p.curW : null;
   if(!w){ raidWarn('当前没有可装填的武器'); return false; }
-  const cal = ammoCaliberOf(w.key);
-  if(cal !== d.cal){
-    raidWarn(`口径不符 · ${d.name}(${AMMO_CAL_NAME[d.cal]}) 不能装进「${w.def.name}」(${AMMO_CAL_NAME[cal]}) · 先按 1/2 换到对应武器`);
+  // 通用弹种: 不检查口径。但枪里/备弹已有别的弹种时不能混装
+  if(w.ammo && ((w.reserve||0)>0 || (w.mag||0)>0) && w.ammo!==key){
+    raidWarn(`枪里/备弹是「${AMMO_DEFS[w.ammo]?AMMO_DEFS[w.ammo].name:w.ammo}」，先打空再换 ${d.name}`);
     return false;
   }
   const cap  = w.def.reserve || 0;
@@ -112,8 +122,9 @@ function loadAmmoFromBag(key){
   RUN.loot[key] = n-1;
   if(RUN.loot[key] <= 0) delete RUN.loot[key];
   w.reserve = Math.min(cap, (w.reserve||0) + give);
+  w.ammo = key;                                   // 本次装填的弹种成为该枪当前弹种
   p._raidUseCdT = (typeof nowT!=='undefined') ? nowT : 0;
-  raidOk(`装填 🔋 <b>${d.name}</b> · <b>+${give}</b> 发 · 「${w.def.name}」备弹 <b>${w.reserve}/${cap}</b> · 背包剩余 <b>${bagCount(key)}</b>`);
+  raidOk(`装填 🔋 <b>${d.name}</b> (T${d.tier}) · <b>+${give}</b> 发 · 「${w.def.name}」备弹 <b>${w.reserve}/${cap}</b> · 背包剩余 <b>${bagCount(key)}</b>`);
   if(typeof AudioSys!=='undefined' && AudioSys.metalSlide) AudioSys.metalSlide(0.2,0.18,450,900);
   if(typeof renderRaidBag==='function') renderRaidBag();
   emitRaidEvent('OnItemUsed', { key:key, left:bagCount(key), rounds:give });
@@ -140,12 +151,23 @@ renderBagPanel = function(){
 
 // ==================== Loot: 掉落表注入弹药 ====================
 // 模块: Loot · 调用入口: lootTargetNear → rollCrateLootList / registerCorpse → rollCorpseLoot
+// 0–4 级弹药掉落权重: 越高级越稀有; rich 用于敌方精锐/高级容器
+function randomAmmoLootKey(rich){
+  const table = rich
+    ? [['ammo_rip',0.08],['ammo_std',0.27],['ammo_m855',0.32],['ammo_m995',0.23],['ammo_ap',0.10]]
+    : [['ammo_rip',0.24],['ammo_std',0.46],['ammo_m855',0.22],['ammo_m995',0.06],['ammo_ap',0.02]];
+  let r=Math.random(), acc=0;
+  for(const [k,w] of table){ acc+=w; if(r<=acc) return k; }
+  return 'ammo_std';
+}
+function randomPlateLootKey(){
+  const r=Math.random();
+  return r<0.45?'plate_steel':(r<0.80?'plate_ti':'plate_ceramic');
+}
 function addAmmoToLootTable(out, kinds, stackMax){
   if(kinds <= 0) return out;
-  const cals = Object.keys(AMMO_KEYS_BY_CAL);
   for(let i=0;i<kinds;i++){
-    const cal = cals[randi(0, cals.length-1)];
-    const key = AMMO_KEYS_BY_CAL[cal];
+    const key = randomAmmoLootKey(Math.random()<0.25);
     out[key] = (out[key]||0) + randi(1, stackMax);
   }
   return out;
@@ -155,6 +177,8 @@ rollCrateLootList = function(){
   const out = _origRollCrateLootList();
   if(Math.random() < AMMO_LOOT_CFG.crateChance)
     addAmmoToLootTable(out, randi(1, AMMO_LOOT_CFG.crateMaxKinds), AMMO_LOOT_CFG.crateStackMax);
+  // 插板: 物资箱有概率出
+  if(Math.random() < 0.10){ const pk=randomPlateLootKey(); out[pk]=(out[pk]||0)+1; }
   return out;
 };
 const _origRollCorpseLoot = rollCorpseLoot;
@@ -168,14 +192,14 @@ rollCorpseLoot = function(bot){
     if(Math.random() < keep) out[wkey] = Math.max(1, out[wkey]||0);
     else if(out[wkey] && Math.random() > keep) delete out[wkey];
   }
-  // 弹药: 优先掉该武器同口径的, 否则随机口径
+  // 弹药: 敌方精锐/高级容器更容易掉高级弹
   const chance = friendly ? AMMO_LOOT_CFG.friendlyCorpseChance : AMMO_LOOT_CFG.corpseChance;
   if(Math.random() < chance){
-    const cal = wkey && WPN_DEFS[wkey] ? ammoCaliberOf(wkey)
-                                       : Object.keys(AMMO_KEYS_BY_CAL)[randi(0,5)];
-    const key = ammoKeyOfCaliber(cal);
+    const key = randomAmmoLootKey(!friendly || !!(bot && bot.cls>=2));
     out[key] = (out[key]||0) + (friendly ? randi(1,2) : 1);
   }
+  // 插板: 尸体小概率出
+  if(Math.random() < 0.08){ const pk=randomPlateLootKey(); out[pk]=(out[pk]||0)+1; }
   return out;
 };
 

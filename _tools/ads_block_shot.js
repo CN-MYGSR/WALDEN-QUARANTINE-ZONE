@@ -1,7 +1,7 @@
 // 真值校验: 用 CDP 真实截图(合成后的画面)统计 ADS 时枪体对屏幕中心的遮挡。
 // 每组对比两张截图 —— 隐藏视模型 / 显示视模型 —— 逐像素求差得到枪体掩码。
 // 同时把"显示视模型"的截图保存下来, 便于人工目视。
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9389;
 const OUT = 'D:/Escape from TakeFu/outputs';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }

@@ -1,6 +1,6 @@
 // 导航诊断: 复刻 NAV 的 2m 通行网格, 从己方入口做 BFS, 并扫描大厅/走廊中心线的"阻断段"
 // 目的: 定位是"哪一段"把地图切断了 (大厅十字 vs 某条走廊)
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9396, URL = 'http://127.0.0.1:8123/index.html';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

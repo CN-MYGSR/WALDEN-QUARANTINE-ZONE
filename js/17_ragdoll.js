@@ -322,7 +322,7 @@ if(s.onVehicle&&s.onVehicle.kind!=='apc') continue;
 // ⚠️ 友伤例外(2026-09-18 联机需求): 双方都是真人玩家时, 同阵营也吃子弹。
 //    只放行"真人↔真人", AI 队友之间保持原有免疫手感。
 const _ffPair=(s.netRemote||s.isPlayer)&&(shooter.netRemote||shooter.isPlayer);
-if(shooter&&!_ffPair&&(s.team===shooter.team||(typeof unitBlocks==='function'&&unitBlocks(shooter,s)))) continue;
+if(shooter&&!_ffPair&&((s.team===shooter.team&&!(typeof isHostileUnit==='function'&&isHostileUnit(shooter,s)))||(typeof unitBlocks==='function'&&unitBlocks(shooter,s)))) continue;
 const seated=s.onVehicle&&s.onVehicle.kind==='apc';
 const eyeY=s.pos.y+(seated?1.35:(s.prone?0.5:s.crouch?1.15:1.62));
 const hx=s.pos.x-o.x, hy=eyeY+0.06-o.y, hz=s.pos.z-o.z;

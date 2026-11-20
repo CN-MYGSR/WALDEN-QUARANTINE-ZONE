@@ -1,7 +1,7 @@
 // 验证 D 项全部功能: Tab背包面板 / 丢弃物资 / 滚轮切换高低姿态
 // 注意: headless 下无法真正获得 pointer lock, 因此测试通过 window.__forceLock()
 //       探针把内部 pointerLocked 置为 true, 以覆盖真实运行时的代码路径。
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9370;
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
 const sleep = ms => new Promise(r => setTimeout(r, ms));

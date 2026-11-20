@@ -87,7 +87,8 @@ let nadeSel=0; // 手雷种类: 0=手雷 1=闪光 2=烟雾
  if(!player.alive) return;
  if(player.onVehicle&&player.onVehicle.kind==='plane') dy=-dy; // 飞机拉杆反转
  const d=WPN_DEFS[VM.key]||{};
-const zoomFac=player.ads?(d.adsFov||60)/74:1;
+// 与鼠标同一套倍率补偿(含 2×/4× 改件)
+const zoomFac=player.ads?(((typeof adsFovOf==='function')?adsFovOf(VM.key):(d.adsFov||60))/BASE_FOV_74):1;
 const s=0.0052*SETTINGS.sens*zoomFac;
 player.yaw-=dx*s;
 player.pitch-=dy*s;
@@ -181,7 +182,7 @@ case 'eat': if(player.alive) InputActions.eatFood(); break;
 case 'skill': if(player.alive) InputActions.classSkill(); break;
 case 'buildsel': if(player.alive) InputActions.buildNext(); break;
 case 'brace': if(player.alive) InputActions.toggleBrace(); break;
-case 'nvg': if(typeof NVG!=='undefined') NVG.toggle(); break;
+case 'nvg': if(typeof toggleHeadgear==='function') toggleHeadgear(); else if(typeof NVG!=='undefined') NVG.toggle(); break;
 case 'selup': if(typeof lootSelMove==='function') lootSelMove(-1); break;
 case 'seldown': if(typeof lootSelMove==='function') lootSelMove(1); break;
 case 'take': if(player.alive&&typeof lootTakeSelected==='function') lootTakeSelected(); break;
@@ -329,9 +330,16 @@ if(onFoot&&p.cls===4){ const bt=BUILD_MENU[p.buildSel||0]; setLbl('tBuildSel',bt
 show('tBrace',onFoot&&(p.canBrace||p.braced));
 setOn('tBrace',p.braced);
 // 夜视仪: 手上这把枪的战术配件槽装了 gear_nvg 才显示
+// 头部装备: 本局选面罩就显示"面罩", 选夜视就显示"夜视"
+const faceMode=!!(typeof RUN!=='undefined'&&RUN&&RUN.headGear==='face');
 const nvgOn=onFoot&&!!p.curW&&typeof getModChoice==='function'&&getModChoice(p.curW.key,'gear')==='gear_nvg';
-show('tNvg',nvgOn);
-if(nvgOn&&typeof NVG!=='undefined') setOn('tNvg',!!NVG.active());
+show('tNvg',faceMode||nvgOn);
+if(faceMode) setLbl('tNvg','面罩'); else setLbl('tNvg','夜视');
+const _tNvg=document.getElementById('tNvg');
+if(_tNvg){ const _ico=_tNvg.querySelector('.tIco'); if(_ico) _ico.textContent=faceMode?'▣':'◐'; _tNvg.title=faceMode?'展开/收起面罩':'开关夜视仪'; }
+if(faceMode) setOn('tNvg',!!RUN.faceDown);
+else if(nvgOn&&typeof NVG!=='undefined') setOn('tNvg',!!NVG.active());
+if(typeof syncHeadgearUI==='function') syncHeadgearUI();
 show('tLeanL',onFoot);
 show('tLeanR',onFoot);
 setOn('tLeanL',!!keys.KeyQ);

@@ -1,6 +1,6 @@
 // 街区多撤离点 实机冒烟 (headless Chrome + CDP + no-cache 服务器)
 // 检查: ① EXTRACT_POINTS 数量 ② 坐标 ③ 站在新撤离点能正常推进撤离进度 ④ 无控制台异常
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9459, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

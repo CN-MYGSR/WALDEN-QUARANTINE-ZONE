@@ -1,5 +1,5 @@
 // 夜视仪白天过曝 + 改件模型 实机确认 (headless Chrome + CDP + no-cache 服务器)
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9457, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

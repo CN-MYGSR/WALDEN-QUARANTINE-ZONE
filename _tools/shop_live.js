@@ -1,6 +1,6 @@
 // 商店搜索实机冒烟 (headless Chrome + CDP + 本地 no-cache 服务器)
 // 检查: ① 搜索框存在 ② 输入"手雷"只剩手雷行 ③ 清空恢复 ④ 无匹配给出提示 ⑤ 无控制台异常
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9455, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

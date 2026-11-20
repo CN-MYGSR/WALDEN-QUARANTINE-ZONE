@@ -105,8 +105,11 @@ return -(VM_ADS_MIN_CLEAR+acc.z);
 function vmEquip(key,team){
 VM.key=key;
 VM.inner.clear();
+VM.inner.scale.setScalar(1);
 VM.inner.add(VM.muzzleFlash); VM.inner.add(VM.muzzleLight);
 VM.gunParts=buildGunModel(key);
+// 双摄像机: 在目镜位置挂一块采样镜内 RT 的平面 (放下枪也一直渲染)
+if(typeof SCOPE!=='undefined'&&SCOPE.attachLens) SCOPE.attachLens(VM.gunParts,key);
 VM.inner.add(VM.gunParts.gun);
 VM.arms=buildArms(team);
 VM.inner.add(VM.arms.L); VM.inner.add(VM.arms.R);
@@ -120,6 +123,12 @@ if(!VM.hammerM) VM.hammerM=buildHammer();
 VM.hammerM.visible=false; VM.inner.add(VM.hammerM);
 if(VM.gunParts.reloadRocket) VM.reloadRocket=VM.gunParts.reloadRocket; else VM.reloadRocket=null;
 VM.ads=(VM.gunParts.anchors&&VM.gunParts.anchors.ads)||adsPoseFor(key);
+// 2026-10-31: 镜内渲染之后枪模不再隐藏, 但自带镜的枪原来的 ADS 锚点只有 0.22m ——
+// 那么近的时候机匣被透视放成一整块黑疙瘩, 完全看不出是把枪。只改 z 把枪推远
+// (y 仍由 sightAnchor 决定 → 镜筒依旧落在屏幕中心), 枪身/枪管/枪托才看得清。
+if(VM.ads&&VM.ads.pos&&(WPN_DEFS[key]||{}).scoped){
+VM.ads={pos:V3(VM.ads.pos.x,VM.ads.pos.y,-0.46),rot:VM.ads.rot};
+}
 // ===== 机瞄自动校准 =====
 // 问题: 各枪的 ads 锚点高度是手填的, 与枪模型里真正的准星顶(前准星/照门)常常差
 // 0.005~0.015 世界单位。因为相机射线恒指屏幕正中, 这点差值会让开镜后"瞄具偏高、
@@ -215,14 +224,33 @@ const carryLowTgt=((player.carry==='low')&&!player.ads&&!player.braced&&!player.
 VM.carryBlend=dampF(VM.carryBlend||0,carryLowTgt,7,dt);
 const lb=VM.carryBlend*(1-VM.adsBlend);
 const hip=d.rocket?HIP_ROCKET:(d.pistol?HIP_PISTOL:HIP);
-const px=lerp(hip.pos.x,VM.ads.pos.x,VM.adsBlend);
-const py=lerp(hip.pos.y,VM.ads.pos.y,VM.adsBlend);
+// 2026-11-18 「枪身和瞄具遮罩同时放大同倍率」:
+// 放大瞄具开镜时整个视模型等比放大 lensMag 倍, 并把目镜推到 SCOPE.adsDist() 处,
+// 目镜在屏幕上正好占 frac*屏高 —— 遮罩就是目镜本身, 枪身与遮罩同步放大,
+// 不会再出现"遮罩巨大、枪身很小"的割裂。放大倍率由目镜半径反算(见 63_scope.sightScale)。
+let lensMag=1, adsX=VM.ads.pos.x, adsY=VM.ads.pos.y;
 let adsPosZ=VM.ads.pos.z-adsViewDepth(d,VM.key);
+if(typeof SCOPE!=='undefined'&&SCOPE&&SCOPE.sightScale&&SCOPE.isLensOptic(VM.key)){
+  const _L=VM.gunParts&&VM.gunParts.gun&&VM.gunParts.gun.userData.scopeLens;
+  if(_L){
+    lensMag=SCOPE.sightScale(VM.key,_L.r);
+    if(lensMag>1.001){
+      // 目镜中心必须落在屏幕正中: root = -(m * 目镜局部坐标), z 再退到 ADS_DIST
+      adsX=-_L.pos.x*lensMag;
+      adsY=-_L.pos.y*lensMag;
+      adsPosZ=-SCOPE.adsDist()-_L.pos.z*lensMag;
+    }
+  }
+}
 // ADS 稳态最小净空: 取"基础推远量"与"实测净空要求"里更远的一个。
 // 直接约束目标深度(而不是事后钳制 root.z)才不会在过渡中产生跳变。
-// 光学镜(d.scoped)不参与: 镜筒本来就该贴到眼睛前, 由 scopeOv 接管, adsViewDepth 也返回 0。
-if(!d.scoped&&VM.adsZLimit!=null&&adsPosZ>VM.adsZLimit) adsPosZ=VM.adsZLimit;
-const pz=lerp(hip.pos.z,adsPosZ,VM.adsBlend);
+// 光学镜(d.scoped)不参与; 放大瞄具由上面的目镜定位接管, 也不参与。
+if(lensMag<=1.001&&!d.scoped&&VM.adsZLimit!=null&&adsPosZ>VM.adsZLimit) adsPosZ=VM.adsZLimit;
+// 放大瞄具过渡: 位置先就位(e^0.65)、倍率后跟上(e^1.5), 避免中途把放大的机匣顶到镜头里
+const _adsP=(lensMag>1.001)?Math.pow(VM.adsBlend,0.65):VM.adsBlend;
+const px=lerp(hip.pos.x,adsX,_adsP);
+const py=lerp(hip.pos.y,adsY,_adsP);
+const pz=lerp(hip.pos.z,adsPosZ,_adsP);
 let rx=lerp(hip.rot.x,VM.ads.rot.x,VM.adsBlend);
 let ry=lerp(hip.rot.y,VM.ads.rot.y,VM.adsBlend);
 let rz=0;
@@ -259,18 +287,20 @@ ox+=Math.sin(VM.bobT)*0.011*bobA;
 oy+=(-Math.abs(Math.cos(VM.bobT))*0.012+Math.sin(VM.bobT*2)*0.003)*bobA;
 rz+=Math.sin(VM.bobT)*0.012*bobA;
 const brT=performance.now()*0.001;
-const breathMul=((player.holdBreath&&player.ads)?0.12:1)*(1-VM.braceBlend*0.75)*(1-VM.proneBlend*0.5);
+const handSway=(typeof weaponAimSwayMul==="function")?weaponAimSwayMul(w):1;
+const breathMul=((player.holdBreath&&player.ads)?0.12:1)*(1-VM.braceBlend*0.75)*(1-VM.proneBlend*0.5)*handSway;
 oy+=Math.sin(brT*1.4)*0.0022*(1-VM.adsBlend*0.5)*breathMul;
 rx+=Math.sin(brT*1.4+0.5)*0.0018*breathMul;
 VM.swayX=dampF(VM.swayX,clamp(player.mouseDX,-40,40),10,dt);
 VM.swayY=dampF(VM.swayY,clamp(player.mouseDY,-40,40),10,dt);
-const swAmt=0.0011*(1-VM.adsBlend*0.75)*(1-bb);
+
+const swAmt=0.0011*(1-VM.adsBlend*0.75)*(1-bb)*handSway;
 // 常态: 枪随视角拖拽; 架枪: 以前端支点为轴摆动(枪口定住, 枪托随视角甩动)
-VM.sway.position.x=-VM.swayX*swAmt+VM.swayX*0.00042*bb;
+VM.sway.position.x=-VM.swayX*swAmt+VM.swayX*0.00042*bb*handSway;
 VM.sway.position.y=VM.swayY*swAmt*0.8;
-VM.sway.rotation.y=-VM.swayX*0.0012*bb;
-VM.sway.rotation.z=-VM.swayX*0.0006*(1-VM.adsBlend*0.6)*(1-bb*0.8);
-VM.sway.rotation.x=VM.swayY*0.0007*(1-VM.adsBlend*0.6)*(1-bb*0.5);
+VM.sway.rotation.y=-VM.swayX*0.0012*bb*handSway;
+VM.sway.rotation.z=-VM.swayX*0.0006*(1-VM.adsBlend*0.6)*(1-bb*0.8)*handSway;
+VM.sway.rotation.x=VM.swayY*0.0007*(1-VM.adsBlend*0.6)*(1-bb*0.5)*handSway;
 oy-=player.landDip*0.05; rx+=player.landDip*0.12;
 VM.recoilV+=(-VM.recoilP*260-VM.recoilV*18)*dt;
 VM.recoilP+=VM.recoilV*dt;
@@ -528,19 +558,29 @@ if(k>0.88) vmPlayOnce('b4',()=>AudioSys.click(1300,0.22,0.03));
     const VM_RAISE_Y=0.015*(1-VM.adsBlend);
     VM.root.position.set(px+ox,py+oy+VM_RAISE_Y,pz+oz);
 VM.root.rotation.set(rx,ry,rz);
+// 放大瞄具: 整把枪(含手臂)与遮罩同倍率放大; 腰射/非放大瞄具保持 1
+{
+  const _scl=lerp(1,lensMag,(lensMag>1.001)?Math.pow(VM.adsBlend,1.5):VM.adsBlend);
+  if(Math.abs(VM.inner.scale.x-_scl)>1e-4) VM.inner.scale.setScalar(_scl);
+}
 positionHands(VM.key);
 if(handLOverride){ VM.arms.L.position.copy(handLOverride.pos); VM.arms.L.rotation.set(handLOverride.rot.x,handLOverride.rot.y,handLOverride.rot.z); }
 if(handROverride){ VM.arms.R.position.copy(handROverride.pos); VM.arms.R.rotation.set(handROverride.rot.x,handROverride.rot.y,handROverride.rot.z); }
 VM.muzzleFlash.material.opacity*=Math.pow(0.0001,dt);
 VM.muzzleLight.intensity*=Math.pow(0.0001,dt);
 if(VM.gunParts.rocketTip&&player.curW) VM.gunParts.rocketTip.visible=player.curW.mag>0;
-const scopedHide=d.scoped&&VM.adsBlend>0.85;
-VM.inner.visible=!scopedHide;
-document.getElementById('scopeOv').style.display=scopedHide?'block':'none';
-// 基础 FOV 来自设置 (默认 74); 开镜 FOV 按同比例缩放 → 设置只改"视野", 不改开镜倍率。
+// 2026-10-31: 镜内渲染之后**不再隐藏枪模** —— 旧逻辑是为了躲开黑圆遮罩(镜内什么都看不到,
+// 留着枪只挡视线)。现在镜片是最后画的, 会把镜筒前端盖住, 视觉上就是"从镜筒里看出去",
+// 枪身/手应该留在画面里(用户反馈"开镜了枪模咋也没了")。
+VM.inner.visible=true;
+// 基础 FOV 来自设置 (默认 74); 开镜 FOV 含瞄具倍率(见 14b 的 adsFovOf)。
+// ⚠️ 有放大的瞄具(内建镜 / 2×4× 改件)开镜时主相机**保持腰射视野** —— 放大交给
+// 63_scope 的镜内渲染, 否则整屏放大 + 黑圆遮罩就是"一眼假"的旧做法。
 const _baseFov=(SETTINGS&&SETTINGS.fov)||74;
-const _adsFovTgt=(d.adsFov||60)*(_baseFov/BASE_FOV_74);
-const tgtFov=lerp(_baseFov, _adsFovTgt, VM.adsBlend)+(player.sprinting?4*VM.sprintBlend:0);
+const _lens=(typeof SCOPE!=='undefined'&&SCOPE&&typeof SCOPE.keepWide==='function')
+  ? SCOPE.keepWide(VM.key,VM.adsBlend) : false;
+const _adsFovTgt=(typeof adsFovOf==='function')?adsFovOf(VM.key):((d.adsFov||60)*(_baseFov/BASE_FOV_74));
+const tgtFov=_lens?_baseFov:lerp(_baseFov, _adsFovTgt, VM.adsBlend)+(player.sprinting?4*VM.sprintBlend:0);
 camera.fov=dampF(camera.fov,tgtFov,16,dt);
 camera.updateProjectionMatrix();
 }
@@ -551,7 +591,9 @@ VM.kickV+=d.kick*22;
 VM.muzzleFlash.position.copy(VM.gunParts.muzzle);
 VM.muzzleFlash.material.opacity=1;
 VM.muzzleFlash.material.rotation=rand(0,TAU);
-VM.muzzleFlash.scale.setScalar(rand(0.12,0.2)*(d.snd==='sniper'?1.5:1));
+// 视模型开镜时整体放大, 枪口焰要按倍率反算局部尺寸, 否则会变成一团盖屏火球
+const _flashK=1/Math.max(1,(VM.inner&&VM.inner.scale&&VM.inner.scale.x)||1);
+VM.muzzleFlash.scale.setScalar(rand(0.12,0.2)*(d.snd==='sniper'?1.5:1)*_flashK);
 VM.muzzleLight.position.copy(VM.gunParts.muzzle);
 VM.muzzleLight.intensity=2.2;
 }

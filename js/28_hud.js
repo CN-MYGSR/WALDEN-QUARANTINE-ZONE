@@ -29,19 +29,11 @@ player.score+=isHead?125:100;
 player.lifeKills=(player.lifeKills||0)+1;
 RUN.kills=(RUN.kills||0)+1;
 showScorePop(isHead?'+125 爆头击杀 · 尸体可搜刮[F]':'+100 击杀 · 尸体可搜刮[F]');
-const hm=el('hitmark');
-hm.classList.add('kill');
-hm.style.opacity=1;
-setTimeout(()=>hm.style.opacity=0,320);
-AudioSys.hitmarkSnd(true);
+// 2026-10-31: 命中反馈(hitmark 十字 + 命中音)已按需求删除, 只留击杀计分与提示
 }
 function onPlayerHit(sol,isHead){
-const hm=el('hitmark');
-hm.classList.remove('kill');
-hm.style.opacity=1;
-clearTimeout(hm._t);
-hm._t=setTimeout(()=>hm.style.opacity=0,140);
-AudioSys.hitmarkSnd(false);
+// 2026-10-31: 命中反馈已删除 (原来在这里闪 #hitmark 十字 + AudioSys.hitmarkSnd)
+// 保留空函数: 18_ballistics.js 每发子弹都会无条件调用它
 }
 function addDirHit(worldAng){
 const rel=worldAng-player.yaw+Math.PI;
@@ -343,6 +335,22 @@ bmC.fillStyle='#ffd77a'; bmC.fillText('小队 '+sm+'/'+(SQUAD.members.length||0)
 }
 let hudSlowT=0;
 function updateHUD(dt){
+if(typeof zoomHudUpdate==='function') zoomHudUpdate();
+// 当前弹种 (0 RIP / 1 普通 / 2 M855 / 3 M995 / 4 AP)
+try{
+  const at=el('ammoType');
+  if(at){
+    let s='空';
+    const w=player&&player.curW;
+    if(w&&w.ammo&&typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[w.ammo]) s=AMMO_DEFS[w.ammo].short||AMMO_DEFS[w.ammo].name;
+    if(at.textContent!==s) at.textContent=s;
+  }
+}catch(e){}
+const faceEl=el('faceInd');
+if(faceEl){
+  const on=!!(player&&player.deployed&&typeof RUN!=='undefined'&&RUN&&RUN.faceDown);
+  if(on!==faceEl._on){ faceEl._on=on; faceEl.classList.toggle('hidden',!on); }
+}
 const w=player.curW;
 if(player.onVehicle&&player.onVehicle.kind==='plane'){
 const t=player.onVehicle;
@@ -490,17 +498,5 @@ el('nadeIndTxt').textContent=player.nadeCharging?('蓄力 '+Math.round(c*100)+'%
 el('nadeIndBar').style.width=(c*100).toFixed(1)+'%';
 } else ni.style.display='none';
 }
-const ch=el('crosshair');
-if(player.alive&&!player.ads&&!player.onVehicle){
-ch.style.display='block';
-const gap=8+player.bloom*26+(Math.hypot(player.vel.x,player.vel.z)>1?6:0);
-ch.style.setProperty('--gap',gap+'px');
-} else if(player.alive&&player.ads&&WPN_DEFS[VM.key]?.atRifle&&!player.onVehicle){
-// 反坦克枪侧偏机瞄: 保留小型准星充当侧置机械瞄具
-ch.style.display='block';
-ch.style.setProperty('--gap','5px');
-} else if(player.alive&&player.ads&&!WPN_DEFS[VM.key]?.scoped){
-ch.style.display='none';
-} else ch.style.display='none';
 }
 let respawnCd=0, selectedSpawn=0;

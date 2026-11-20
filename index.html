@@ -9,6 +9,17 @@
 <meta http-equiv="Pragma" content="no-cache">
 <meta http-equiv="Expires" content="0">
 <link rel="icon" href="data:,">
+<!-- Import Maps (2026-11-20): 浏览器原生解析裸模块名, 不再依赖 node_modules。
+     经典脚本仍用 vendor/three.min.js / cannon.min.js 的全局变量; 新增的 ES Module
+     (workshop mod / 后续模块) 可直接 import * as THREE from 'three'。 -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "cannon-es": "./vendor/cannon-es.js"
+  }
+}
+</script>
 <!-- 资源加载失败兜底 (2026-09-15):
      任何一个 <script>/<link> 拉取失败, 游戏会因为缺符号而静默崩成一堆 "xxx is not defined",
      玩家只看到一个坏掉的界面(没有菜单、点哪都没反应), 完全不知道发生了什么。
@@ -63,16 +74,14 @@
 })();
 </script>
 <title>BF Urban Infantry · 无载具巷战</title>
-<link rel="stylesheet" href="css/style.css?v=20260929b">
+<link rel="stylesheet" href="css/style.css?v=20261030k">
 </head>
 <body>
 <div id="ui">
-<div id="crosshair"><span class="chl t"></span><span class="chl b"></span><span class="chl l"></span><span class="chl r"></span><span class="chdot"></span></div>
-<div id="hitmark"><span></span><span></span><span></span><span></span></div>
-<div id="dmgOv"></div><div id="supOv"></div><div id="lowOv"></div><div id="vig"></div>
-<div id="scopeOv"></div>
+<div id="dmgOv"></div><div id="supOv"></div><div id="lowOv"></div><div id="vig"></div><div id="bloodOv"></div>
+<div id="rangeHud"><b>靶 场</b><span id="rangeStat">命中 0 / 射击 0</span></div>
 <div id="dirHits"></div>
-<div id="ammoPanel"><span id="wname">M1 加兰德</span><span id="wmode">半自动</span><div class="ammoRow"><span id="magN">8</span> <span id="resN">/ 72</span></div><div id="nadeN">手雷 ×3</div></div>
+<div id="ammoPanel"><span id="wname">M1 加兰德</span><span id="wmode">半自动</span><span id="ammoType"></span><span id="zoomN"></span><div class="ammoRow"><span id="magN">8</span> <span id="resN">/ 72</span></div><div id="nadeN">手雷 ×3</div></div>
 <div id="healthPanel"><div id="bodyWrap"><div id="bodyFig"><svg viewBox="0 0 56 96" xmlns="http://www.w3.org/2000/svg">
 <ellipse id="bp-head" class="bp" cx="28" cy="11" rx="9" ry="9.5"><title>头部</title></ellipse>
 <rect id="bp-armR" class="bp" x="4" y="22" width="11" height="22" rx="3.5"><title>右臂</title></rect>
@@ -120,6 +129,8 @@
 </div>
 <div id="killfeed"></div>
 <div id="msgC"></div><div id="scorePop"></div>
+<!-- 配音字幕: 英文语音 + 中文文本, 由 js/64_voice.js 驱动 -->
+<div id="voSub" aria-live="polite"><span class="voWho" id="voWho">RAVEN ONE</span><span class="voLine" id="voLine"></span></div>
 <div id="extractHud" class="hidden"><b>撤 离 中</b><div id="extractBarWrap"><div id="extractBar"></div></div><div id="extractTxt"></div></div>
 <div id="capPanel"><span id="capLetter">B</span><div id="capBarWrap"><div id="capBarFill"></div></div><div id="capTxt"></div></div>
 <div id="interact"></div>
@@ -132,6 +143,7 @@
 <div id="scoreboard"><h3>战 场 记 分 板</h3><div id="sbCols"><div><table><thead><tr><th class="t0h">USEC</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbL"></tbody></table></div><div><table><thead><tr><th class="t1h">PMC</th><th>击杀</th><th>阵亡</th><th>得分</th></tr></thead><tbody id="sbR"></tbody></table></div></div></div>
 <div id="fps"></div>
 <div id="nvgInd" class="hidden"></div>
+<div id="faceInd" class="hidden">面 罩 ↓</div>
 <div id="storyHud" class="hidden"></div>
 <div id="downHud"></div>
 <div id="clsTip"></div>
@@ -191,6 +203,7 @@
 <div class="menuNav">
 <button class="bigBtn navBtn" data-p="mPlay">撤 离 部 署</button>
 <button class="bigBtn navBtn" data-p="mStory">剧 情 模 式</button>
+<button class="bigBtn navBtn" id="rangeBtn">靶 场</button>
 <button class="bigBtn navBtn" data-p="mArmory">军 械 库 / 仓 库</button>
 <button class="bigBtn navBtn" data-p="mNet">联 机 / 排 行 榜</button>
 <button class="bigBtn navBtn" data-p="mSet">游 戏 设 置</button>
@@ -331,8 +344,11 @@
 <select id="secondarySelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">防弹衣（仓库）</div>
 <select id="armorSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">插板（护甲无板 = 凯夫拉 · 需自己插入）</div>
+<select id="plateSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">头盔（仓库）</div>
 <select id="helmetSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<label style="display:flex;align-items:center;gap:8px;font-size:12px;color:#d2d2d2;margin:6px 0"><input type="checkbox" id="faceShieldChk"> 展开头盔面罩（提升防弹 · 禁用夜视仪）</label>
 <div class="secLabel">耳机（仓库 · 影响听力范围与环境音）</div>
 <select id="headsetSelect" style="width:100%;padding:8px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">胸挂（仓库 · 与背包共存，但只收 2 格以内的物品）</div>
@@ -349,6 +365,9 @@
 <div class="secLabel">食物（各带 1 份 · 出击消耗 · 局内 [K]食用 [J]切换）</div>
 <select id="foodSel1" style="width:100%;padding:6px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <select id="foodSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<div class="secLabel">弹药（各带 1 盒 · 出击从仓库扣除 · 局内 [E] 装填 · 开局枪内无弹）</div>
+<select id="ammoSel1" style="width:100%;padding:6px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
+<select id="ammoSel2" style="width:100%;padding:6px;margin-top:4px;border-radius:6px;background:#2b2b2b;color:#eaeaea;border:1px solid #666666"></select>
 <div class="secLabel">投掷物（自费 · 出击从仓库扣除 · [3]手雷 [4]闪光 [5]烟雾）</div>
 <div id="throwRow" style="display:flex;gap:6px;flex-wrap:wrap"></div>
 <div class="secLabel">撤离通行证（仅「港口」登船有效 · 成功登船时消耗）</div>
@@ -390,79 +409,92 @@
 </div>
 <script src="vendor/three.min.js"></script>
 <script src="vendor/cannon.min.js"></script>
-<script src="js/00_core.js?v=20260929b"></script>
-<script src="js/00b_elo.js?v=20260929b"></script>
-<script src="js/01_data.js?v=20260929b"></script>
-<script src="js/02_audio.js?v=20260929b"></script>
-<script src="js/03_renderer.js?v=20260929b"></script>
-<script src="js/04_textures.js?v=20260929b"></script>
-<script src="js/05_terrain.js?v=20260929b"></script>
-<script src="js/06_collision.js?v=20260929b"></script>
-<script src="js/07_props.js?v=20260929b"></script>
-<script src="js/07b_batch.js?v=20260929b"></script>
-<script src="js/07c_buildings.js?v=20260929b"></script>
-<script src="js/07d_lab.js?v=20260929b"></script>
-<script src="js/07e_port.js?v=20260929b"></script>
-<script src="js/07f_airport.js?v=20260929b"></script>
-<script src="js/07g_anvil.js?v=20260929b"></script>
-<script src="js/08_world.js?v=20260929b"></script>
-<script src="js/09_deployables.js?v=20260929b"></script>
-<script src="js/10_nav.js?v=20260929b"></script>
-<script src="js/11_particles.js?v=20260929b"></script>
-<script src="js/12_weather_fx.js?v=20260929b"></script>
-<script src="js/13_weapons_data.js?v=20260929b"></script>
-<script src="js/14_gunmodels.js?v=20260929b"></script>
-<script src="js/14b_weapon_mods.js?v=20260929b"></script>
-<script src="js/15_viewmodel.js?v=20260929b"></script>
-<script src="js/15c_flashlight.js?v=20260929b"></script>
-<script src="js/16_soldier.js?v=20260929b"></script>
-<script src="js/17_ragdoll.js?v=20260929b"></script>
-<script src="js/18_ballistics.js?v=20260929b"></script>
-<script src="js/19_bot.js?v=20260929b"></script>
-<script src="js/20_explosives.js?v=20260929b"></script>
-<script src="js/22_emplacements.js?v=20260929b"></script>
-<script src="js/23_player.js?v=20260929b"></script>
-<script src="js/24_input.js?v=20260929b"></script>
-<script src="js/25_player_update.js?v=20260929b"></script>
-<script src="js/26_camera.js?v=20260929b"></script>
-<script src="js/27_gamemode.js?v=20260929b"></script>
-<script src="js/28_hud.js?v=20260929b"></script>
-<script src="js/29_menus.js?v=20260929b"></script>
-<script src="js/30c_cutscene.js?v=20260929b"></script>
-<script src="js/30_main.js?v=20260929b"></script>
-<script src="js/31_touch.js?v=20260929b"></script>
-<script src="js/34_nvg.js?v=20260929b"></script>
-<script src="js/37_meta.js?v=20260929b"></script>
-<script src="js/38_tarkov.js?v=20260929b"></script>
-<script src="js/35_extraction.js?v=20260929b"></script>
-<script src="js/39_quests.js?v=20260929b"></script>
-<script src="js/40_raidshop.js?v=20260929b"></script>
-<script src="js/41_raidloot.js?v=20260929b"></script>
-<script src="js/42_shake.js?v=20260929b"></script>
-<script src="js/43_maps.js?v=20260929b"></script>
-<script src="js/45_elo_bots.js?v=20260929b"></script>
-<script src="js/44_deathcam.js?v=20260929b"></script>
-<script src="js/46_throwables.js?v=20260929b"></script>
-<script src="js/47_units.js?v=20260929b"></script>
-<script src="js/48_shopsearch.js?v=20260929b"></script>
+<script src="js/00_core.js?v=20261030k"></script>
+<script src="js/00b_elo.js?v=20261030k"></script>
+<script src="js/01_data.js?v=20261030k"></script>
+<script src="js/02_audio.js?v=20261115a"></script>
+<script src="js/03_renderer.js?v=20261030k"></script>
+<script src="js/04_textures.js?v=20261030k"></script>
+<script src="js/05_terrain.js?v=20261030k"></script>
+<script src="js/06_collision.js?v=20261030k"></script>
+<script src="js/07_props.js?v=20261030k"></script>
+<script src="js/07b_batch.js?v=20261030k"></script>
+<script src="js/07c_buildings.js?v=20261030k"></script>
+<script src="js/07d_lab.js?v=20261030k"></script>
+<script src="js/07e_port.js?v=20261030k"></script>
+<script src="js/07f_airport.js?v=20261030k"></script>
+<script src="js/07g_anvil.js?v=20261030k"></script>
+<script src="js/07h_range.js?v=20261030k"></script>
+<script src="js/08_world.js?v=20261030k"></script>
+<script src="js/09_deployables.js?v=20261030k"></script>
+<script src="js/10_nav.js?v=20261030k"></script>
+<script src="js/11_particles.js?v=20261030k"></script>
+<script src="js/12_weather_fx.js?v=20261030k"></script>
+<script src="js/13_weapons_data.js?v=20261116b"></script>
+<script src="js/14_gunmodels.js?v=20261116h"></script>
+<script src="js/14b_weapon_mods.js?v=20261120a"></script>
+<script src="js/15_viewmodel.js?v=20261118a"></script>
+<script src="js/15c_flashlight.js?v=20261120a"></script>
+<script src="js/16_soldier.js?v=20261030k"></script>
+<script src="js/17_ragdoll.js?v=20261119a"></script>
+<script src="js/18_ballistics.js?v=20261119a"></script>
+<script src="js/19_bot.js?v=20261119a"></script>
+<script src="js/20_explosives.js?v=20261119a"></script>
+<script src="js/22_emplacements.js?v=20261030k"></script>
+<script src="js/23_player.js?v=20261030k"></script>
+<script src="js/24_input.js?v=20261119b"></script>
+<script src="js/25_player_update.js?v=20261030k"></script>
+<script src="js/26_camera.js?v=20261030k"></script>
+<script src="js/27_gamemode.js?v=20261115a"></script>
+<script src="js/28_hud.js?v=20261116b"></script>
+<script src="js/29_menus.js?v=20261119b"></script>
+<script src="js/30c_cutscene.js?v=20261030k"></script>
+<script src="js/30_main.js?v=20261115c"></script>
+<script src="js/31_touch.js?v=20261116c"></script>
+<script src="js/34_nvg.js?v=20261116c"></script>
+<script src="js/37_meta.js?v=20261116c"></script>
+<script src="js/38_tarkov.js?v=20261119b"></script>
+<script src="js/35_extraction.js?v=20261030k"></script>
+<script src="js/39_quests.js?v=20261030k"></script>
+<script src="js/40_raidshop.js?v=20261115i"></script>
+<script src="js/41_raidloot.js?v=20261116b"></script>
+<script src="js/42_shake.js?v=20261030k"></script>
+<script src="js/43_maps.js?v=20261030k"></script>
+<script src="js/45_elo_bots.js?v=20261030k"></script>
+<script src="js/44_deathcam.js?v=20261030k"></script>
+<script src="js/46_throwables.js?v=20261030k"></script>
+<script src="js/47_units.js?v=20261119a"></script>
+<script src="js/48_shopsearch.js?v=20261115d"></script>
 <!-- VibeHub Workshop 接入点 (2026-09-13):
      32_boot 只挂 window._wfBoot, 不立即启动; 49_mod_api 建立 modApi;
      Loader 暴露 VibeHubWorkshop; 50_workshop_boot 在 beforeStart 之后才调 _wfBoot -->
-<script src="js/32_boot.js?v=20260929b"></script>
-<script src="js/49_mod_api.js?v=20260929b"></script>
+<script src="js/32_boot.js?v=20261030k"></script>
+<script src="js/49_mod_api.js?v=20261030k"></script>
 <script src="https://gamesvibe.app/workshop/loader/v1.js"></script>
-<script type="module" src="js/50_workshop_boot.js?v=20260929b"></script>
+<script type="module" src="js/50_workshop_boot.js?v=20261030k"></script>
 <!-- 设置扩展: 键位自定义 + 手机端按钮布局 (依赖 24_input 的键位映射层与 31_touch 的按钮) -->
-<script src="js/51_settings.js?v=20260929b"></script>
+<script src="js/51_settings.js?v=20261030k"></script>
 <!-- 开发者控制台: 按 \ (Backslash) 或 F2 开关 (不写进作品简介/版本日志) -->
-<script src="js/52_devconsole.js?v=20260929b"></script>
+<script src="js/52_devconsole.js?v=20261030k"></script>
 <!-- 药品轮盘: 依赖 38_tarkov(MED_DEFS/RUN) 与 40_raidshop(useLootFromBag), 所以放在最后 -->
 <!-- VibeHub SDK: 必须用绝对地址（游戏页在 vibeapps 域，相对路径会 404） -->
 <script src="https://vibe.lumigrav.space/sdk/v3/vibehub.js"></script>
-<script src="js/53_medwheel.js?v=20260929b"></script>
-<script src="js/54_vibe.js?v=20260929b"></script>
-<script src="js/55_net.js?v=20260929b"></script>
-<script src="js/56_story.js?v=20260929b"></script>
-<script src="js/57_downed.js?v=20260929b"></script>
+<script src="js/53_medwheel.js?v=20261030k"></script>
+<script src="js/54_vibe.js?v=20261030k"></script>
+<script src="js/55_net.js?v=20261030k"></script>
+<script src="js/56_story.js?v=20261115h"></script>
+<script src="js/57_downed.js?v=20261119a"></script>
+<script src="js/58_vault.js?v=20261030k"></script>
+<script src="js/59_screenfx.js?v=20261030k"></script>
+<script src="js/60_falldmg.js?v=20261030k"></script>
+<script src="js/61_range.js?v=20261030k"></script>
+<!-- 双摄像机镜内渲染: 主相机 + 目镜 RT, 关镜后镜片仍在渲染 (见 63_scope) -->
+<script src="js/63_scope.js?v=20261118a"></script>
+<!-- 配音: 英文语音 + 中文字幕 (assets/vo/manifest.json) -->
+<script src="js/64_voice.js?v=20261115a"></script>
+<!-- 网格库存: 仓库 / 背包 / 物资容器 (见 65_invgrid) -->
+<script src="js/65_invgrid.js?v=20261116c"></script>
+<!-- 每张地图的 BOSS: 街区守备不攻击 BOSS, 其他地图会围剿 (见 66_boss) -->
+<script src="js/66_boss.js?v=20261119a"></script>
 </body>
 </html>

@@ -62,6 +62,8 @@ p320:    { name:'SIG P320', mode:'半自动', type:'semi', snd:'pistol', dmg:26,
  g17:     { name:'格洛克 G17', mode:'半自动', type:'semi', snd:'pistol', dmg:24, headMul:2.0, rpm:450, mag:17, reserve:68, reload:2.0, spreadHip:2.7, spreadAds:0.5, recoil:0.75, recSide:0.4, adsFov:60, kick:0.05, pistol:true, tracer:2 },
  // ============ 俄制 2000-2020 ============
  ak74m:   { name:'AK-74M', mode:'全自动', type:'auto', snd:'rifle', dmg:27, headMul:1.9, rpm:650, mag:30, reserve:150, reload:2.5, spreadHip:3.0, spreadAds:0.34, recoil:0.75, recSide:0.45, adsFov:54, kick:0.05, tracer:3 },
+ ak12:    { name:'AK-12', mode:'全自动', type:'auto', snd:'rifle', dmg:32, headMul:1.95, rpm:650, mag:30, reserve:150, reload:2.4, spreadHip:2.8, spreadAds:0.30, recoil:0.66, recSide:0.40, adsFov:54, kick:0.05, model:'ak74m', tracer:3 },
+ aks74u:  { name:'AKS-74U', mode:'全自动', type:'auto', snd:'rifle', dmg:26, headMul:1.85, rpm:650, mag:30, reserve:120, reload:2.3, spreadHip:3.4, spreadAds:0.42, recoil:0.58, recSide:0.38, adsFov:56, kick:0.045, model:'ak74m', tracer:4 },
  svd:     { name:'SVD 德拉贡诺夫', mode:'半自动 · 4x', type:'semi', snd:'sniper', dmg:72, headMul:2.2, rpm:150, mag:10, reserve:60, reload:2.9, spreadHip:4.2, spreadAds:0.04, recoil:1.6, recSide:0.45, adsFov:28, kick:0.1, scoped:true, tracer:1 },
  pp19:    { name:'PP-19 勇士', mode:'全自动', type:'auto', snd:'smg', dmg:21, headMul:1.8, rpm:750, mag:30, reserve:180, reload:2.3, spreadHip:2.7, spreadAds:0.5, recoil:0.42, recSide:0.32, adsFov:56, kick:0.04, tracer:4 },
  // 已移除: rpg7(RPG-7 火箭筒)
@@ -87,7 +89,7 @@ const ARSENAL_ERA={
  m38carb:'ww2', finmosin:'ww2', finmosins:'ww2', suomi:'ww2', ls26:'ww2',
  l35:'ww2', type38c:'ww2', laotao:'ww2',
  m4:'modern', g36c:'modern', m24:'modern', g28:'modern', mp5:'modern',
- p320:'modern', g17:'modern', ak74m:'modern', svd:'modern', pp19:'modern', pyat:'modern',
+ p320:'modern', g17:'modern', ak74m:'modern', ak12:'modern', aks74u:'modern', svd:'modern', pp19:'modern', pyat:'modern',
  deagle:'modern', glock18:'modern', awm:'modern', qbz95:'modern', qbz191:'modern', hk416:'modern'
 };
 // 过滤 &&WPN_DEFS[k]: 已移除的武器(火箭筒/反坦克枪)若仍残留在 ARSENAL_ERA 里,

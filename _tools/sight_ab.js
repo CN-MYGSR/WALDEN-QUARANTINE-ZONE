@@ -1,7 +1,7 @@
 // A/B: 接通 WFX.sight 前后 AI 交战活跃度对比
 // 两趟独立加载, 分别把 WFX.sight 钉成 1.0(旧行为) / 0.55(街区实际值), 各采样 42s。
 // 用法: node _tools/sight_ab.js [campaignIdx]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9442, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 const SIGHTS = (process.argv[3] ? process.argv[3].split(',') : ['1.0','0.55']).map(Number);

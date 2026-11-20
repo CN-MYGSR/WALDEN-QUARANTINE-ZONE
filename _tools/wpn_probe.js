@@ -1,6 +1,6 @@
 // 武器平衡运行时探针: 通过 CDP 连接已打开的页面, 读取 CQB 平衡后的武器数值
 const http = require('http');
-const WS = require('ws');
+const WS = require('./ws');
 (async () => {
   const list = await new Promise(r => http.get('http://127.0.0.1:9222/json/list', res => {
     let d = ''; res.on('data', c => d += c); res.on('end', () => r(JSON.parse(d)));

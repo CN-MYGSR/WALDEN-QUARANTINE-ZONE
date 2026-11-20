@@ -1,6 +1,6 @@
 // 夜视仪白天过曝可用 + gear_nvg 枪上模型 实机冒烟 (headless Chrome + CDP)
 // 结果写入 _tools/nvg_day_live.txt, 截图到 outputs/
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9457, URL = 'http://127.0.0.1:8123/index.html';
 const ROOT = path.resolve(__dirname, '..');
 const out = []; const log = s => out.push(s);

@@ -2,7 +2,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const WS = require('ws');
+const WS = require('./ws');
 const { spawn } = require('child_process');
 
 const URL_GAME = process.argv[2] || 'http://127.0.0.1:8123/index.html';

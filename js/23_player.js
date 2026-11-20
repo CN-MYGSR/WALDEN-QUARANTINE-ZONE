@@ -69,7 +69,6 @@ this.nadeHeld=false; this.nadeCharge=0; this.nadeCharging=false;
 // 修复: 开镜状态阵亡后残留(镜遮罩/ADS/屏息/架枪一并复位)
 this.ads=false; this.holdBreath=false; this.braced=false;
 if(typeof VM!=='undefined'){ VM.adsBlend=0; }
-document.getElementById('scopeOv').style.display='none';
 document.exitPointerLock&&document.exitPointerLock();
 noteDeath(this.pos.x,this.pos.z);
 // 死亡视角: 摄像机绑进布娃娃头部眼位(约4秒), 期间部署冷却并行计时(不额外占用)

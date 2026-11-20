@@ -87,6 +87,8 @@ function unitJoin(bot,u){
 // 分配单位: 回原单位 → 补最满的缺编单位 → 新建不足编单位
 function assignUnit(bot){
  if(!bot) return null;
+ // BOSS 不编队: 同单位免伤会让同阵营守备无法围剿 (见 66_boss / isHostileUnit)
+ if(bot.isBoss){ bot.unitId='BOSS'; bot.squadGroup=0; return null; }
  let u=unitOf(bot);
  if(u&&u.team===bot.team){
   // 阵亡后仍在原单位名册里 → 重生时原地归队(保留编制位就是为了让他人能回来)
@@ -111,7 +113,7 @@ function reformAllUnits(){
  const groups=new Map();                       // "team:origGroup" -> [bot]
  const list=(typeof soldiers!=='undefined')?soldiers:[];
  for(const s of list){
-  if(!s) continue;
+  if(!s||s.isBoss) continue;                   // BOSS 不参与编队
   const key=s.team+':'+((s.squadGroup|0)||0);
   if(!groups.has(key)) groups.set(key,[]);
   groups.get(key).push(s);

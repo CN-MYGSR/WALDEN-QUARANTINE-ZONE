@@ -11,6 +11,8 @@ this.mesh=buildSoldierMesh(team,name);
 this.gun=null; this.gunKind=null;
 this.customWeapon=null;
 this.setClass(cls);
+// 敌方 PMC 使用 2–3 级弹, 拾荒者/友军用普通弹; 决定打玩家护甲时的穿透
+this.ammoKey = (this.team===1) ? ((cls>=3)?'ammo_m995':'ammo_m855') : 'ammo_std';
 this.state='idle';
 this.path=null; this.pathI=0; this.repathT=0;
 this.objective=null; this.defendPt=null;
@@ -149,7 +151,7 @@ this.lastDmgT=nowT;
 this.suppression=Math.min(1.6,this.suppression+0.45);
 this.aimSettle=Math.max(0.1,this.aimSettle-0.4);
 // 同单位误伤不成立: 既不反制也不锁定对方 (同队之外再加一道单位闸)
-if(attacker&&attacker.team!==this.team&&!(typeof unitBlocks==='function'&&unitBlocks(attacker,this))){
+if(attacker&&(attacker.team!==this.team||(typeof isHostileUnit==='function'&&isHostileUnit(attacker,this)))&&!(typeof unitBlocks==='function'&&unitBlocks(attacker,this))){
 // 中立模式: 被谁打就只记谁的仇 (含同小队 30m 内的队友), 且必定立刻还击
 if(NPC_NEUTRAL) this.aggroOn(attacker,30);
 this.noticeThreat(attacker);
@@ -410,7 +412,7 @@ const eye=this.eyePos();
 for(const e of combatants){
 // 同队 或 同单位 一律不可锁定 (单位由 47_units 维护; 未加载时该判定自动退化为只按队伍)
 // ⚠️ 跳过已倒地目标 (倒地 = 退出战斗, 不该继续被点名; 想处决得手动打)
-if(!e.alive||e.downed||e.team===this.team||!this.aggroOk(e)||(typeof unitBlocks==='function'&&unitBlocks(this,e))) continue;
+if(!e.alive||e.downed||(e.team===this.team&&!(typeof isHostileUnit==='function'&&isHostileUnit(this,e)))||!this.aggroOk(e)||(typeof unitBlocks==='function'&&unitBlocks(this,e))) continue;
 // 载具内目标: 运兵车车斗乘员是暴露的可以被看到; 封闭车厢(canvas)只在尾部扇区可见
 if(e.onVehicle){
 if(e.onVehicle.kind!=='apc') continue;

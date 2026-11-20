@@ -68,7 +68,7 @@ lootSpots:[] },
  mapLoot:'物资箱 ×16 · 中低价值为主',
  mapThreat:'守备强度 ★★★☆☆',
  mapDiff:3,
- forceWeather:'anvilhaze',
+ forceWeather:'anvilhaze', storyOnly:true,
  botMul:{ enemyHp:1.10, enemyReact:0.86, enemySpread:0.86, friendHp:0.98 },
  extract:[{x:0,z:92}] },
 { id:'anvil_b2', title:'铁砧 · B2 层', sub:'剧情 · 第二章 · 地下封存库 · 取回制剂样本', f:['usec','pmc'], theme:'anvilb2', allyBots:1, enemyBots:8, dimLight:0.34,
@@ -81,15 +81,35 @@ lootSpots:[] },
  mapLoot:'物资箱 ×20 · 高价值密集',
  mapThreat:'守备强度 ★★★★☆',
  mapDiff:4,
- forceWeather:'labhaze',
+ forceWeather:'labhaze', storyOnly:true,
  botMul:{ enemyHp:1.24, enemyReact:0.78, enemySpread:0.76, friendHp:0.95 },
  extract:[{x:0,z:66}] },
+ // ===== 靶场 (只能从主菜单「靶 场」进入) =====
+ { id:'range', title:'室内靶场', sub:'靶场 · 练习枪法 · 2~30m 固定/移动靶', f:['usec','pmc'], theme:'lab', allyBots:0, enemyBots:0,
+  terr:'flat', layout:'range', mode:'extract', atk:0, modeName:'室内靶场', mapSize:90,
+  flags:[], bases:[{x:0,z:14},{x:0,z:-18}], sineRoad:false,
+  roads:[], trench:[],
+  mapName:'室内靶场',
+  mapTag:'靶场 · 2~30m 固定 / 移动靶',
+  mapDesc:'封闭靶道，射击线到挡弹墙 30m。免费武器、无限弹药 —— 练枪法用的，没有敌人也没有战利品。',
+  mapLoot:'无战利品',
+  mapThreat:'无敌人',
+  mapDiff:0,
+  rangeOnly:true,
+  forceWeather:'indoor',
+  botMul:{ enemyHp:1, enemyReact:1, enemySpread:1, friendHp:1 },
+  extract:[] },
 ];
 // 地图选择持久化: localStorage.sf_campaign (旧版只写不读, 这里补上读取)
 let CAMPAIGN_IDX=(()=>{
 let i=NaN;
 try{ i=parseInt(localStorage.getItem('sf_campaign')||'',10); }catch(e){ i=NaN; }
 if(!isFinite(i)||i<0||i>=CAMPAIGNS.length) i=0;
+// 剧情专用地图不能当沙盒地图用: 没有待打章节(sf_story)时回退到第一张
+try{
+ if(CAMPAIGNS[i]&&CAMPAIGNS[i].storyOnly&&!localStorage.getItem('sf_story')) i=0;
+ if(CAMPAIGNS[i]&&CAMPAIGNS[i].rangeOnly&&!localStorage.getItem('sf_range')) i=0;
+}catch(e){}
 return i;
 })();
 const CAMPAIGN=CAMPAIGNS[CAMPAIGN_IDX];
@@ -105,7 +125,7 @@ const CAMPAIGN_WEATHER={rhine:'overcast',alps:'snow',delta:'storm',berlin:'overc
 const WEATHER_MODES={clear:{name:'晴朗'},fog:{name:'迷雾'},rain:{name:'雨天'},storm:{name:'雷暴雨'},night:{name:'黑夜'},overcast:{name:'阴天'},dusk:{name:'黄昏'},
  // ⚠️ 下面 4 个不是玩家可选项, 而是 CAMPAIGN_WEATHER / CAMPAIGN.forceWeather 的取值。
  //    必须留在这张表里 —— 29_menus 会拿 WEATHER_MODE 直接查它 (缺了会让主菜单初始化抛错)。
- labhaze:{name:'地下浮尘'},seahaze:{name:'海雾'},airporthaze:{name:'清晨薄霾'},anvilhaze:{name:'工业尘霾'}};
+ labhaze:{name:'地下浮尘'},seahaze:{name:'海雾'},airporthaze:{name:'清晨薄霾'},anvilhaze:{name:'工业尘霾'},indoor:{name:'室内'}};
 // 2026-09-19: 天气改为**随机**（每局开始掷一次），玩家不再能选。
 // 掷点权重: 晴朗/阴天常见, 雾与雨次之, 雷暴与黑夜稀有 —— 稀有感更强。
 const WEATHER_POOL=[
@@ -147,7 +167,9 @@ seahaze:{fogFar:0.42,fogNear:16,sun:0.38,hemi:0.5,skyDark:0.44,sight:0.5},
 // 但航站楼与机库的轮廓被霾吃掉, 中远距离交火仍是主流
 airporthaze:{fogFar:0.58,fogNear:28,sun:0.42,hemi:0.54,skyDark:0.30,sight:0.62},
 // 铁砧外围专用: 工业尘霾 —— 比海雾更呛、比实验室亮, 钢构与堆场轮廓在中距被吃掉
-anvilhaze:{fogFar:0.50,fogNear:22,sun:0.40,hemi:0.56,skyDark:0.40,sight:0.60}
+anvilhaze:{fogFar:0.50,fogNear:22,sun:0.40,hemi:0.56,skyDark:0.40,sight:0.60},
+// 靶场专用: 室内没有天气, 全亮
+indoor:{fogFar:1,fogNear:60,sun:1,hemi:1.45,skyDark:0,sight:1}
 };
 // 注意: 必须取 WEATHER(已折算战役默认天气) 而非 WEATHER_MODE,
 // 否则玩家未显式选天气时, 战役默认阴天/黄昏的能见度参数不会生效。

@@ -9,6 +9,8 @@ release/
 .workbuddy/
 .workbuddy-ai/
 .mimosa/
+# 配音交付的临时解包目录(源 WAV 体积大, 运行时只用 assets/vo/*.mp3)
+_vo_incoming/
 
 # ===================== 编辑器 / 系统 =====================
 .vscode/

@@ -1,6 +1,6 @@
 // 建筑战术结构探针: 逐栋检查 每层可站立率 / 封闭房间 / 楼梯越界 / 出入口数量
 // 用法: node _tools/bld_probe.js <campaignIdx> [outTag]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9417, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 const TAG = process.argv[3] || ('c' + IDX);

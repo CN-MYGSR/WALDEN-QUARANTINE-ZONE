@@ -22,7 +22,7 @@ function splashDamage(p,attacker,team,radius,dmgMax,dmgVeh){
 for(const s of combatants){
 if(!s.alive||s.onVehicle) continue;
 // 不误伤队友/同单位, 但炸自己会受伤 (单位判定见 47_units)
-if(s!==attacker&&(s.team===team||(attacker&&typeof unitBlocks==='function'&&unitBlocks(attacker,s)))) continue;
+if(s!==attacker&&((s.team===team&&!(typeof isHostileUnit==='function'&&isHostileUnit(attacker,s)))||(attacker&&typeof unitBlocks==='function'&&unitBlocks(attacker,s)))) continue;
 const d=Math.hypot(s.pos.x-p.x,(s.pos.y+0.9)-p.y,s.pos.z-p.z);
 if(d<radius){ let dm=lerp(dmgMax,10,d/radius); if(attacker&&!attacker.isPlayer&&attacker.dmgMul) dm*=attacker.dmgMul; s.damage(dm,attacker,false); }
 }

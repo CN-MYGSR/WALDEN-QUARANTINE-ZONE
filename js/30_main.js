@@ -110,6 +110,8 @@ player.mouseDY*=Math.pow(0.0001,dt*3);
 updateHUD(dt);
 NVG.render(()=>{
 renderer.clear();
+// 双摄像机: 先把镜内 RT 渲好, 枪模上的目镜 quad 才能采样到当帧画面
+if(typeof SCOPE!=='undefined'&&SCOPE.preRender) SCOPE.preRender();
 renderer.render(scene,camera);
 if(player.alive&&!player.onMG&&VM.root.visible){
 renderer.clearDepth();

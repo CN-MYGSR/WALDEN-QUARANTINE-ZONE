@@ -15,6 +15,8 @@
 // ============================ 1) 地图规则表 ============================
 // 每张地图的掉落/守备差异集中在这里, 改数值不必翻实现
 const MAP_RULES={
+  // 靶场: 不刷战利品、不刷敌人
+  range:{ crateExtra:0, richChance:0, corpseExtra:0, botMul:null },
   // 街区: 基准
   bfruins:{
     crateExtra:0,          // 普通箱追加件数
@@ -243,11 +245,24 @@ finishRaid=function(extracted){
 // ============================ 5) 撤离部署: 地图选择 ============================
 // 世界在页面加载时构建, 所以换地图必须重载页面;
 // 用 sf_autodeploy 标记"这次重载是为了直接开打", 回来后自动进部署界面。
+// 剧情专用地图 (storyOnly) 只能从主菜单「剧情模式」进入, 沙盒不给选
+function storyPendingChapter(){
+  try{ return !!localStorage.getItem('sf_story'); }catch(e){ return false; }
+}
+function storyMapBlocked(){
+  const c=CAMPAIGNS[CAMPAIGN_IDX];
+  if(!c||(!c.storyOnly&&!c.rangeOnly)) return false;
+  if(storyPendingChapter()) return false;
+  try{ if(localStorage.getItem('sf_range')==='1') return false; }catch(e){}                                  // 剧情模式待打 → 放行
+  if(typeof player!=='undefined'&&player.deployed&&!matchOver) return false;  // 局内重新部署 → 放行
+  return true;
+}
 function renderMapCards(){
   const row=el('mapRow');
   if(!row){ console.warn('[map] #mapRow 不存在, 地图卡片无法渲染 (index.html 版本过旧?)'); return; }
   row.innerHTML='';
   CAMPAIGNS.forEach((c,i)=>{
+    if(c.storyOnly||c.rangeOnly) return;   // 剧情 / 靶场专用地图不进沙盒列表
     const b=document.createElement('button');
     b.className='optBtn mapCard'+(i===CAMPAIGN_IDX?' sel':'');
     b.style.minWidth='176px';
@@ -263,7 +278,18 @@ function renderMapCards(){
     b.onclick=()=>selectMapAndDeploy(i);
     row.appendChild(b);
   });
-  showMapBrief(CAMPAIGN_IDX);
+  const cur=CAMPAIGNS[CAMPAIGN_IDX];
+  let _rngPend=false; try{ _rngPend=localStorage.getItem('sf_range')==='1'; }catch(e){}
+  if(cur&&(cur.storyOnly||cur.rangeOnly)&&!storyPendingChapter()&&!_rngPend){
+    // 当前地图是剧情图(打完剧情章节后可能停在这里) → 提示选一张沙盒地图
+    const fb=CAMPAIGNS.findIndex(c=>!c.storyOnly);
+    showMapBrief(fb>=0?fb:0);
+    const box=el('mapBrief');
+    if(box) box.innerHTML='<b style="color:#e0b0a0">当前地图是剧情专用</b> —— 请选一张沙盒地图<br>'
+      +'<span style="opacity:.8">剧情地图只能从主菜单「剧情模式」进入</span>';
+  } else {
+    showMapBrief(CAMPAIGN_IDX);
+  }
 }
 function showMapBrief(i){
   const box=el('mapBrief');

@@ -1,6 +1,6 @@
 // 遗留项验证: ① 港区地形是否仍高于混凝土板  ② 各战役 bot 实际视距
 // 用法: node _tools/leftover_probe.js [campaignIdx]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9436, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '2', 10);
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }

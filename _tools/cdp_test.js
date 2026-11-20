@@ -63,7 +63,7 @@ function rpc(ws, method, params, sessionId) {
 (async () => {
   const list = await waitTarget();
   const page = list.find(t => t.type === 'page') || list[0];
-  const WebSocket = require('ws');
+  const WebSocket = require('./ws');
   let ws, sid = null;
 
   const errors = [], logs = [];

@@ -1,4 +1,4 @@
-﻿'use strict';
+'use strict';
 // 小队指令标记: 多种纹理(进攻/驻守), 按模式切换
 function squadMarkerTex(label,color){
 const c=document.createElement('canvas'); c.width=64; c.height=64;
@@ -121,6 +121,12 @@ drawBigMap();
 function bigMapVisible(){ return bigMapOn; }
 const keys={};
 let pointerLocked=false;
+// 打开背包等模态界面时调用: 释放所有按键与鼠标状态, 避免人物继续移动/开火
+function releaseAllInputs(){
+try{ for(const k in keys) keys[k]=false; }catch(e){}
+try{ mouseDown=false; mouse2Down=false; }catch(e){}
+try{ if(typeof player!=='undefined'&&player){ player.mouseDX=0; player.mouseDY=0; } }catch(e){}
+}
 // ===================== 键位自定义 =====================
 // 每个「动作」绑定一个 KeyboardEvent.code。改动只影响输入层:
 //  · 动作键: keydown 里用 isKey(e,'xxx') 比对
@@ -154,7 +160,7 @@ const KEY_ACTIONS=[
 {a:'interact',   n:'互动/搜刮',   d:'KeyF'},
 {a:'bag',        n:'背包面板',    d:'Tab'},
 {a:'score',      n:'计分板',      d:'KeyP'},
-{a:'nvg',        n:'夜视仪',      d:'KeyN'},
+{a:'nvg',        n:'夜视/面罩（轻按）', d:'KeyN'},
 {a:'flashLight', n:'手电/激光指示器', d:'KeyG'},
 {a:'map',        n:'大地图',      d:'KeyM'},
 {a:'squadAttack',n:'小队·攻击',   d:'KeyT'},
@@ -387,7 +393,51 @@ showScorePop('建造选择: '+bn+' (消耗'+BUILD_COST[bt]+'点'+(TOUCHUI?'':' �
 },
 };
 addEventListener('keydown',e=>{
-if(isKey(e,'bag')){ e.preventDefault(); if(typeof toggleBagPanel==='function') toggleBagPanel(); }
+// 弹药商店打开时, Esc 只关闭商店, 不继续触发暂停/部署界面。
+if(e.code==='Escape'&&typeof AMMO_UI!=='undefined'&&AMMO_UI.open){
+  e.preventDefault(); e.stopImmediatePropagation();
+  ammoShopClose();
+  return;
+}
+// ===== 背包面板打开时: 只响应 Tab / Esc / R / ↑ / ↓ =====
+// 面板会主动退出指针锁定让鼠标能拖拽, 因此这里必须先于 pointerLocked 判断,
+// 否则方向键/R 会因为"未锁定"被直接 return 掉。
+if(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open){
+  const _c=e.code;
+  const _tab=(typeof isKey==='function')?isKey(e,'bag'):(_c==='Tab');
+  if(_tab){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if(typeof toggleBagPanel==='function') toggleBagPanel();
+    return;
+  }
+  if(_c==='Escape'){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if(typeof bagPanelClose==='function') bagPanelClose();
+    return;
+  }
+  if(_c==='KeyR'){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if(typeof bagRotateSelected==='function') bagRotateSelected();
+    return;
+  }
+  if(_c==='ArrowUp'||_c==='ArrowDown'){
+    e.preventDefault(); e.stopImmediatePropagation();
+    if(typeof bagPanelKey==='function') bagPanelKey(_c,e.shiftKey);
+    return;
+  }
+  // 其余按键一律吞掉: 不写入 keys、不触发换弹/切枪/使用/建造等游戏动作
+  e.preventDefault(); e.stopImmediatePropagation();
+  return;
+}
+// 无极变倍: [ / ] 只在开镜时生效, 不占用其他键位
+if(player&&player.ads&&(e.code==='BracketLeft'||e.code==='BracketRight')&&typeof zoomAdjust==='function'){
+  if(zoomAdjust(VM.key,e.code==='BracketRight'?1:-1)){
+    e.preventDefault();
+    if(typeof zoomHudUpdate==='function') zoomHudUpdate();
+    return;
+  }
+}
+if(isKey(e,'bag')){ e.preventDefault(); if(typeof toggleBagPanel==='function') toggleBagPanel(); return; }
 if(isKey(e,'score')){ document.getElementById('scoreboard').style.display='block'; updateScoreboard(); }
 // 药品轮盘: 和背包一样放在 pointerLocked 检查之前 —— 退出指针锁定(暂停菜单)时也得能按开
 if(e.code==='Escape'&&typeof medWheelIsOpen==='function'&&medWheelIsOpen()){ e.preventDefault(); closeMedWheel(); return; }
@@ -397,7 +447,8 @@ if(e.repeat) return;
 if(!player.alive||!pointerLocked) return;
 // 背包面板打开时优先消费方向键/G/Q/Esc, 避免与游戏操作冲突
 if(typeof bagPanelKey==='function'&&bagPanelKey(e.code,e.shiftKey)) return;
-if(isKey(e,'nvg')&&typeof NVG!=='undefined') NVG.toggle();
+// N: 轻按切换本局选定的头部装备 —— 面罩模式切面罩, 夜视模式切夜视仪
+if(isKey(e,'nvg')){ if(typeof toggleHeadgear==='function') toggleHeadgear(); }
 if(isKey(e,'flashLight')&&typeof flashToggle==='function') flashToggle();
 if(isKey(e,'reload')) tryReload();
 if(isKey(e,'crouch')) InputActions.toggleCrouch();
@@ -474,6 +525,17 @@ addEventListener('contextmenu',e=>e.preventDefault());
 // ===== 鼠标滚轮: 切换高低姿态持枪 =====
 // 上滚 → 高位持枪(抵肩待发), 下滚 → 低位持枪(枪口下压, 移动加速)
 // 仅在步兵状态下生效; 背包面板打开时滚轮用于滚动列表, 不切姿态。
+// 无极变倍 HUD: 只在开镜且当前武器可放大时显示 ×N.N
+let _zoomHudTxt='', _zoomHudOn=false;
+function zoomHudUpdate(){
+  const elz=document.getElementById('zoomN'); if(!elz) return;
+  let z=null;
+  try{ z=(typeof zoomOf==='function'&&typeof VM!=='undefined')?zoomOf(VM.key):null; }catch(err){}
+  const on=!!(z&&typeof player!=='undefined'&&player&&player.ads);
+  const t=on?('×'+z.toFixed(1)):'';
+  if(t!==_zoomHudTxt){ _zoomHudTxt=t; elz.textContent=t; }
+  if(on!==_zoomHudOn){ _zoomHudOn=on; elz.style.display=on?'inline':'none'; }
+}
 let _wheelAcc=0, _wheelLockT=0;
 addEventListener('wheel',e=>{
 if(!pointerLocked||!player.alive) return;
@@ -485,8 +547,14 @@ if(now-_wheelLockT<180) return;                            // 防抖: 触控板�
 const dy=e.deltaY;
 _wheelAcc+=dy;
 if(Math.abs(_wheelAcc)<8) return;
-const dir=_wheelAcc>0?'low':'high';                        // 下滚=低位, 上滚=高位
+const up=_wheelAcc<0;
 _wheelAcc=0; _wheelLockT=now;
+// 开镜 + 放大瞄具: 滚轮改为无极变倍, 不再切持枪姿态
+if(player.ads&&typeof zoomAdjust==='function'&&zoomAdjust(VM.key,up?1:-1)){
+  if(typeof zoomHudUpdate==='function') zoomHudUpdate();
+  return;
+}
+const dir=up?'high':'low';                                 // 下滚=低位, 上滚=高位
 if(player.carry!==dir&&typeof setCarryStance==='function') setCarryStance(dir);
 },{passive:false});
 let lockGraceUntil=0; // 修复: 指针锁定切换后浏览器可能给出一次异常巨大的 movementX 导致视角瞬移
@@ -505,7 +573,8 @@ if(performance.now()<lockGraceUntil) return;
  if(my>160)my=160; else if(my<-160)my=-160;
  if(player.onVehicle&&player.onVehicle.kind==='plane') my=-my; // 飞机拉杆反转: 鼠标上推=推杆(机头下压)
 const d=WPN_DEFS[VM.key]||{};
-const zoomFac=player.ads?(d.adsFov||60)/74:1;
+// 灵敏度按真实开镜倍率补偿(含 2×/4× 改件, 见 14b 的 adsFovOf)
+const zoomFac=player.ads?(((typeof adsFovOf==='function')?adsFovOf(VM.key):(d.adsFov||60))/BASE_FOV_74):1;
 const s=0.0022*SETTINGS.sens*zoomFac;
 player.yaw-=mx*s;
 player.pitch-=my*s;
@@ -518,7 +587,9 @@ pointerLocked=document.pointerLockElement===renderer.domElement;
 lockGraceUntil=performance.now()+120;
 toggleBigMap(false);
 if(!pointerLocked&&player.alive&&player.deployed&&!matchOver){
-showDeploy(false);
+// 背包面板主动解锁鼠标用于拖拽: 这不是"暂停/失焦", 不能弹部署界面
+const _bagOpen=!!(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open);
+if(!_bagOpen) showDeploy(false);
 }
 });
 function lockPointer(){

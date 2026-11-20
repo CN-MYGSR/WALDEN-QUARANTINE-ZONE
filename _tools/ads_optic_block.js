@@ -1,6 +1,6 @@
 // 测试"非光学枪加装反射/2倍/4倍镜"后, 实体镜筒是否堵住屏幕中心。
 // 这类武器 WPN_DEFS.scoped 为 false, 因此不会走 scopeOv 镜内遮罩。
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9390;
 const OUT = 'D:/Escape from TakeFu/outputs';
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', 'C:/Program Files/Microsoft/Edge/Application/msedge.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }

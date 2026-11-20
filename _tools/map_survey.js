@@ -1,6 +1,6 @@
 // 地图普查: 对指定战役截取俯视图 + 街景, 输出结构指标
 // 用法: node _tools/map_survey.js <campaignIdx> <tag>
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9411, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 const TAG = process.argv[3] || ('map' + IDX);

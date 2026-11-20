@@ -1,7 +1,7 @@
 // 连通性探针: 秘密实验室按 8m 网格采样, 检查从己方入口是否真能走到每个点
 // "真能走到" = findPath 返回的最后一个路点落在目标 6m 内 (findPath 只在找到时补精确终点)
 // 每次 location.reload() 都会用新的 Math.random 重新生成房间/道具 → 多跑几轮看方差
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9395, URL = 'http://127.0.0.1:8123/index.html';
 // argv[2] = 战役序号 (0=街区 对照, 1=秘密实验室)
 const CIDX = (process.argv[2] === undefined ? '1' : String(process.argv[2]));

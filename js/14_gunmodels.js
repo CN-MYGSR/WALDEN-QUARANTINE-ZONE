@@ -23,33 +23,33 @@ m.position.set(x,y,z); if(g) g.add(m); return m;
 // ---------- 机瞄部件族 ----------
 // 每个函数末尾把"准星顶高度"记录进 SIGHT_REC, 供开镜自动校准使用。
 // 片状准星 (手枪/冲锋枪)
-function sFront_blade(G,m,x,y,z){ bx(m,0.006,0.022,0.006, x,y+0.011,z,G); const t=y+0.020; SIGHT_REC.front.push(t); return t; }
+function sFront_blade(G,m,x,y,z){ bx(m,0.006,0.022,0.006, x,y+0.011,z,G); const t=y+0.020; SIGHT_REC.front.push(t); SIGHT_REC.frontPos.push({x:x,y:t,z:z}); return t; }
 // 麦粒+斜护翼 (毛瑟/中正/三八)
 function sFront_wings(G,m,x,y,z){
 bx(m,0.005,0.02,0.006, x,y+0.010,z,G);
 const l=bx(m,0.004,0.02,0.008, x-0.014,y+0.008,z,G); l.rotation.z=0.42;
 const r=bx(m,0.004,0.02,0.008, x+0.014,y+0.008,z,G); r.rotation.z=-0.42;
-const t=y+0.018; SIGHT_REC.front.push(t); return t;
+const t=y+0.018; SIGHT_REC.front.push(t); SIGHT_REC.frontPos.push({x:x,y:t,z:z}); return t;
 }
 // 带全护罩准星 (M1/91-30/PPSh)
 function sFront_hood(G,m,x,y,z){
 bx(m,0.005,0.02,0.006, x,y+0.010,z,G);
 ringM(m,0.013,0.0022, x,y+0.013,z,G);
-const t=y+0.018; SIGHT_REC.front.push(t); return t;
+const t=y+0.018; SIGHT_REC.front.push(t); SIGHT_REC.frontPos.push({x:x,y:t,z:z}); return t;
 }
 // 觇孔照门+护耳 (M1系/汤普森)
 function sRear_peep(G,m,x,y,z){
 ringM(m,0.0075,0.0028, x,y+0.014,z,G);
 bx(m,0.0055,0.026,0.014, x-0.0135,y+0.010,z,G);
 bx(m,0.0055,0.026,0.014, x+0.0135,y+0.010,z,G);
-const t=y+0.014; SIGHT_REC.rear.push(t); return t;
+const t=y+0.014; SIGHT_REC.rear.push(t); SIGHT_REC.rearPos.push({x:x,y:t,z:z}); return t;
 }
 // V型缺口照门片 (毛瑟/莫辛表尺后座)
 function sRear_notch(G,m,x,y,z){
 bx(m,0.013,0.010,0.005, x-0.0115,y+0.008,z,G);
 bx(m,0.013,0.010,0.005, x+0.0115,y+0.008,z,G);
 bx(m,0.034,0.004,0.005, x,y+0.002,z,G);
-const t=y+0.012; SIGHT_REC.rear.push(t); return t;
+const t=y+0.012; SIGHT_REC.rear.push(t); SIGHT_REC.rearPos.push({x:x,y:t,z:z}); return t;
 }
 // 弧形表尺底座 (栓动步枪中段)
 function sTangent(G,m,x,y,z){
@@ -67,6 +67,8 @@ cyl(gm,0.006,0.006,0.014, x,y+r+0.005,z,G,0);
 cyl(gm,0.006,0.006,0.014, x+r+0.005,y,z,G,Math.PI/2).rotation.z=HPI;
 bx(gm,0.010,0.024,0.024, x,y-r-0.008,z-len*0.28,G);
 bx(gm,0.010,0.024,0.024, x,y-r-0.008,z+len*0.28,G);
+// 目镜挂点: 63_scope 在这里贴一块采样镜内 RT 的平面 (枪口朝 -z, 目镜在 +z 侧)
+G.userData.scopeLens={pos:V3(x,y,z+len/2+0.012), r:r*0.86};
 return y;
 }
 // 栓动拉栓组: 返回 {bolt, handle, knobPos}
@@ -96,10 +98,10 @@ function adsFromSight(sx,sy,zoff){ return {pos:V3(-sx,-sy,zoff),rot:ADSROT0}; }
 // 由 buildGunModel 汇总为 parts.sightAnchor, 供 vmEquip 校准 ADS 锚点高度。
 // 若不这样做, 手填的 ads 锚点高度与模型实绘准星会差 0.005~0.015,
 // 开镜后瞄具偏离屏幕中心(玩家感受为"准星偏低")。
-let SIGHT_REC={front:[],rear:[]};
+let SIGHT_REC={front:[],rear:[],frontPos:[],rearPos:[]};
 function buildGunModel(key){
 const modKey=key;
-SIGHT_REC={front:[],rear:[]};
+SIGHT_REC={front:[],rear:[],frontPos:[],rearPos:[]};
 const dm=WPN_DEFS[key]&&WPN_DEFS[key].model;
 if(dm) key=dm;
 const G=new THREE.Group();
@@ -1261,6 +1263,9 @@ magWell:V3(0,-0.055,0.048),
 });
 }
 G.traverse(o=>{ if(o.isMesh){ o.castShadow=false; o.receiveShadow=false; } });
+// 机瞄坐标: 后照门优先(瞄具就装在照门所在的机匣导轨上), 没有后照门时用前准星
+if(SIGHT_REC.rearPos.length) parts.ironSight=SIGHT_REC.rearPos[0];
+else if(SIGHT_REC.frontPos.length) parts.ironSight=SIGHT_REC.frontPos[0];
 addModVisuals(parts, modKey);
 // ===== 机瞄锚点汇总 =====
 // 前准星顶高度优先; 无前准星记录时退回照门高度。供 vmEquip 校准 ADS 锚点,

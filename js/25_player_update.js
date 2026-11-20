@@ -78,6 +78,8 @@ if(!player.alive){ return; }
 // 倒地: 不能移动/开火/交互 (视角仍可转 —— 鼠标监听在 24_input, 只要求 player.alive)
 // 倒计时与 HUD 由 57_downed 的 updatePlayerDowned 负责
 if(player.downed) return updatePlayerDowned(dt);
+// 翻越: 0.4s 的脚本化跨越, 位置由 58_vault 的 updateVault 直接驱动 (不参与常规碰撞)
+if(player.vaultT>0) return updateVault(dt);
 const p=player;
 p.meleeCd-=dt; p.resupplyCd-=dt;
 p.bandResupCd=Math.max(0,(p.bandResupCd||0)-dt);
@@ -140,7 +142,8 @@ let leanTgt=0;
 if(!p.sprinting&&!p.prone&&p.onGround&&!p.braced&&!(typeof BAG_UI!=='undefined'&&BAG_UI.open)){ leanTgt=(keys.KeyQ?-1:0)+(keys.KeyE?1:0); }
 p.leanT=dampF(p.leanT,leanTgt,10,dt);
 if(p.sprinting){ p.stamina=Math.max(0,p.stamina-dt*0.11*(p.stimT>0?0:1)); p.stamUseT=nowT; }
-else if(p.holdBreath){ p.stamina=Math.max(0,p.stamina-dt*0.16*(p.stimT>0?0:1)); p.stamUseT=nowT; }
+else if(p.holdBreath){ const aimLoad=(typeof weaponAimStaminaMul==="function")?weaponAimStaminaMul(p.curW):1; p.stamina=Math.max(0,p.stamina-dt*0.16*aimLoad*(p.stimT>0?0:1)); p.stamUseT=nowT; }
+else if(p.ads){ const aimLoad=(typeof weaponAimStaminaMul==="function")?weaponAimStaminaMul(p.curW):1; p.stamina=Math.max(0,p.stamina-dt*0.025*aimLoad*(p.stimT>0?0:1)); p.stamUseT=nowT; }
 else if(nowT-(p.stamUseT||0)>1) p.stamina=Math.min(1,p.stamina+dt*0.16*(typeof tarkovStaminaMul==='function'?1/Math.max(0.5,tarkovStaminaMul(p)):1));
 if(p.holdBreath&&p.stamina<=0.02) p.holdBreath=false;
 let speed=p.prone?1.15:p.crouch?2.2:(p.sprinting?6.4:4.3);
@@ -167,7 +170,12 @@ if(p.braced){ mx=0; mz=0; }
 const accel=p.onGround?38:6;
 p.vel.x=dampF(p.vel.x,mx*speed,accel*dt>1?12:accel,dt);
 p.vel.z=dampF(p.vel.z,mz*speed,accel*dt>1?12:accel,dt);
-if(keys.Space&&p.onGround&&p.stamina>0.05){ p.vel.y=4.6; p.onGround=false; p.stamina-=0.05; p.stamUseT=nowT; p.crouch=false; p.prone=false; p.braced=false; }
+if(keys.Space&&p.onGround&&p.stamina>0.05){
+// 面朝窗户/低矮掩体时, 跳跃键优先触发翻越 (58_vault); 翻不过去才照常跳
+if(!(typeof vaultTry==='function'&&vaultTry())){
+p.vel.y=4.6; p.onGround=false; p.stamina-=0.05; p.stamUseT=nowT; p.crouch=false; p.prone=false; p.braced=false;
+}
+}
 // ===== 梯子攀爬 =====
 if(p._onLadder){
 const L2=p._onLadder;
@@ -246,7 +254,11 @@ return;
 }
 const adsB=VM.adsBlend;
 let spread=lerp(w.def.spreadHip,w.def.spreadAds,adsB)*(Math.PI/180)*0.5;
-spread*=(1+p.bloom*1.4)*(p.prone?0.5:p.crouch?0.8:1)*(p.onGround?1:2.2)*(Math.hypot(p.vel.x,p.vel.z)>1?1.4:1);
+// 移动扩散: 按「实际速度」连续加成 —— 站定 1.0 / 步行 ≈2.1 / 冲刺 ≈2.6
+// (原来是「动起来就 ×1.4」的台阶式, 没有准星后必须让"站着打"和"边跑边打"拉开差距)
+const vSpd=Math.hypot(p.vel.x,p.vel.z);
+const moveMul=1+Math.min(1.6,(vSpd/6.4)*1.6)*(1-adsB*0.45);   // 开镜时移动惩罚打 55 折
+spread*=(1+p.bloom*1.4)*(p.prone?0.5:p.crouch?0.8:1)*(p.onGround?1:2.2)*moveMul;
 // 低位持枪: 枪未抵肩, 首发精度明显下降(抬枪惩罚) —— 与移动加速形成取舍
 if(p.carryLow&&adsB<0.6) spread*=1.55;
 if(p.limbs&&p.limbs.arms<35) spread*=1.5; // 手臂受伤: 持枪不稳

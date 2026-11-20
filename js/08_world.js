@@ -574,6 +574,7 @@ case 'port': layoutPort(); break;
 case 'airport': layoutAirport(); break;
 case 'anvil_yard': layoutAnvilYard(); break;
 case 'anvil_b2': layoutAnvilB2(); break;
+case 'range': layoutRange(); break;
 case 'delta': layoutDelta(); break;
 case 'loess': layoutLoess(); break;
 case 'jungle': layoutJungle(); break;
@@ -589,7 +590,8 @@ if(g) DEPOTS.push({id:f.id,x:f.x,z:f.z,g,destroyed:false});
 }
 // 基地营区 (通用) —— 室内/港区/机场地图不摆野战帐篷, 改用设施内或堆场里的设备掩体
 // (见 07d_lab 入口区 / 07e_port 出生点 / 07f_airport 场坪)
-if(CAMPAIGN.layout!=='lab'&&CAMPAIGN.layout!=='port'&&CAMPAIGN.layout!=='airport'){
+// ⚠️ 靶场也是室内图: 不排除的话帐篷/沙袋/木箱会被搭进靶道里 (bases 就在厅内)
+if(CAMPAIGN.layout!=='lab'&&CAMPAIGN.layout!=='port'&&CAMPAIGN.layout!=='airport'&&CAMPAIGN.layout!=='range'){
 CAMPAIGN.bases.forEach((b,t)=>{
 const sgn=b.x<0?1:-1;
 tent(b.x+sgn*2,6,0.3); tent(b.x,-6,-0.2); tent(b.x-sgn*4,0,0);

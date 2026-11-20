@@ -34,7 +34,7 @@ addKillMsg(`${TEAM_NAME[attacker]} 占领了 ${f.id} 点`,attacker);
 for(const c of combatants){
 if(c.alive&&c.team===attacker&&Math.hypot(c.pos.x-f.x,c.pos.z-f.z)<f.r){
 c.score=(c.score||0)+150;
-if(c.isPlayer) showScorePop('+150 占领 '+f.id+' 点');
+if(c.isPlayer){ showScorePop('+150 占领 '+f.id+' 点'); if(typeof VO!=='undefined') VO.play('m_objective',{priority:1}); }
 }
 }
 if(GAMEMODE==='assault'&&attacker===ATK){

@@ -2,7 +2,7 @@
 // 1) 亮度: 用浏览器解码「提亮前基准截图」与「提亮后新截图」, 对比平均亮度
 // 2) 手电: 改件可装 / 运行时点亮 / 光锥暴露判定 / HUD 指示
 // 用法: node _tools/flash_probe.js [campaignIdx]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('ws'), { spawn } = require('child_process');
+const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
 const PORT = 9428, URL = 'http://127.0.0.1:8123/index.html';
 const IDX = parseInt(process.argv[2] || '0', 10);
 function findChrome() { for (const c of ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe']) { try { if (fs.existsSync(c)) return c; } catch (e) { } } return null; }
