@@ -162,15 +162,14 @@ function addRebirthButton(){
  const P=META.prestige||0;
  const info=document.createElement('div');
  info.id='rebirthInfo';
- info.style.cssText='margin:14px 0 2px;color:#d0d0d0;font-size:13px;text-align:center;line-height:1.6';
- info.innerHTML=`已持「撤离通行证」从港口登船离开禁区 · 当前重生次数 <b style="color:#ffffff">NG+${P}</b><br>重生将从零开始：任务重置且目标提高、敌方 NPC 更强、己方 NPC 更弱`;
+ info.className='reportGroup';
+ info.append(reportElement('h2','重生 NG+'+P),reportElement('p','重生将清空货币、仓库、等级和任务。下一轮的任务目标会提高，敌方更强，己方更弱。'));
  const btn=document.createElement('button');
  btn.id='rebirthBtn';
- btn.className='bigBtn';
- btn.textContent=`重 生（NG+${P+1}）`;
- btn.style.cssText='background:#707070;border-color:#dfdfdf;margin-left:8px';
+ btn.className='optBtn';
+ btn.textContent=`重生 NG+${P+1}`;
  btn.onclick=()=>{ if(confirm('确定重生？货币、仓库、等级、任务将全部清零！')) doRebirth(); };
- ctr.parentNode.insertBefore(info,ctr);
+ document.getElementById('endStats').append(info);
  ctr.appendChild(btn);
 }
 
@@ -213,12 +212,12 @@ function renderQuestRows(){
 // ---------- 局内任务追踪 HUD (右上方小面板) ----------
 let _questHud=null,_qSig='';
 function questHudEl(){
- if(!_questHud){ _questHud=document.createElement('div'); _questHud.id='questHud'; document.body.appendChild(_questHud); }
+ if(!_questHud){ _questHud=document.createElement('div'); _questHud.id='questHud'; el('mapObjectives').appendChild(_questHud); }
  return _questHud;
 }
 function updateQuestHud(){
  const hud=questHudEl();
- const inRaid=typeof player!=='undefined'&&player.deployed&&player.alive&&!matchOver&&GAMEMODE==='extract';
+ const inRaid=typeof player!=='undefined'&&player.deployed&&player.alive&&!matchOver&&GAMEMODE==='extract'&&!CAMPAIGN.rangeOnly;
  if(!inRaid){ if(_qSig!=='x'){ hud.style.display='none'; _qSig='x'; } return; }
  const act=QUEST_DEFS.filter(q=>!META.questDone[q.id])
   .map(q=>({q,cur:Math.min(questTarget(q),META.questProg[q.id]||0),tgt:questTarget(q)}))

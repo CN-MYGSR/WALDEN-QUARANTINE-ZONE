@@ -36,7 +36,7 @@ function medWheelRender() {
     const k = ks[i];
     const a = -Math.PI / 2 + i * Math.PI * 2 / n;   // 从正上方开始, 顺时针
     const x = Math.round(Math.cos(a) * r), y = Math.round(Math.sin(a) * r);
-    h += `<div class="mwItem${i === MEDWHEEL.sel ? ' sel' : ''}" data-mwk="${encodeURIComponent(k)}"`
+    h += `<div id="mwOption${i}" role="option" aria-selected="${i===MEDWHEEL.sel}" class="mwItem${i === MEDWHEEL.sel ? ' sel' : ''}" data-mwk="${encodeURIComponent(k)}"`
       + ` style="transform:translate(-50%,-50%) translate(${x}px,${y}px)">`
       + `<div class="mwIco">${itemIconOf(k)}</div>`
       + `<div class="mwName">${itemLabel(k)}</div>`
@@ -44,24 +44,29 @@ function medWheelRender() {
       + `</div>`;
   }
   ring.innerHTML = h;
+  ring.setAttribute('aria-activedescendant','mwOption'+MEDWHEEL.sel);
   const sel = ks[MEDWHEEL.sel];
-  el('mwTitle').textContent = '药 品 · ' + n + ' 种';
-  el('mwSub').textContent = sel ? (((MED_DEFS[sel] && MED_DEFS[sel].desc) || '') + ' · 持有 ' + (RUN.loot[sel] || 0)) : '';
+  el('mwSub').textContent = sel ? itemLabel(sel)+' · '+MED_DEFS[sel].desc+' · 持有 '+RUN.loot[sel] : '';
 }
 
 function openMedWheel() {
   if (MEDWHEEL.open) return false;
   const p = (typeof player !== 'undefined') ? player : null;
   if (!p || !p.alive || !p.deployed || (typeof matchOver !== 'undefined' && matchOver)) return false;
+  if (BAG_UI.open || AMMO_UI.open || LOOT_UI.open || document.querySelector('.screen:not(.hidden)')) return false;
   if (p.onMG || p.onAT || p.onAA || (typeof handsFreeVeh === 'function' && !handsFreeVeh())) {
     if (typeof showScorePop === 'function') showScorePop('当前姿态无法使用药品');
     return false;
   }
   const ks = medWheelKeys();
   if (!ks.length) { if (typeof showScorePop === 'function') showScorePop('身上没有可用的药品'); return false; }
+  releaseAllInputs();
+  p.ads = false;
   MEDWHEEL.keys = ks; MEDWHEEL.sel = 0; MEDWHEEL.ax = 0; MEDWHEEL.ay = 0; MEDWHEEL.open = true;
   medWheelRender();
+  el('mwHint').textContent=TOUCHUI?'点药品使用':'鼠标或方向键选择，单击或回车使用';
   const root = el('medWheel'); if (root) root.classList.remove('hidden');
+  el('mwRing').focus({preventScroll:true});
   if (typeof AudioSys !== 'undefined' && AudioSys.click) AudioSys.click(1100, 0.12, 0.04);
   return true;
 }

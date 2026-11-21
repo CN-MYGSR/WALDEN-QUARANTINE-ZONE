@@ -1,0 +1,51 @@
+#ui .inventoryHead, .inventoryBar, #ui .lootActions {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;
+}
+#ui .inventoryHead h2 { margin: 0; font-size: 21px; letter-spacing: 0; }
+.inventoryBar { border-bottom: 1px solid var(--field-line); padding-bottom: 6px; }
+.inventoryViews { display: inline-flex; gap: 2px; padding: 2px; background: #111813; border-radius: 6px; }
+.inventoryViews button, .takeItem {
+  min-height: 38px; padding: 5px 12px; border: 1px solid transparent; border-radius: 4px;
+  background: transparent; color: var(--field-muted); font: inherit; font-size: 14px; cursor: pointer;
+}
+.inventoryViews [aria-pressed="true"] { background: #36443d; color: var(--field-ink); }
+.inventoryViews button:focus-visible, .takeItem:focus-visible { outline: 2px solid var(--field-amber); outline-offset: -2px; }
+#lootSpace { color: var(--field-ink); font-size: 14px; }
+#ui :is(#bagDetail,#lootDetail) { min-height: 0; flex: none; padding: 8px 10px; margin: 0; }
+#lootDetail .invDBtns { display: inline-block; margin: 3px 0 0; }
+#ui [data-view="list"] :is(#lootRotate,[data-bact="rotate"],.lootCol:nth-child(2)) { display: none; }
+#bagPanel[data-view="list"] #bagPanelList { display: block; }
+#lootPanel[data-view="list"] .lootWrap, #lootPanel[data-view="list"] .lootCol { display: block; width: 100%; }
+#ui [data-view="list"] .invSection { margin: 0 0 6px; }
+#ui [data-view="list"] .invHead { display: flex; justify-content: space-between; margin: 0; padding: 3px 0; }
+#ui [data-view="list"] .invHead span { color: var(--field-muted); }
+#ui [data-view="list"] .invHost { overflow: visible; }
+#ui [data-view="list"] .invGrid {
+  display: grid; gap: 2px; width: 100% !important; height: auto !important;
+  box-sizing: border-box; border: none; background: transparent; box-shadow: none;
+}
+#ui [data-view="list"] .invGrid:empty::after { content: "空"; padding: 4px 12px; font-size: 13px; color: var(--field-muted); }
+#ui [data-view="list"] .invTile {
+  position: static; width: 100% !important; height: auto !important; min-height: 40px;
+  display: flex; flex-direction: row; justify-content: flex-start; gap: 10px; padding: 3px 10px;
+  text-align: left; background: #242d29; border: 1px solid transparent; color: var(--field-ink);
+  cursor: pointer; touch-action: pan-y; font: inherit;
+}
+#ui [data-view="list"] .invTile:hover { background: #303c34; }
+#ui [data-view="list"] .invTile.sel { outline: 0; box-shadow: none; border-color: var(--field-amber); background: #38392c; }
+#ui [data-view="list"] .itIco { flex: none; width: 24px; text-align: center; }
+#ui [data-view="list"] .itName { display: block; flex: 1; min-width: 0; opacity: 1; font-size: 15px; }
+#ui [data-view="list"] .itQty { position: static; color: var(--field-muted); font-size: 14px; }
+#ui .takeItem, #ui .secTakeLabel { display: none; }
+#ui [data-view="list"] .takeItem, #ui [data-view="list"] .secTakeLabel { display: inline-block; }
+.takeItem { color: var(--field-amber); background: #303a32; border-color: var(--field-line); }
+.takeItem:disabled { color: var(--field-muted); opacity: .65; }
+#ui [data-view="list"] .secTakeLabel { color: var(--field-amber); font-size: 14px; }
+#ui .lootActions #lootTakeOne { flex: none; }
+@media (max-height: 480px) {
+  #ui .inventoryHead h2 { font-size: 16px; }
+  #ui .inventoryBar { padding-bottom: 2px; }
+  #ui :is(#bagDetail,#lootDetail) { padding: 4px 8px; }
+  #ui :is(#bagDetail,#lootDetail) .invDHint { display: none; }
+  #ui #bagPanel, #ui #lootPanel { gap: 4px; }
+}

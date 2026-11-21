@@ -14,7 +14,7 @@ const SUITES = [
     /VIBE\.client|面板可见|unitBlocks 已打补丁|^无$/m,
   ]],
   ['头盔系统', '_helmet_probe.js', '_helmet_probe.txt', [
-    /1级 PACA|1级 SSh-68|itemKind|20 伤害打头|护甲不该|helmetHud|带头盔的尸体|货架命中|^无$/m,
+    /1级 PACA|1级 SSh-68|itemKind|20 伤害打头|护甲不该|护甲 HUD|带头盔的尸体|货架命中|^无$/m,
   ]],
   ['耳机系统', '_headset_probe.js', '_headset_probe.txt', [
     /听力 67m|kind=headset|Altyn \+|SSh-68 \+|禁用|NPC 脚步音次数|戴ComTac gain|货架命中|^无$/m,

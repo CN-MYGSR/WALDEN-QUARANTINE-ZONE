@@ -40,30 +40,7 @@ const AMMO_LOOT_CFG = {
 };
 
 // ---------- 弹药类物品 (可拾取 / 可装填 / 可售卖) ----------
-// 0–4 级通用弹种: RIP / 普通 / M855 / M995 / AP
-// 定义与局内弹药商店共用 40_raidshop 的 AMMO_TIERS, 保证价格/穿甲/发数一致
-const AMMO_DEFS = {};
-const AMMO_TIER_KEYS = [];
-(function(){
-  const src=(typeof AMMO_TIERS!=='undefined'&&AMMO_TIERS.length)?AMMO_TIERS:[
-    { id:'ammo_rip',  name:'RIP 弹', short:'RIP',  tier:0, pen:0, dmgMul:1.35, armorMul:0.25, rounds:30, price:120, weight:0.40, icon:'🟥', desc:'0 级 · 几乎不穿甲，软组织伤害极高' },
-    { id:'ammo_std',  name:'普通弹',  short:'普通', tier:1, pen:1, dmgMul:1.00, armorMul:1.00, rounds:30, price:180, weight:0.45, icon:'⬜', desc:'1 级 · 标准全金属被甲弹，通用' },
-    { id:'ammo_m855', name:'M855 弹', short:'M855', tier:2, pen:2, dmgMul:1.05, armorMul:1.30, rounds:30, price:320, weight:0.50, icon:'🟦', desc:'2 级 · 钢芯穿甲，对 1–2 级护甲有效' },
-    { id:'ammo_m995', name:'M995 弹', short:'M995', tier:3, pen:3, dmgMul:1.12, armorMul:1.70, rounds:30, price:520, weight:0.55, icon:'🟪', desc:'3 级 · 钨芯穿甲，对 3 级护甲有效' },
-    { id:'ammo_ap',   name:'AP 弹',   short:'AP',   tier:4, pen:4, dmgMul:1.20, armorMul:2.20, rounds:20, price:780, weight:0.60, icon:'🟨', desc:'4 级 · 高硬度穿甲弹，专打重甲' }
-  ];
-  for(const t of src){
-    AMMO_DEFS[t.id]={ name:t.name, short:t.short, cal:'*', size:1, weight:t.weight,
-      price:t.price, rounds:t.rounds, pen:t.pen, dmgMul:t.dmgMul, armorMul:t.armorMul,
-      tier:t.tier, icon:t.icon, desc:t.desc };
-    AMMO_TIER_KEYS.push(t.id);
-  }
-})();
-const AMMO_KEYS_BY_CAL = { '*':'ammo_std' };
-function ammoKeyOfCaliber(){ return 'ammo_std'; }
-function ammoShortOf(key){ const d=AMMO_DEFS[key]; return d?(d.short||d.name):'空'; }
-// 市集可购买 0–4 级弹药
-for(const _ak of AMMO_TIER_KEYS) if(TRADE_KEYS.indexOf(_ak)<0) TRADE_KEYS.push(_ak);
+for(const key of Object.keys(AMMO_DEFS)) TRADE_KEYS.push(key);
 
 // ==================== 物品 API 扩展: 让弹药走统一通道 ====================
 // 模块: Inventory · 调用入口: 所有既有 item*() 调用点(背包/市集/结算/仓库)
@@ -94,6 +71,11 @@ itemUsableInRaid = key => _origItemUsableInRaid(key) || !!AMMO_DEFS[key];
 const _origRaidUseVerb = (typeof raidUseVerb==='function') ? raidUseVerb : null;
 raidUseVerb = key => AMMO_DEFS[key] ? '装填' : (_origRaidUseVerb ? _origRaidUseVerb(key) : '立即使用');
 
+function ammoBoxIssue(d,w){
+  const q=ammoQuote(d,w);
+  if(!q.ok) return q.reason;
+  return q.give<d.rounds?`备弹还差 ${d.rounds-q.give} 发空间才能拆一整盒`:'';
+}
 function loadAmmoFromBag(key){
   const p = (typeof player!=='undefined') ? player : null;
   const d = AMMO_DEFS[key];
@@ -108,26 +90,21 @@ function loadAmmoFromBag(key){
   if(typeof nowT!=='undefined' && nowT-(p._raidUseCdT||-99) < RAID_USE_CD) return false;
   const w = (p.curW && p.curW.def) ? p.curW : null;
   if(!w){ raidWarn('当前没有可装填的武器'); return false; }
-  // 通用弹种: 不检查口径。但枪里/备弹已有别的弹种时不能混装
-  if(w.ammo && ((w.reserve||0)>0 || (w.mag||0)>0) && w.ammo!==key){
-    raidWarn(`枪里/备弹是「${AMMO_DEFS[w.ammo]?AMMO_DEFS[w.ammo].name:w.ammo}」，先打空再换 ${d.name}`);
-    return false;
+  const issue=ammoBoxIssue(d,w);
+  if(issue){ raidWarn(issue); return false; }
+  if(w.loanAmmoBox===key) delete w.loanAmmoBox;
+  else {
+    const n=bagCount(key);
+    if(n<=0){ raidWarn('背包中没有「'+d.name+'」'); return false; }
+    if(n===1) delete RUN.loot[key]; else RUN.loot[key]=n-1;
   }
-  const cap  = w.def.reserve || 0;
-  const room = cap - (w.reserve||0);
-  if(room <= 0){ raidWarn(`「${w.def.name}」备弹已满 ${w.reserve}/${cap}`); return false; }
-  const n = bagCount(key);
-  if(n <= 0){ raidWarn('背包中没有「'+d.name+'」'); return false; }
-  const give = Math.min(d.rounds, room);
-  RUN.loot[key] = n-1;
-  if(RUN.loot[key] <= 0) delete RUN.loot[key];
-  w.reserve = Math.min(cap, (w.reserve||0) + give);
+  w.reserve=(w.reserve||0)+d.rounds;
   w.ammo = key;                                   // 本次装填的弹种成为该枪当前弹种
   p._raidUseCdT = (typeof nowT!=='undefined') ? nowT : 0;
-  raidOk(`装填 🔋 <b>${d.name}</b> (T${d.tier}) · <b>+${give}</b> 发 · 「${w.def.name}」备弹 <b>${w.reserve}/${cap}</b> · 背包剩余 <b>${bagCount(key)}</b>`);
+  raidOk(`${d.name} · +${d.rounds} 发 · ${w.def.name} 备弹 ${w.reserve}/${w.def.reserve}`);
   if(typeof AudioSys!=='undefined' && AudioSys.metalSlide) AudioSys.metalSlide(0.2,0.18,450,900);
   if(typeof renderRaidBag==='function') renderRaidBag();
-  emitRaidEvent('OnItemUsed', { key:key, left:bagCount(key), rounds:give });
+  emitRaidEvent('OnItemUsed', { key:key, left:bagCount(key), rounds:d.rounds });
   return true;
 }
 // 分发: 弹药走装填, 其余回落 40_raidshop 的医疗/食物流程
@@ -152,13 +129,17 @@ renderBagPanel = function(){
 // ==================== Loot: 掉落表注入弹药 ====================
 // 模块: Loot · 调用入口: lootTargetNear → rollCrateLootList / registerCorpse → rollCorpseLoot
 // 0–4 级弹药掉落权重: 越高级越稀有; rich 用于敌方精锐/高级容器
-function randomAmmoLootKey(rich){
+function randomAmmoLootKey(rich,cal='rifle'){
+  if(cal==='heavy') return AMMO_KEYS_BY_CAL.heavy;
   const table = rich
     ? [['ammo_rip',0.08],['ammo_std',0.27],['ammo_m855',0.32],['ammo_m995',0.23],['ammo_ap',0.10]]
     : [['ammo_rip',0.24],['ammo_std',0.46],['ammo_m855',0.22],['ammo_m995',0.06],['ammo_ap',0.02]];
   let r=Math.random(), acc=0;
-  for(const [k,w] of table){ acc+=w; if(r<=acc) return k; }
-  return 'ammo_std';
+  for(const [k,w] of table){
+    acc+=w;
+    if(r<=acc) return cal==='pistol'?k.replace('ammo_','ammo_pistol_'):k;
+  }
+  return ammoKeyOfCaliber(cal);
 }
 function randomPlateLootKey(){
   const r=Math.random();
@@ -167,7 +148,7 @@ function randomPlateLootKey(){
 function addAmmoToLootTable(out, kinds, stackMax){
   if(kinds <= 0) return out;
   for(let i=0;i<kinds;i++){
-    const key = randomAmmoLootKey(Math.random()<0.25);
+    const key = randomAmmoLootKey(Math.random()<0.25,Math.random()<0.35?'pistol':'rifle');
     out[key] = (out[key]||0) + randi(1, stackMax);
   }
   return out;
@@ -195,7 +176,7 @@ rollCorpseLoot = function(bot){
   // 弹药: 敌方精锐/高级容器更容易掉高级弹
   const chance = friendly ? AMMO_LOOT_CFG.friendlyCorpseChance : AMMO_LOOT_CFG.corpseChance;
   if(Math.random() < chance){
-    const key = randomAmmoLootKey(!friendly || !!(bot && bot.cls>=2));
+    const key = randomAmmoLootKey(!friendly || !!(bot && bot.cls>=2),ammoCaliberOf(wkey));
     out[key] = (out[key]||0) + (friendly ? randi(1,2) : 1);
   }
   // 插板: 尸体小概率出

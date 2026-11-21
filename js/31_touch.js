@@ -12,34 +12,23 @@ const k=(parseInt(localStorage.getItem('sf_tsize')||'100'))/100;
 const ui=document.getElementById('touchUI');
 if(ui) ui.style.zoom=k;
 }
-// ===================== 触控层让位: 模态界面打开时必须隐藏 =====================
-// 为什么必须做: #touchUI 是 z-index:40, 而菜单/部署/结算面板 .screen 只有 z-index:20,
-// 局内背包 #bagPanel 更是在 #ui(z-index:10) 里面; 而 #tLook 是 pointer-events:auto 且铺满全屏,
-// #tStickZone 又占了左下 42%x60% —— 触控层一旦显示, 面板上的触摸全被它吃掉
-// (手机上表现为"点了没反应": 点背包里的丢弃/安全箱, 结果是转视角)。
-// 所以只要有 blocks 里任何一个可见, 就给 body 加 uiOpen, 由 CSS 隐藏整个触控层。
-// 用 MutationObserver 盯 class 变化, 不依赖各面板是否记得调用某个同步函数。
+// 全屏视角层会吃掉面板触摸。模态切换时同时收起触控层，终止正在按住的动作。
+let clearTouchClaims=null;
 (function(){
-// 会挡住触控层的"模态"界面: .screen(菜单/部署/结算) + #bagPanel(局内背包)。
-// ⚠️ #bagPanel 必须算进来 —— 它在 #ui(z-index 10) 里, 而 #touchUI 是 40,
-//    #tLook 全屏 + #tStickZone 左下 42%×60% + 右侧按键簇都会盖在面板上抢走触摸。
-// ⚠️ #lootPanel **不要**加进来: 它是故意 pointer-events:none 的,
-//    靠触控层的 tSelUp/tSelDown/tTake 操作, 藏了触控层就没法搜刮了。
-const blocks=[...document.querySelectorAll('.screen')];
-const bagP=document.getElementById('bagPanel');
-if(bagP) blocks.push(bagP);
-// 药品轮盘: 全屏模态(z-index 60), 但触控层不藏掉的话会在半透明遮罩下透出来, 很乱
-const medW=document.getElementById('medWheel');
-if(medW) blocks.push(medW);
-if(!blocks.length) return;
+const screens=[...document.querySelectorAll('.screen')];
+const panels=[...document.querySelectorAll('#bagPanel,#lootPanel,#ammoShopPanel,#medWheel')];
+const isOpen=panel=>!panel.classList.contains('hidden');
 function syncTouchLayerBlock(){
-let open=false;
-for(const s of blocks){ if(!s.classList.contains('hidden')){ open=true; break; } }
+const inMenu=screens.some(isOpen);
+const open=inMenu||panels.some(isOpen);
+document.body.classList.toggle('fieldMenu',inMenu);
 document.body.classList.toggle('uiOpen',open);
+if(open&&clearTouchClaims) clearTouchClaims();
 }
 const mo=new MutationObserver(syncTouchLayerBlock);
-for(const s of blocks) mo.observe(s,{attributes:true,attributeFilter:['class']});
+for(const s of [...screens,...panels]) mo.observe(s,{attributes:true,attributeFilter:['class']});
 syncTouchLayerBlock();
+document.getElementById('ammoClose').addEventListener('click',()=>ammoShopClose());
 })();
 // ===== 虚拟按键: 手动开关 + 键盘探测 (2026-09-28) =====
 // 设置面板「虚拟按键」: 自动 / 常开 / 常关 —— 改完重载生效 (TOUCHUI 是加载时算出的 const)
@@ -98,13 +87,12 @@ player.mouseDX=dx; player.mouseDY=dy;
 // ---------- 移动摇杆 ----------
 function stickHome(){
 stickEl.classList.remove('live','sprint');
-stickEl.style.left='40px'; stickEl.style.top='';
-stickEl.style.bottom='60px';
+stickEl.style.left=''; stickEl.style.top=''; stickEl.style.bottom='';
 knob.style.transform='translate(0px,0px)';
 }
 function setMove(dx,dy){
 const r=Math.hypot(dx,dy);
-const cl=Math.min(r,STICK_R);
+const cl=Math.min(r,STICK_R)*(stickEl.offsetWidth/2)/STICK_R;
 const nx=r>1e-3?dx/r:0, ny=r>1e-3?dy/r:0;
 knob.style.transform=`translate(${nx*cl}px,${ny*cl}px)`;
 const fx=dx/STICK_R, fy=dy/STICK_R;
@@ -141,8 +129,17 @@ const nt=$('tNadeType');
 if(nt) nt.querySelector('.tLbl').textContent='换'+names[(av[(av.indexOf(nadeSel)+1)%Math.max(av.length,1)]??nadeSel)];
 }
 // ---------- 按钮动作 ----------
+function setTools(open){
+ui.classList.toggle('toolsOpen',open);
+$('tToolsToggle').setAttribute('aria-expanded',String(open));
+$('tToolsToggle').querySelector('.tLbl').textContent=open?'收起':'工具';
+const quests=$('questHud');
+if(quests) (open?$('tTools'):$('mapObjectives')).appendChild(quests);
+}
 function pressAct(act,claim){
 switch(act){
+case 'tools': setTools(!ui.classList.contains('toolsOpen')); break;
+case 'shop': if(typeof ammoShopOpen==='function') ammoShopOpen(); break;
 case 'fire':
 if(player.alive){ mouseDown=true; claim.fireLook=true; }
 break;
@@ -150,14 +147,26 @@ case 'ads':
 if(!player.alive) break;
 if(player.onVehicle&&player.onVehicle.kind==='tank'){ mouse2Down=true; claim.holdAds=true; } // 坦克: 按住=同轴机枪
 else if(player.onVehicle&&player.onVehicle.kind==='plane'){ keys.KeyB=true; claim.bombKey=true; } // 飞机: 投弹
-else if(!player.onMG&&!player.onAT&&!player.onAA&&!player.onMortar){ player.ads=!player.ads; } // 步兵: 切换开镜
+else if(weaponControlsActive()){
+  if(zoomRangeOf(player.curW.key)){
+    claim.zoomKey=player.curW.key;
+    claim.closeSightOnTap=player.ads;
+    player.ads=true;
+  }else player.ads=!player.ads;
+  if(player.ads&&player.carry==='low') setCarryStance('high');
+}
 break;
 case 'jump': keys.Space=true; claim.jumpKey=true; break;
 case 'crouch':
 // 点按 = 蹲/起立, 长按(430ms) = 趴/起身
 claim.longT=setTimeout(()=>{ claim.longT=null; if(player.alive) InputActions.toggleProne(); },430);
 break;
-case 'reload': if(player.alive) tryReload(); break;
+case 'reload':
+if(player.alive){
+  if(emptyMagAction(player.curW)==='buy') ammoShopOpen();
+  else tryReload();
+}
+break;
 case 'swap': if(player.alive) switchSlot(player.curSlot===0?1:0); break;
 case 'melee': if(player.alive) InputActions.melee(); break;
 case 'nade':
@@ -183,9 +192,6 @@ case 'skill': if(player.alive) InputActions.classSkill(); break;
 case 'buildsel': if(player.alive) InputActions.buildNext(); break;
 case 'brace': if(player.alive) InputActions.toggleBrace(); break;
 case 'nvg': if(typeof toggleHeadgear==='function') toggleHeadgear(); else if(typeof NVG!=='undefined') NVG.toggle(); break;
-case 'selup': if(typeof lootSelMove==='function') lootSelMove(-1); break;
-case 'seldown': if(typeof lootSelMove==='function') lootSelMove(1); break;
-case 'take': if(player.alive&&typeof lootTakeSelected==='function') lootTakeSelected(); break;
 case 'carry': if(player.alive&&typeof setCarryStance==='function') setCarryStance(player.carry==='high'?'low':'high'); break;
 case 'bag': if(player.alive&&typeof toggleBagPanel==='function') toggleBagPanel(); break;
 case 'bagdrop': if(player.alive&&typeof bagDropSelected==='function') bagDropSelected(false); break;
@@ -207,12 +213,13 @@ break;
 case 'menu': if(player.deployed&&!matchOver) showDeploy(false); break;
 }
 }
-function releaseAct(act,claim){
+function releaseAct(act,claim,canceled){
 switch(act){
 case 'fire': mouseDown=false; break;
 case 'ads':
 if(claim.holdAds) mouse2Down=false;
 if(claim.bombKey) keys.KeyB=false;
+if(claim.closeSightOnTap&&!claim.zoomDragged&&!canceled&&weaponControlsActive()&&player.curW.key===claim.zoomKey) player.ads=false;
 break;
 case 'jump': keys.Space=false; break;
 case 'crouch':
@@ -230,30 +237,38 @@ ui.addEventListener('touchstart',e=>{
 // 按钮布局编辑中: 交给 51_settings 的捕获阶段处理拖动, 这里一律不响应
 if(window.LAYOUT_EDIT) return;
 AudioSys.resume&&AudioSys.resume();
-e.preventDefault();
+// 抽屉里的短按在抬指后执行，纵向滑动留给浏览器滚动。
+if(!e.target.closest('#tTools')) e.preventDefault();
 for(const t of e.changedTouches){
 const x=t.clientX,y=t.clientY;
 const target=document.elementFromPoint(x,y);
 const btn=target&&target.closest?target.closest('.tbtn'):null;
+if(ui.classList.contains('toolsOpen')&&btn?.id!=='tToolsToggle'&&!target?.closest('#tTools')){
+setTools(false);
+if(!btn) continue;
+}
 if(btn&&!btn.classList.contains('hiddenT')){
 const claim={t:'btn',el:btn,act:btn.dataset.act,lx:x,ly:y};
 claims.set(t.identifier,claim);
 btn.classList.add('press');
-pressAct(claim.act,claim);
+claim.waitTap=ui.classList.contains('toolsOpen')&&!!btn.closest('#tTools')&&!btn.classList.contains('placed')&&!['leanl','leanr','nade'].includes(claim.act);
+if(!claim.waitTap) pressAct(claim.act,claim);
 continue;
 }
+if(target?.closest('#tTools')) continue;
+if(bigMapVisible()) continue;
 const zr=stickZone.getBoundingClientRect();
 let hasMove=false; for(const c of claims.values()) if(c.t==='move') hasMove=true;
 if(!hasMove&&x>=zr.left&&x<=zr.right&&y>=zr.top&&y<=zr.bottom){
 const claim={t:'move',ox:x,oy:y};
 claims.set(t.identifier,claim);
 // 浮动摇杆: 落指处为原点
-const ur=ui.getBoundingClientRect();
+const ur=stickZone.getBoundingClientRect();
 const k=ui.style.zoom?parseFloat(ui.style.zoom):1;
 stickEl.classList.add('live');
-stickEl.style.left=((x-ur.left)/k-62)+'px';
+stickEl.style.left=((x-ur.left)/k-stickEl.offsetWidth/2)+'px';
 stickEl.style.bottom='';
-stickEl.style.top=((y-ur.top)/k-62)+'px';
+stickEl.style.top=((y-ur.top)/k-stickEl.offsetHeight/2)+'px';
 setMove(0,0);
 continue;
 }
@@ -261,19 +276,29 @@ claims.set(t.identifier,{t:'look',lx:x,ly:y});
 }
 },{passive:false});
 ui.addEventListener('touchmove',e=>{
-e.preventDefault();
+if(!e.target.closest('#tTools')) e.preventDefault();
 for(const t of e.changedTouches){
 const c=claims.get(t.identifier);
 if(!c) continue;
 const x=t.clientX,y=t.clientY;
+if(c.waitTap&&Math.hypot(x-c.lx,y-c.ly)>8) c.scrolled=true;
 if(c.t==='move'){ setMove(x-c.ox,y-c.oy); }
 else if(c.t==='look'){ applyLook(x-c.lx,y-c.ly); c.lx=x; c.ly=y; }
 else if(c.t==='btn'&&c.fireLook){ applyLook(x-c.lx,y-c.ly); c.lx=x; c.ly=y; }
+else if(c.zoomKey){
+  const dy=c.ly-y;
+  if(!c.zoomDragged&&Math.abs(dy)<5) continue;
+  c.zoomDragged=true; c.ly=y;
+  if(player.ads&&weaponControlsActive()&&player.curW.key===c.zoomKey){
+    zoomAdjust(c.zoomKey,dy/20);
+    zoomHudUpdate();
+  }
+}
 else if(c.t==='btn'&&c.longT&&Math.hypot(x-c.lx,y-c.ly)>18){ clearTimeout(c.longT); c.longT=null; } // 移出取消长按
 }
 },{passive:false});
 function endTouch(e){
-e.preventDefault();
+if(e.cancelable) e.preventDefault();
 for(const t of e.changedTouches){
 const c=claims.get(t.identifier);
 if(!c) continue;
@@ -281,12 +306,29 @@ claims.delete(t.identifier);
 if(c.t==='move') resetMove();
 else if(c.t==='btn'){
 c.el.classList.remove('press');
-releaseAct(c.act,c);
+const canceled=e.type==='touchcancel';
+if(canceled){
+  if(c.longT) clearTimeout(c.longT);
+  c.longT=null;
+  if(c.nadeHold){ c.nadeHold=false; player.nadeCharging=false; player.nadeCharge=0; }
+}
+if(c.waitTap){ if(!c.scrolled&&!canceled) pressAct(c.act,c); }
+else releaseAct(c.act,c,canceled);
 }
 }
 }
 ui.addEventListener('touchend',endTouch,{passive:false});
 ui.addEventListener('touchcancel',endTouch,{passive:false});
+clearTouchClaims=function(){
+for(const claim of claims.values()){
+if(claim.longT) clearTimeout(claim.longT);
+if(claim.nadeHold){ player.nadeCharging=false; player.nadeCharge=0; }
+if(claim.el) claim.el.classList.remove('press');
+}
+if(claims.size){ claims.clear(); resetMove(); releaseAllInputs(); leanHoldL=leanHoldR=false; }
+if(ui.classList.contains('toolsOpen')) setTools(false);
+};
+addEventListener('blur',clearTouchClaims);
 // ---------- 按钮可见性 / 语义随状态切换 ----------
 const show=(id,on)=>{ const b=$(id); if(b._v!==on){ b._v=on; b.classList.toggle('hiddenT',!on); } };
 const setLbl=(id,txt)=>{ const b=$(id); const l=b.querySelector('.tLbl'); if(l._t!==txt){ l._t=txt; l.textContent=txt; } };
@@ -302,7 +344,7 @@ show('tStickZone',inGame&&!inPlane||inPlane); // 飞机也用摇杆(油门/滚�
 show('tFire',inGame);
 setLbl('tFire',inTank?'主炮':inPlane?'机枪':onGun?'开火':'开火');
 show('tAds',inGame&&!onGun||inTank||inPlane);
-setLbl('tAds',inTank?'机枪':inPlane?'炸弹':'瞄准');
+setLbl('tAds',inTank?'机枪':inPlane?'炸弹':onFoot&&p.ads&&p.curW&&zoomRangeOf(p.curW.key)?'上下调倍':'瞄准');
 setOn('tAds',onFoot&&p.ads);
 show('tJump',onFoot);
 // 右手战斗簇
@@ -350,12 +392,6 @@ setOn('tBag',typeof BAG_UI!=='undefined'&&BAG_UI.open);
 show('tFlash',onFoot&&!!FLASH.hasMod);
 setOn('tFlash',!!FLASH.want);
 if(onFoot) setLbl('tFlash',FLASH.isLaser?'激光':'手电');
-// 搜刮面板三键: 以前靠 38_tarkov 写内联 display, 但初始化时加的 hiddenT 是 display:none !important,
-// 内联样式压不过它 → 按钮永远出不来。改成统一走 show()。
-const lootOpen=typeof LOOT_UI!=='undefined'&&LOOT_UI.open;
-show('tSelUp',lootOpen);
-show('tSelDown',lootOpen);
-show('tTake',lootOpen);
 // 情境交互键
 const it=(inGame||p.onVehicle)&&INTERACT_INFO?INTERACT_INFO.label:null;
 show('tInteract',!!it);
@@ -364,8 +400,11 @@ show('tAttack',inGame&&SQUAD.members.length>0);
 show('tGuard',inGame&&SQUAD.members.length>0);
 show('tFollow',inGame&&SQUAD.members.length>0);
 show('tMap',inGame);
+setLbl('tMap',bigMapVisible()?'收起地图':'地图');
 show('tScore',p.deployed);
 show('tMenu',p.deployed);
+show('tToolsToggle',p.deployed);
+show('tShop',inGame&&typeof ammoShopCanOpen==='function'&&ammoShopCanOpen());
 };
 // 初始化
 for(const b of ui.querySelectorAll('.tbtn')) b.classList.add('hiddenT');

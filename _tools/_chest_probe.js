@@ -105,8 +105,10 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await ev(`(function(){ const b=document.getElementById('startBtn'); if(b) b.click(); return 1; })()`);
   await sleep(7000);
   log('  配装摘要 = ' + await ev(`(document.getElementById('loadoutSummary')||{}).textContent||'NO_EL'`));
-  log('  仓库行数 = ' + await ev(`(function(){try{ renderArmory('warehouse'); return document.querySelectorAll('#arList .arRow').length; }catch(e){return 'EXC';}})()`));
-  log('  仓库里的胸挂 = ' + await ev(`(function(){try{ var n=[...document.querySelectorAll('#arList .arName')].map(function(e){return e.textContent;}).filter(function(t){return t.indexOf('胸挂')>=0;}); return n.join(' | ')||'（无）'; }catch(e){return 'EXC';}})()`));
+  await ev(`document.querySelector('#deploy #fieldNav [data-route=mArmory]').click()`);
+  const chests = await ev(`[...document.querySelectorAll('#arGridHost .invTile')].map(tile=>tile.dataset.key).filter(key=>CHEST_DEFS[key])`);
+  log('  仓库里的胸挂 = ' + (Array.isArray(chests) ? chests.join(' | ') : chests));
+  if (!Array.isArray(chests) || !['chest56','chestBH','chestMK3'].every(key=>chests.includes(key))) return finish(1);
   log('  市集货架 = ' + await ev(`(function(){try{ renderArmory('market'); var t=document.getElementById('arList').textContent; var hit=['56式','Commando','WARTECH'].filter(function(s){return t.indexOf(s)>=0;}); return hit.join(', ')||'（无）'; }catch(e){return 'EXC';}})()`));
   log('  装备槽位映射 = ' + await ev(`(function(){ try{ var kind=itemKind('chestMK3'); var slot=(kind==='armor')?'armor':(kind==='helmet')?'helmet':(kind==='headset')?'headset':(kind==='pack')?'pack':(kind==='chest')?'chest':'primary'; return 'chestMK3 ('+kind+') → '+slot; }catch(e){return 'EXC';} })()`));
 

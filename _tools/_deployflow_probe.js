@@ -39,6 +39,15 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   log('soldiers/bots 数 (应 0) : ' + await ev(`soldiers.length`) + ' / ' + await ev(`combatants.length`));
   log('_pendingRaid (应 false) : ' + await ev(`typeof _pendingRaid!=='undefined'?_pendingRaid:'(不可见)'`));
 
+  await ev("document.querySelector('[data-p=mPlay]').click()");
+  for(const route of ['mArmory','mStory','mSet','mNet','mPlay']){
+    await ev("document.querySelector('#fieldNav [data-route="+route+"]').click()");
+    if(await ev("!el('"+route+"').classList.contains('hidden') && document.querySelector('#fieldNav [aria-current=page]').dataset.route==='"+route+"' && document.querySelectorAll('#menu .mSub:not(.hidden)').length===1")!==true) throw new Error('跨区导航失败 '+route);
+  }
+  await ev("el('mapRow').children[1].click()");
+  if(await ev("el('deploy').classList.contains('hidden') && !el('mPlay').classList.contains('hidden') && el('mapRow').children[1].getAttribute('aria-pressed')==='true' && el('startBtn').textContent.includes(CAMPAIGNS[1].mapName) && !_pendingRaid")!==true) throw new Error('选择地图时应显示该图简报并等待确认');
+  await ev("el('mapRow').children[0].click()");
+
   log('');
   log('=== 1) 点「进入当前地图」: 应立刻进部署界面, 且还没建局 ===');
   log('点击耗时(ms) : ' + await ev(`(function(){
@@ -53,6 +62,18 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   log('combatants 数 (应仍 0) : ' + await ev(`combatants.length`));
   log('出生点列表已渲染 : ' + await ev(`el('spawnList').children.length+' 项'`));
   log('部署界面地图已画 : ' + await ev(`(function(){const c=el('deployMap');return c.width+'x'+c.height;})()`));
+  for(const [width,height] of [[390,844],[844,390],[1280,720]]){
+    await rpc('Emulation.setDeviceMetricsOverride',{width,height,deviceScaleFactor:1,mobile:false});
+    if(await ev(`(()=>{const targets=[el('deployBtn'),document.querySelector('#deploy #fieldNav [data-route=mArmory]')];return targets.every(b=>{const r=b.getBoundingClientRect();return b.contains(document.elementFromPoint(r.x+r.width/2,r.y+r.height/2))}) && el('deployFlex').scrollTop===0})()`)!==true) throw new Error(width+'x'+height+' 首屏无法点到部署按钮或区域导航');
+  }
+  await ev("el('deployBackBtn').click()");
+  if(await ev("!_pendingRaid && !el('menu').classList.contains('hidden') && !el('mPlay').classList.contains('hidden') && soldiers.length===0")!==true) throw new Error('准备阶段重选地图失败');
+  await ev("el('startBtn').click()");
+  await ev("window.__savedVibe=[VIBE.user,VIBE.client]; VIBE.user={name:'探针'}; VIBE.client={rooms:{quickJoin:()=>new Promise(()=>{})}}; el('deployBtn').click()");
+  if(await ev("!!NET.matchAttempt && !el('netSearch').classList.contains('hidden')")!==true) throw new Error('未进入匹配状态');
+  await ev("document.querySelector('#fieldNav [data-route=mArmory]').click(); [VIBE.user,VIBE.client]=window.__savedVibe");
+  if(await ev("!NET.matchAttempt && !_pendingRaid && !el('menu').classList.contains('hidden') && !el('mArmory').classList.contains('hidden') && soldiers.length===0")!==true) throw new Error('匹配中前往仓库应取消建局');
+  await ev("document.querySelector('#fieldNav [data-route=mPlay]').click(); el('startBtn').click()");
 
   log('');
   log('=== 2) 选出生点 + 点「部署」: 这时才建局 ===');
@@ -76,6 +97,8 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await ev(`(function(){showDeploy(false);return 'OK';})()`);
   await sleep(600);
   log('回到部署界面 : ' + await ev(`!el('deploy').classList.contains('hidden')`));
+  if(await ev("el('fieldNav').hidden && el('deployBackBtn').hidden")!==true) throw new Error('战斗暂停时出现了局外导航');
+  if(await ev("el('deployLeft').hidden && !el('raidOverview').hidden && el('raidWeapons').textContent.includes(player.curW.def.name)")!==true) throw new Error('对局菜单应展示已经实际携带的武器');
   await ev(`(function(){el('deployBtn').click();return 'OK';})()`);
   await sleep(1200);
   log('再次部署后 soldiers 数 : ' + await ev(`soldiers.length`));
@@ -87,7 +110,9 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await ev("player.die(null,true)");
   for(let i=0;i<100 && await ev("matchOver && !el('end').classList.contains('hidden')")!==true;i++) await sleep(150);
   if(await ev("matchOver")!==true) throw new Error('阵亡未结算 '+errs.join(', '));
-  await ev("el('armoryBtn').click(); document.querySelector('#mArmory .backBtn').click(); document.querySelector('[data-p=mPlay]').click(); el('mapRow').querySelector('.mapCard.sel').click()");
+  await ev("el('armoryBtn').click()");
+  if(await ev("document.querySelectorAll('#menu .mSub:not(.hidden)').length===1 && !el('mArmory').classList.contains('hidden')")!==true) throw new Error('从结算返回仓库时只能显示仓库面板');
+  await ev("document.querySelector('#mArmory .backBtn').click(); document.querySelector('[data-p=mPlay]').click(); el('mapRow').querySelector('.mapCard.sel').click(); el('startBtn').click()");
   if(await ev("!el('deploy').classList.contains('hidden') && !el('deployBtn').disabled && !el('respawnTxt').textContent && respawnCd===0")!==true) throw new Error('新局沿用了上局的重生冷却');
   // 已登录但 SDK 请求一直不返回；用缩短的同一超时验证回退和重复点击。
   await ev("VIBE.user={name:'探针'}; VIBE.client={rooms:{quickJoin:()=>new Promise(()=>{})}}; NET_CFG.autoMatchMs=150; el('deployBtn').click(); el('deployBtn').click()");

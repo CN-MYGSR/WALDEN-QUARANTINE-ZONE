@@ -129,24 +129,54 @@ function soldierPanels(material,parts){
  return new THREE.Mesh(g,material);
 }
 const soldierGunFinish=new THREE.MeshLambertMaterial({vertexColors:true});
+// 人物手中的枪只保留大的色块和轮廓。每个部件只取三个截面，整枪一次绘制。
+function soldierGunShell(pieces){
+  const positions=[],colors=[];
+  for(const [form,mat,w,h,d,y,z] of pieces){
+    const middle=form[Math.floor(form.length/2)];
+    const vertices=gunLoftVertices([form[0],middle,form[form.length-1]],w,h,d,0,y,z);
+    positions.push(...vertices);
+    const c=mat.color;
+    for(let i=0;i<vertices.length;i+=3) colors.push(c.r,c.g,c.b);
+  }
+  const geometry=new THREE.BufferGeometry();
+  geometry.setAttribute('position',new THREE.Float32BufferAttribute(positions,3));
+  geometry.setAttribute('color',new THREE.Float32BufferAttribute(colors,3));
+  geometry.computeVertexNormals();
+  return new THREE.Mesh(geometry,soldierGunFinish);
+}
 function worldGunModel(kind,team,key){
 const g=new THREE.Group();
 const gm=vmMats.gun, wd=vmMats.wood;
-const wg=key&&WPN_DEFS[key]?WPN_DEFS[key].wg:null;
-if(key&&ARSENAL_ERA[key]==='modern'&&kind!=='launcher'){
- const def=WPN_DEFS[key], metal=0x414849, trim=0x252b2b;
- const stock=key==='g28'?0x656453:0x444a46;
- const compact=key==='mp5'||key==='pp19', stretch=compact?.76:1;
- const parts=def.pistol?[
-  [.034,.044,.18,0,0,-.045,metal],[.032,.087,.05,0,-.057,.018,trim]
- ]:[
-  [.048,.073,.22,0,.006,.005,metal], [.055,.059,.23*stretch,0,.008,-.20*stretch,stock],
-  [.026,.028,.19*stretch,0,.013,-.39*stretch,trim],
-  [.044,.051,.14,0,-.006,.17,stock], [.048,.094,.085,0,-.02,.253,stock],
-  [.035,.088,.052,0,-.071,.069,trim], [.036,.115,.065,0,-.081,-.058,trim]
+const def=WPN_DEFS[key],wg=def&&def.wg;
+const {upper,grip,bed,stock}=GUN_SECTIONS;
+const modern=ARSENAL_ERA[key]==='modern';
+const poly=vmMats.polymer,steel=vmMats.gunL;
+if(def&&def.pistol){
+ const finish=key==='p320'?vmMats.fieldTan:modern?poly:wd;
+ const length=(key==='deagle'||key==='c96') ? .225 : .175;
+ g.add(soldierGunShell([[upper,gm,.037,.045,length,.013,-.044],
+   [upper,steel,.035,.029,length,.043,-.048],[grip,finish,.035,.092,.056,-.044,.013]]));
+} else if(def&&(kind==='rifle'||(modern&&kind!=='launcher'))){
+ const compact=key==='mp5'||key==='pp19'||key==='aks74u';
+ const bullpup=key==='qbz95';
+ const fore=compact ? .135 : .218;
+ const barrel=def.scoped ? .33 : (compact ? .077 : .158);
+ const finish=({svd:wd,aks74u:wd,g28:vmMats.fieldTan,qbz191:vmMats.fieldTan,awm:vmMats.fieldTan})[key]
+   ||(modern?poly:wd);
+ const pieces=[
+   [upper,gm,.054,.059,.22,.009,.005],
+   [bed,finish,.055,.062,fore,.001,-.100-fore/2],
+   [upper,steel,.022,.023,barrel,.015,-.100-fore-barrel/2],
+   [stock,finish,.053,.094,.207,-.025,.199]
  ];
- if(!def.pistol)parts.push(key==='g36c'?[.038,.027,.195,0,.068,-.04,trim]:[.034,.04,.055,0,.06,.005,trim]);
- g.add(soldierPanels(soldierGunFinish,parts));
+ if(modern){
+   pieces.push([grip,poly,.036,.094,.054,-.062,bullpup?-.030:.057],
+     [grip,gm,.033,.127,.069,-.082,bullpup ? .108 : -.063]);
+ }
+ if(def.scoped) pieces.push([upper,gm,.043,.043,.182,.072,.013],[upper,steel,.023,.035,.048,.045,.024]);
+ else if(key==='g36c'||bullpup) pieces.push([bed,gm,.034,.033,.203,.054,-.042]);
+ g.add(soldierGunShell(pieces));
 } else if(kind==='smg'){
 bx(gm,0.05,0.06,0.5,0,0,-0.1,g);
 if(wg==='drum') { const d2=cyl(gm,0.075,0.075,0.05, 0,-0.1,-0.1,g,0); d2.rotation.z=HPI; }

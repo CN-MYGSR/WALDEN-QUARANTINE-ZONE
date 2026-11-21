@@ -1,140 +1,165 @@
-// 设置扩展验收: 键位自定义 + 手机端按钮布局
-// 覆盖: 键位表渲染 · UI 改键(真实按键派发) · 端到端生效 · 移动键规范码翻译 · 占位交换 ·
-//       持久化 · 恢复默认 · 布局编辑模式 · 拖拽保存 · 控制台异常
-// 用法: node _tools/_settings_probe.js [url]
-const http = require('http'), fs = require('fs'), path = require('path'), WS = require('./ws'), { spawn } = require('child_process');
-const URL = process.argv[2] || 'http://127.0.0.1:8123/index.html';
-const PORT = 9503;
-const ROOT = path.resolve(__dirname, '..');
-const out = []; const log = s => out.push(s);
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-let proc, ws;
+'use strict';
+// node _tools/_settings_probe.js [game URL] — drives the visible menus in an isolated Chrome profile.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {spawn} = require('node:child_process');
+const {setTimeout: sleep} = require('node:timers/promises');
+const WS = require('./ws');
+const game = new URL(process.argv[2] || 'http://127.0.0.1:8123/');
+const report = [];
+const log = text => { report.push(text); console.log(text); };
 
-function finish(code) {
-  try { if (ws) ws.close(); } catch (e) { }
-  try { if (proc) proc.kill(); } catch (e) { }
-  fs.writeFileSync(path.join(ROOT, '_tools', '_settings_probe.txt'), out.join('\n') + '\n', 'utf8');
-  process.exit(code);
+async function run() {
+  const chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
+    '--headless=new', '--remote-debugging-port=0', '--incognito', '--mute-audio', '--no-first-run',
+    '--enable-unsafe-swiftshader', '--user-data-dir=' + path.resolve(__dirname, '../outputs/settings-probe-browser'), 'about:blank'
+  ], {stdio:['ignore','ignore','pipe'], windowsHide:true});
+  let ws;
+  try {
+    const browserUrl = await new Promise((ok, fail) => {
+      const timeout = setTimeout(() => fail(Error('Chrome did not start')), 20000);
+      chrome.once('error', e => { clearTimeout(timeout); fail(e); });
+      chrome.once('exit', () => { clearTimeout(timeout); fail(Error('Chrome exited')); });
+      chrome.stderr.on('data', data => {
+        const url = /DevTools listening on (ws:\/\/\S+)/.exec(String(data))?.[1];
+        if (url) { clearTimeout(timeout); ok(url); }
+      });
+    });
+    const pages = await (await fetch('http://' + new URL(browserUrl).host + '/json/list')).json();
+    ws = new WS(pages.find(p => p.type === 'page').webSocketDebuggerUrl);
+    await new Promise((ok, fail) => { ws.once('open', ok); ws.once('error', fail); });
+    let seq=0;
+    const pending=new Map(), errors=[];
+    ws.on('message', data => {
+      const msg=JSON.parse(data), call=pending.get(msg.id);
+      if (call) {
+        pending.delete(msg.id);
+        msg.error ? call.fail(Error(msg.error.message)) : call.ok(msg.result);
+      }
+      if (msg.method==='Runtime.exceptionThrown') errors.push(msg.params.exceptionDetails.exception?.description || msg.params.exceptionDetails.text);
+    });
+    const rpc=(method,params={})=>new Promise((ok,fail)=>{
+      pending.set(++seq,{ok,fail}); ws.send(JSON.stringify({id:seq,method,params}));
+    });
+    async function read(expression){
+      const r=await rpc('Runtime.evaluate',{expression,returnByValue:true});
+      if(r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description||r.exceptionDetails.text);
+      return r.result.value;
+    }
+    async function wait(expression){
+      const end=Date.now()+60000;
+      while(!await read(expression).catch(()=>false)){
+        if(Date.now()>end) throw Error('Timed out: '+expression);
+        await sleep(90);
+      }
+    }
+    const bad=[];
+    async function expect(name,expression,value){
+      const actual=await read(expression);
+      try { assert.deepEqual(actual,value); log('PASS '+name); }
+      catch { bad.push(name); log('FAIL '+name+' — '+JSON.stringify(actual)+' / expected '+JSON.stringify(value)); }
+    }
+    async function center(selector){
+      return read(`(()=>{const b=document.querySelector(${JSON.stringify(selector)}); if(!b)throw Error('Missing control'); b.scrollIntoView({block:'nearest'});const {left,top,width,height}=b.getBoundingClientRect(); if(!width||!height)throw Error('Hidden control: '+b.outerHTML.slice(0,80)); return {x:left+width/2,y:top+height/2};})()`);
+    }
+    const touch=(type,p)=>rpc('Input.dispatchTouchEvent',{type,touchPoints:p?[{...p,id:1}]:[]});
+    const mouse=(type,p)=>rpc('Input.dispatchMouseEvent',{type,...p,button:'left',clickCount:1,buttons:type==='mouseReleased'?0:1});
+    let mobile=false;
+    async function press(selector){
+      const p=await center(selector);
+      if(mobile){ await touch('touchStart',p); await touch('touchEnd'); }
+      else { await mouse('mousePressed',p); await mouse('mouseReleased',p); }
+      await sleep(40);
+    }
+    async function screenshot(name){
+      const dir=path.resolve(__dirname,'../outputs/操作验证');
+      fs.mkdirSync(dir,{recursive:true});
+      const {data}=await rpc('Page.captureScreenshot',{format:'jpeg',quality:88});
+      fs.writeFileSync(path.join(dir,name+'.jpg'),Buffer.from(data,'base64'));
+    }
+    const key=(type,code,k,vk)=>rpc('Input.dispatchKeyEvent',{type,code,key:k,windowsVirtualKeyCode:vk});
+    async function tapKey(code,k,vk){ await key('keyDown',code,k,vk); await key('keyUp',code,k,vk); }
+    let visits=0;
+    async function open(width,height,withTouch){
+      mobile=withTouch;
+      await rpc('Emulation.setDeviceMetricsOverride',{width,height,mobile,deviceScaleFactor:1});
+      await rpc('Emulation.setTouchEmulationEnabled',{enabled:mobile,maxTouchPoints:5});
+      const url=new URL(game); url.searchParams.set('settings-check',String(++visits));
+      await rpc('Page.navigate',{url:url.href});
+      await wait('location.href==='+JSON.stringify(url.href)+'&&document.readyState==="complete"&&typeof el("startBtn").onclick==="function"');
+    }
+    await rpc('Page.enable'); await rpc('Runtime.enable'); await rpc('Network.enable');
+    await rpc('Network.setBlockedURLs',{urls:['*://gamesvibe.app/*','*://vibe.lumigrav.space/*']});
+    await rpc('Page.addScriptToEvaluateOnNewDocument',{source:
+      'window.VibeHubWorkshop={beforeStart:Promise.resolve(),markGameReady(){}};'+
+      'const nativeFrame=requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>fn.name==="loop"?0:nativeFrame(fn);'
+    });
+    const homeSettings='#mHome [data-p=mSet]', audio='#tabAudio', input='#tabInput', keys='#tabKeys';
+    const score='#keyGrid button[aria-label^="计分板"]';
+    await open(1280,720,false);
+    await press(homeSettings);
+    await press(audio);
+    await tapKey('ArrowRight','ArrowRight',39);
+    await expect('arrow key selects and focuses the next settings tab','[document.activeElement.id,el("setInput").hidden]', ['tabInput',false]);
+    await press(keys);
+    await expect('all actions have visible binding controls','el("keyGrid").querySelectorAll("button").length===KEY_ACTIONS.length',true);
+    await press(score); await tapKey('Escape','Escape',27);
+    await expect('Escape cancels capture and keeps the settings page','[keyOf("score"),_keyCapturing,el("mSet").classList.contains("hidden")]', ['KeyP',null,false]);
+    await press(score); await press('#fieldNav [data-route=mPlay]'); await press('#fieldNav [data-route=mSet]');
+    await tapKey('KeyL','l',76);
+    await expect('leaving and returning cancels the pending binding','[keyOf("score"),_keyCapturing]', ['KeyP',null]);
+    await press(score); await tapKey('KeyI','i',73);
+    await expect('rebinding swaps occupied shortcuts and saves','[keyOf("score"),keyOf("ammoShop"),JSON.parse(localStorage.bf_keys_v1).score]', ['KeyI','KeyP','KeyI']);
+    await screenshot('游戏设置-键位');
+    await press('#keyGrid button[aria-label^="前进"]'); await tapKey('KeyL','l',76);
+    await expect('forward binding updates movement and retires its old key','[canonKey("KeyL"),canonKey("KeyW")]', ['KeyW',null]);
+    await press(audio); await press('#volRange'); await tapKey('Home','Home',36);
+    await press(input); await press('#sensRange'); await tapKey('End','End',35);
+    await press('#tLayoutBtn');
+    const fire=await center('#tFire');
+    await mouse('mousePressed',fire); await mouse('mouseMoved',{x:fire.x-80,y:fire.y-60}); await mouse('mouseReleased',{x:fire.x-80,y:fire.y-60});
+    await expect('desktop mouse drag pins the chosen button','Object.keys(JSON.parse(localStorage.bf_tbtn_v1))',['tFire']);
+    await tapKey('Escape','Escape',27);
+    await expect('Escape exits layout editing and restores its opener','[window.LAYOUT_EDIT,document.activeElement.id]',[false,'tLayoutBtn']);
+    await press('#tLayoutReset');
+    await press('#tabDisplay'); await press('.qualBtn[data-q="0"]');
+    await press('#fieldNav [data-route=mPlay]'); await press('#startBtn'); await press('#deployBtn');
+    await wait('player.alive&&player.deployed');
+    await key('keyDown','KeyI','i',73); await expect('held rebound key opens the scoreboard in a raid','el("scoreboard").style.display','block');
+    await key('keyUp','KeyI','i',73); await expect('releasing the scoreboard key closes it','el("scoreboard").style.display','none');
+    await key('keyDown','KeyL','l',76); await expect('rebound forward key reaches raid input','keys.KeyW',true); await key('keyUp','KeyL','l',76);
+    await open(390,844,true); await press(homeSettings);
+    await expect('quality, sensitivity and mute survive reload','[SETTINGS.quality,SETTINGS.sens,SETTINGS.vol,+el("volRange").value]', [0,2,0,0]);
+    await press(keys); await expect('key binding survives reload','keyOf("score")','KeyI'); await press('#keyResetBtn');
+    await expect('reset restores the defaults and visible labels','[keyOf("score"),el("keyGrid").querySelector("[aria-label^=计分板]").textContent]', ['KeyP','P']);
+    for(const [width,height] of [[390,844],[844,390]]){
+      await open(width,height,true); await press(homeSettings); await press(input);
+      await expect(width+' touches leave field navigation fully visible','[...el("fieldNav").querySelectorAll("button")].every(b=>{const r=b.getBoundingClientRect();return r.left>=0&&r.top>=0&&r.bottom<=innerHeight&&r.right<=innerWidth})',true);
+      await press('#tLayoutBtn');
+      await expect(width+' opens the touch layout editor','window.LAYOUT_EDIT',true);
+      await screenshot('触屏布局编辑-'+width+'x'+height);
+      const p=await center('#tBag'), dest={x:Math.round(width*.47),y:Math.round(height*.48)};
+      const top=await read(`document.elementFromPoint(${p.x},${p.y})?.closest('.tbtn')?.id`);
+      await touch('touchStart',p); await touch('touchMove',dest); await touch('touchEnd');
+      await expect(width+' dragging the bag by touch saves only the bag (hit '+top+')','Object.keys(JSON.parse(localStorage.getItem("bf_tbtn_v1")||"{}"))',['tBag']);
+      const shop=await center('#tShop'), pin={x:Math.round(width*.68),y:Math.round(height*.58)};
+      await touch('touchStart',shop); await touch('touchMove',pin); await touch('touchEnd');
+      await expect(width+' a tool can leave the tray and be hit at its new position',
+        'document.elementFromPoint('+pin.x+','+pin.y+')?.closest(".tbtn")?.id','tShop');
+      const stored=await read('localStorage.bf_tbtn_v1');
+      await touch('touchStart',pin); await touch('touchMove',{x:pin.x-60,y:pin.y+42}); await touch('touchCancel');
+      await expect(width+' interrupted drag preserves the previous pin','localStorage.bf_tbtn_v1',stored);
+      await press('#layoutBar button:last-of-type');
+      await expect(width+' finishing returns to the input settings','[window.LAYOUT_EDIT,el("setInput").hidden,el("mSet").classList.contains("hidden"),document.activeElement.id]',[false,false,false,'tLayoutBtn']);
+      await open(width,height,true); await press(homeSettings); await press(input);
+      await expect(width+' position is restored after reloading','el("tBag").classList.contains("placed")',true);
+      await press('#tLayoutReset');
+      await expect(width+' reset clears the pin and restores default CSS','[el("tBag").style.left,Object.keys(JSON.parse(localStorage.bf_tbtn_v1)).length]', ['',0]);
+    }
+    assert.deepEqual(errors,[],'Runtime exceptions');
+    assert.deepEqual(bad,[],'Failed checks');
+    log('全部通过');
+  } finally { ws?.close(); chrome.kill(); }
 }
-
-(async () => {
-  const ud = path.join(require('os').tmpdir(), 'settings_' + Date.now());
-  proc = spawn(CHROME, ['--headless=new', '--remote-debugging-port=' + PORT, '--user-data-dir=' + ud, '--window-size=1280,900', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', '--mute-audio', 'about:blank'], { stdio: 'ignore' });
-  await sleep(2500);
-  let list = null;
-  for (let i = 0; i < 40; i++) { try { list = await new Promise((res, rej) => http.get('http://127.0.0.1:' + PORT + '/json/list', r => { let d = ''; r.on('data', c => d += c); r.on('end', () => res(JSON.parse(d))) }).on('error', rej)); if (list && list.length) break; } catch (e) { await sleep(500); } }
-  const page = (list || []).find(t => t.type === 'page');
-  if (!page) { log('NO_PAGE'); return finish(1); }
-  ws = new WS(page.webSocketDebuggerUrl, { perMessageDeflate: false, maxPayload: 256 * 1024 * 1024 });
-  let id = 0; const pend = {}; const errs = [];
-  ws.on('message', m => {
-    const j = JSON.parse(m);
-    if (j.id && pend[j.id]) pend[j.id](j);
-    if (j.method === 'Runtime.exceptionThrown') errs.push('EXC ' + ((j.params.exceptionDetails.exception || {}).description || '').split('\n')[0]);
-    if (j.method === 'Log.entryAdded' && j.params.entry.level === 'error') errs.push('LOG ' + String(j.params.entry.text).slice(0, 200));
-  });
-  await new Promise(r => ws.on('open', r));
-  const rpc = (me, pa) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method: me, params: pa || {} })); });
-  await rpc('Page.enable'); await rpc('Runtime.enable'); await rpc('Log.enable');
-  const ev = async e => { const o = await rpc('Runtime.evaluate', { expression: e, returnByValue: true }); if (o.result && o.result.exceptionDetails) return 'EXC:' + ((o.result.exceptionDetails.exception || {}).description || '').split('\n')[0]; return o.result && o.result.result ? o.result.result.value : String(o); };
-  const key = async (type, code, k, vk) => rpc('Input.dispatchKeyEvent', { type, code, key: k, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
-  const tapKey = async (code, k, vk) => { await key('keyDown', code, k, vk); await sleep(120); await key('keyUp', code, k, vk); await sleep(150); };
-
-  await rpc('Page.navigate', { url: URL });
-  await sleep(6000);
-  await ev(`localStorage.removeItem('bf_keys_v1'); localStorage.removeItem('bf_tbtn_v1'); localStorage.setItem('sf_campaign','0'); localStorage.removeItem('bf_meta_v1');`);
-  await rpc('Page.navigate', { url: URL });
-  await sleep(8000);
-
-  log('=== 1) 键位表渲染 ===');
-  log('加载 51_settings : ' + await ev(`typeof keyOf + ' / ' + typeof setKey + ' / ' + typeof canonKey`));
-  log('KEY_ACTIONS 条数 : ' + await ev(`typeof KEY_ACTIONS!=='undefined'?KEY_ACTIONS.length:'(const 不可见)'`));
-  log('#keyGrid 行数    : ' + await ev(`el('keyGrid')?el('keyGrid').children.length:'NO_EL'`));
-  log('前 6 行          : ' + await ev(`el('keyGrid')?[...el('keyGrid').children].slice(0,6).map(r=>r.children[0].textContent+'='+r.children[1].textContent).join(' , '):'-'`));
-
-  log('');
-  log('=== 2) 通过界面改键 (计分板 P → I) ===');
-  log('点「计分板」右侧按钮 : ' + await ev(`(function(){const rows=[...el('keyGrid').children];const r=rows.find(x=>x.children[0].textContent==='计分板');if(!r)return 'NO_ROW';r.children[1].click();return r.children[1].textContent;})()`));
-  log('  → 应显示「按新键…」 : ' + await ev(`(function(){const rows=[...el('keyGrid').children];const r=rows.find(x=>x.children[0].textContent==='计分板');return r.children[1].textContent;})()`));
-  await tapKey('KeyI', 'i', 73);
-  log('派发 KeyI 后 keyOf(score): ' + await ev(`keyOf('score')`));
-  log('  → 按钮文案           : ' + await ev(`(function(){const rows=[...el('keyGrid').children];const r=rows.find(x=>x.children[0].textContent==='计分板');return r.children[1].textContent;})()`));
-  log('localStorage 已写入    : ' + await ev(`(JSON.parse(localStorage.getItem('bf_keys_v1')||'{}').score)||'(无)'`));
-
-  log('');
-  log('=== 3) 端到端: 按新键应真的触发 (计分板不依赖 pointerLock) ===');
-  log('先关掉计分板 : ' + await ev(`(function(){el('scoreboard').style.display='none';return el('scoreboard').style.display;})()`));
-  // 计分板是「按住显示 / 松开隐藏」(keyup 里会设回 none), 所以必须在 keyUp 之前读
-  await key('keyDown', 'KeyI', 'i', 73); await sleep(200);
-  log('按住 I 时 display     : ' + await ev(`el('scoreboard').style.display`) + '  (应 block)');
-  await key('keyUp', 'KeyI', 'i', 73); await sleep(200);
-  log('松开 I 后 display     : ' + await ev(`el('scoreboard').style.display`) + '  (应 none)');
-  await key('keyDown', 'KeyP', 'p', 80); await sleep(200);
-  log('按住旧键 P 时 display : ' + await ev(`el('scoreboard').style.display`) + '  (应 none, 老键已解绑)');
-  await key('keyUp', 'KeyP', 'p', 80); await sleep(150);
-
-  log('');
-  log('=== 4) 移动键规范码翻译 (前进 W → I) ===');
-  log('setKey(forward,KeyI) : ' + await ev(`(function(){setKey('forward','KeyI');return keyOf('forward');})()`));
-  log('canonKey(KeyI) 应 KeyW : ' + await ev(`canonKey('KeyI')`));
-  log('canonKey(KeyW) 应 null : ' + await ev(`String(canonKey('KeyW'))`));
-  await key('keyDown', 'KeyI', 'i', 73); await sleep(150);
-  log('按 I 后 keys.KeyW       : ' + await ev(`keys.KeyW`) + '  (应 true)');
-  await key('keyUp', 'KeyI', 'i', 73); await sleep(150);
-  log('松开 I 后 keys.KeyW     : ' + await ev(`keys.KeyW`) + '  (应 false)');
-  await key('keyDown', 'KeyW', 'w', 87); await sleep(150);
-  log('按旧键 W 后 keys.KeyW   : ' + await ev(`keys.KeyW`) + '  (应 false, 老键作废)');
-  await key('keyUp', 'KeyW', 'w', 87); await sleep(150);
-
-  log('');
-  log('=== 5) 占位交换 (把「后退」也绑到 I → 前进应被挤到 S) ===');
-  log('setKey(back,KeyI) : ' + await ev(`(function(){setKey('back','KeyI');return 'forward='+keyOf('forward')+' back='+keyOf('back');})()`));
-
-  log('');
-  log('=== 6) 持久化 ===');
-  await rpc('Page.navigate', { url: URL });
-  await sleep(7000);
-  log('重载后 keyOf(score/forward/back): ' + await ev(`keyOf('score')+' / '+keyOf('forward')+' / '+keyOf('back')`));
-
-  log('');
-  log('=== 7) 恢复默认 ===');
-  log('resetKeys() : ' + await ev(`(function(){resetKeys();return keyOf('score')+' / '+keyOf('forward')+' / '+keyOf('back');})()`));
-  log('按钮文案已同步: ' + await ev(`(function(){renderKeyGrid();const rows=[...el('keyGrid').children];const r=rows.find(x=>x.children[0].textContent==='计分板');return r.children[1].textContent;})()`));
-
-  log('');
-  log('=== 8) 手机端按钮布局编辑 ===');
-  log('enterLayoutEdit() : ' + await ev(`(function(){try{enterLayoutEdit();return 'OK';}catch(e){return 'EXC '+e.message;}})()`));
-  await sleep(400);
-  log('body.layoutEdit   : ' + await ev(`document.body.classList.contains('layoutEdit')`));
-  log('LAYOUT_EDIT 标志  : ' + await ev(`!!window.LAYOUT_EDIT`));
-  log('#layoutBar 存在   : ' + await ev(`!!el('layoutBar')`));
-  log('可见按钮数(应 17) : ' + await ev(`[...el('touchUI').querySelectorAll('.tbtn')].filter(b=>!b.classList.contains('hiddenT')).length`));
-  log('#touchUI display  : ' + await ev(`getComputedStyle(el('touchUI')).display`));
-  log('摇杆区 display    : ' + await ev(`getComputedStyle(el('tStickZone')).display`) + '  (编辑时应 none)');
-  const pos = JSON.parse(await ev(`(function(){const b=el('tBag');const r=b.getBoundingClientRect();return JSON.stringify({x:Math.round(r.left+r.width/2),y:Math.round(r.top+r.height/2)});})()`));
-  log('tBag 中心(拖前)   : ' + JSON.stringify(pos));
-  await rpc('Input.dispatchMouseEvent', { type: 'mousePressed', x: pos.x, y: pos.y, button: 'left', clickCount: 1 });
-  await sleep(120);
-  await rpc('Input.dispatchMouseEvent', { type: 'mouseMoved', x: pos.x - 140, y: pos.y - 90, button: 'left' });
-  await sleep(120);
-  await rpc('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pos.x - 140, y: pos.y - 90, button: 'left', clickCount: 1 });
-  await sleep(300);
-  log('拖后 tBag 位置     : ' + await ev(`el('tBag').style.left+' , '+el('tBag').style.top`));
-  log('localStorage 布局  : ' + await ev(`localStorage.getItem('bf_tbtn_v1')`));
-  log('exitLayoutEdit()   : ' + await ev(`(function(){try{exitLayoutEdit();return 'OK';}catch(e){return 'EXC '+e.message;}})()`));
-  await sleep(300);
-  log('退出后 layoutEdit  : ' + await ev(`document.body.classList.contains('layoutEdit')`));
-
-  log('');
-  log('=== 9) 布局持久化 ===');
-  await rpc('Page.navigate', { url: URL });
-  await sleep(7000);
-  log('重载后 tBag 内联位置: ' + await ev(`el('tBag').style.left+' , '+el('tBag').style.top`));
-  log('恢复默认布局       : ' + await ev(`(function(){localStorage.removeItem('bf_tbtn_v1');applyTouchLayout();return el('tBag').style.left||'(空=用 CSS 默认)';})()`));
-
-  log('');
-  log('=== 10) 控制台异常 ===');
-  log(errs.length ? errs.slice(0, 12).join('\n') : '无');
-  finish(0);
-})().catch(e => { log('FATAL ' + e.message); finish(1); });
+run().catch(err=>{ log(err.stack); process.exitCode=1; }).finally(()=>fs.writeFileSync(path.join(__dirname,'_settings_probe.txt'),report.join('\n')+'\n'));

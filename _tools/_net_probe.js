@@ -57,11 +57,14 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   log('  面板可见            = ' + await ev(`(function(){var e=document.getElementById('mNet');return e?!e.classList.contains('hidden'):'NO_EL';})()`));
   log('  netBox 内容         = ' + await ev(`(document.getElementById('netBox')||{}).textContent||'NO_EL'`));
   log('  vhBoard 内容        = ' + await ev(`(document.getElementById('vhBoard')||{}).textContent||'NO_EL'`));
-  log('  房间码输入框        = ' + await ev(`!!document.getElementById('netCode')`));
-  log('  创建/加入按钮       = ' + await ev(`(!!document.getElementById('netCreate'))+' / '+(!!document.getElementById('netJoin'))`));
+  const guestControls = await ev(`['netCode','netCreate','netJoin'].filter(id=>el(id).getClientRects().length)`);
+  log('  游客可见的房间控件  = ' + (Array.isArray(guestControls) ? guestControls.join(', ') || '无' : guestControls));
+  if (!Array.isArray(guestControls) || guestControls.length || await ev(`!!VIBE.user`) !== false) return finish(1);
 
   log('\n=== 未登录时点创建房间（应给出提示而不是崩）===');
-  log('  ' + await ev(`(async function(){ try{ await netCreateRoom(); return 'ok · '+NET.msg[0]; }catch(e){ return 'EXC '+e.message; } })()`));
+  const refused = await ev(`(async()=>!await netCreateRoom() && !NET.room && NET.msg[0].includes('请先登录'))()`);
+  log('  游客创建请求被拒绝  = ' + refused);
+  if (refused !== true) return finish(1);
   log('  netBox 内容         = ' + await ev(`(document.getElementById('netBox')||{}).textContent||'NO_EL'`));
 
   log('\n=== 友伤补丁 ===');

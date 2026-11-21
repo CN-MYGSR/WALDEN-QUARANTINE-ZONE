@@ -22,7 +22,7 @@ const STORY=(()=>{
 })();
 function storySave(){ try{ localStorage.setItem(STORY_KEY,JSON.stringify(STORY)); }catch(e){} }
 function storyDone(i){ return !!(STORY_CHAPTERS[i]&&STORY.done[STORY_CHAPTERS[i].id]); }
-function storyUnlocked(i){ return i<=0||(i>0&&storyDone(i-1)); }
+function storyUnlocked(i){ return !!STORY_CHAPTERS[i]&&(i===0||storyDone(i-1)); }
 function storyCleared(){ return STORY_CHAPTERS.every((c,i)=>storyDone(i)); }
 function storyReset(){ STORY.done={}; STORY.cur=0; storySave(); }
 
@@ -54,7 +54,7 @@ const STORY_CHAPTERS=[
   tag:'地下 · 铁砧 B2',
   brief:'你下来了。\n这里是铁砧第三层——1980 年代华约挖的，1991 年封的，2021 年被 NBK 重新打开。\n北端是封存冷库，那一排低温罐就是当年泄漏的源头。带 3 份制剂样本上来，这是唯一能证明 NBK 在做什么的东西。\n注意：取样本会触发他们的警报。',
   obj:[
-    {id:'sample', type:'fetch', key:'ledx', n:3, label:'取得制剂样本 ×3（撤离时必须带在身上）'},
+    {id:'sample', type:'fetch', key:'ledx', n:3, label:'带出 3 个医疗记录仪（制剂样本）'},
     {id:'out',    type:'extract', label:'从北端升降机撤离'},
   ],
   events:[
@@ -68,7 +68,7 @@ const STORY_CHAPTERS=[
   tag:'地下 · 实验室',
   brief:'样本只能证明「有什么」，证明不了「谁干的」。\nUSEC 在铁砧地下封了一个自己的设施，里面有 NBK 的作业记录。拿 2 份文件出来。\n那里的守备是 PMC 合同精锐——比井口那批硬得多。',
   obj:[
-    {id:'doc', type:'fetch', key:'docs', n:2, label:'取得 NBK 作业记录 ×2'},
+    {id:'doc', type:'fetch', key:'docs', n:2, label:'带出 2 份机密文件（NBK 作业记录）'},
     {id:'out', type:'extract', label:'从北端净化闸门撤离'},
   ],
   events:[
@@ -94,7 +94,7 @@ const STORY_CHAPTERS=[
   tag:'机场 · 跑道与航站楼',
   brief:'线人交代了一件事：封锁当天有一架货机没起飞，货舱里是 NBK 要运走的最后一批东西。\n航单在航站楼里，但维和部队已经进场了——他们不想让任何人拿到它。\n你有 90 秒。跑道是开阔地，别在那儿停。',
   obj:[
-    {id:'manifest', type:'fetch', key:'keycard', n:1, label:'取得货机航单 ×1'},
+    {id:'manifest', type:'fetch', key:'keycard', n:1, label:'带出 1 张通行卡（货机航单）'},
     {id:'wait', type:'survive', n:90, label:'在航站楼内撑住 90 秒（等接应窗口）'},
     {id:'out',  type:'extract', label:'撤到跑道东端'},
   ],
@@ -156,13 +156,18 @@ function storyApplyChapter(){
 // =====================================================================
 // 目标判定
 // =====================================================================
+function storyCarried(key){
+  let count=RUN.loot[key]||0;
+  for(const item of RUN.secure||[]) if(item===key) count++;
+  return count;
+}
 function storyObjMet(o){
   try{
     switch(o.type){
       case 'reach':   return Math.hypot(player.pos.x-o.x,player.pos.z-o.z) <= (o.r||8);
       case 'kill':    return (RUN.kills||0) >= (o.n||1);
       case 'survive': return SRAID.t >= (o.n||30);
-      case 'fetch':   return (RUN.loot&&(RUN.loot[o.key]|0)||0) >= (o.n||1);
+      case 'fetch':   return storyCarried(o.key) >= (o.n||1);
       case 'escort': {
         let c=0;
         for(const m of SQUAD.members){ if(m&&m.alive&&Math.hypot(m.pos.x-o.x,m.pos.z-o.z)<=(o.r||18)) c++; }
@@ -173,16 +178,20 @@ function storyObjMet(o){
     }
   }catch(e){ return false; }
 }
-// ⚠️ 结算判定必须用**局内锁存的 o.met**, 不能在这里重新求值:
-//    reach 这类目标是「瞬时」的 —— 玩家抵达竖井口后继续走到撤离点, 结算时再算 hypot()
-//    必然不在原地 → 目标判为未达成 → **章节永远无法通关** (线上实测: 章节完成后无法继续下一章)。
-//    只有 escort 例外: 它要求「撤离那一刻队友仍在位」, 所以结算时必须重新求值。
-function storyObjectivesMet(){
+// 到过的地点一直算数；物资和护送对象必须在撤离时仍然随行。
+function storyRefreshObjectives(){
+  let changed=false;
   for(const o of SRAID.obj){
-    if(o.type==='extract') continue;
-    if(o.type==='escort'){ if(!storyObjMet(o)) return false; continue; }
-    if(o.met) continue;              // 局内已锁存
-    if(storyObjMet(o)) continue;     // 兜底: kill / survive / fetch 这类单调目标
+    if(o.type==='extract'||(o.met&&o.type!=='fetch'&&o.type!=='escort')) continue;
+    const met=storyObjMet(o);
+    if(met!==o.met){ o.met=met; changed=true; }
+  }
+  return changed;
+}
+function storyObjectivesMet(){
+  storyRefreshObjectives();
+  for(const o of SRAID.obj){
+    if(o.type==='extract'||o.met) continue;
     return false;
   }
   return true;
@@ -238,19 +247,14 @@ function storyUpdateEvents(){
 // 每帧
 // =====================================================================
 function storyUpdate(dt){
-  if(!SRAID.live||!player||!player.alive) return;
+  if(!SRAID.live||SRAID.ended||!player||!player.alive) return;
+  const second=Math.floor(SRAID.t), priorRadio=SRAID.sayT>0?SRAID.say:'';
   SRAID.t+=dt;
   if(SRAID.alarm>0) SRAID.alarm-=dt;
   if(SRAID.sayT>0) SRAID.sayT-=dt;
-  let changed=false;
-  for(const o of SRAID.obj){
-    if(o.met) continue;
-    // escort 不锁存: 它要按「撤离那一刻队友是否在位」判, 锁存会让 HUD 一直显示已完成
-    if(o.type==='extract'||o.type==='escort') continue;
-    if(storyObjMet(o)){ o.met=true; changed=true; }
-  }
+  const changed=storyRefreshObjectives();
   storyUpdateEvents();
-  if(changed||SRAID.sayT>0) storyRenderHud();
+  if(changed||second!==Math.floor(SRAID.t)||priorRadio!==(SRAID.sayT>0?SRAID.say:'')) storyRenderHud();
 }
 // wrap 一个每帧都会被调用的函数 (与 39_quests 包 updateExtraction 同一手法)
 // ⚠️⚠️ storyUpdate 在**每帧**路径上, 必须包 try/catch:
@@ -277,7 +281,7 @@ function storyCrateBonus(out){
   if(!SRAID.live||!SRAID.ch||!out) return;
   for(const o of SRAID.obj){
     if(o.type!=='fetch') continue;
-    const have=(out[o.key]|0)+((RUN.loot&&RUN.loot[o.key])|0);
+    const have=(out[o.key]|0)+storyCarried(o.key);
     if(have<(o.n||1)&&Math.random()<0.35) out[o.key]=(out[o.key]||0)+1;
   }
 }
@@ -291,7 +295,9 @@ function storyCrateBonus(out){
 function storyApplyKit(){
   if(!SRAID.live||typeof player==='undefined'||!player) return;
   const p=player;
-  const mk=k=>{ const md=(typeof moddedDef==='function'&&moddedDef(k))||WPN_DEFS[k]; return {key:k,def:md,mag:0,reserve:0,ammo:''}; };
+  // 随借用武器配发的一盒弹通过换弹键拆封，不进入玩家仓库或撤离收益。
+  const mk=k=>({key:k,def:moddedDef(k)||WPN_DEFS[k],mag:0,reserve:0,ammo:'',
+    loanAmmoBox:ammoKeyOfCaliber(ammoCaliberOf(k))});
   try{
     if(WPN_DEFS.m4&&WPN_DEFS.m1911){
       p.slots=[mk('m4'),mk('m1911')];
@@ -307,7 +313,7 @@ function storyApplyKit(){
     // 夜视仪: 剧情配装直接给**全景夜视仪**(GPNVG-18 · 118°) —— 地下章节(铁砧 B2 / 实验室)太黑。
     // ⚠️ 只写 RUN + 内存判断, 不碰 META.loadout / PLAYER_MODS → 玩家存档与沙盒配装完全不受影响。
     RUN.nvgBrought=true; RUN.nvgKey='nvg_pano';
-    if(typeof showScorePop==='function') showScorePop('剧情配装：M4 + M1911 · 手雷×2 · 医疗包×2 · 手术包×1 · 全景夜视仪(按 N 开关)');
+    if(typeof showScorePop==='function') showScorePop('剧情配装：M4 和 M1911 各配一盒弹 · '+(TOUCHUI?'点换弹装填':'按 '+keyLabelOf('reload')+' 装填'));
   }catch(e){ console.warn('[story] kit failed',e); }
 }
 const _storyOrigDeployPlayer=deployPlayer;
@@ -377,58 +383,84 @@ function storyOnRaidEnd(extracted){
 // =====================================================================
 // UI
 // =====================================================================
+let storyHudMarkup='';
 function storyRenderHud(){
   const box=document.getElementById('storyHud');
   if(!box) return;
-  if(!SRAID.live||!SRAID.ch){ box.classList.add('hidden'); return; }
+  if(!SRAID.live||!SRAID.ch||SRAID.ended){ box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   const ch=SRAID.ch;
   let h='<div class="shTitle">剧情 · 第'+ch.no+'章 「'+ch.name+'」</div>';
   for(const o of SRAID.obj){
     const met=o.type==='extract'?false:o.met;
     let prog='';
-    if(o.type==='fetch') prog=' '+Math.min(RUN.loot[o.key]|0,o.n)+'/'+o.n;
+    if(o.type==='fetch') prog=' '+Math.min(storyCarried(o.key),o.n)+'/'+o.n;
     else if(o.type==='survive') prog=' '+Math.min(Math.floor(SRAID.t),o.n)+'/'+o.n+'s';
     else if(o.type==='kill') prog=' '+Math.min(RUN.kills|0,o.n)+'/'+o.n;
     h+='<div class="shObj'+(met?' ok':'')+'">'+(met?'✔':'▸')+' '+o.label+prog+'</div>';
   }
   if(SRAID.sayT>0&&SRAID.say) h+='<div class="shSay">'+SRAID.say+'</div>';
-  box.innerHTML=h;
+  if(h!==storyHudMarkup){ box.innerHTML=h; storyHudMarkup=h; }
 }
 function storyRenderPanel(){
   const box=document.getElementById('storyList');
   if(!box) return;
-  let h='<div class="storyHead">瓦尔登隔离禁区 · 行动档案</div>';
-  h+='<div class="storySub">共 '+STORY_CHAPTERS.length+' 章 · 已完成 '+STORY_CHAPTERS.filter((c,i)=>storyDone(i)).length+' 章'+(storyCleared()?' · <b style="color:#ffd77a">全部完成</b>':'')+'</div>';
-  STORY_CHAPTERS.forEach((c,i)=>{
-    const done=storyDone(i), un=storyUnlocked(i);
-    h+='<div class="storyCard'+(done?' done':'')+(un?'':' lock')+'">';
-    h+='<div class="scNo">第 '+c.no+' 章</div>';
-    h+='<div class="scName">'+c.name+(done?' ✔':'')+'</div>';
-    h+='<div class="scTag">'+c.tag+'</div>';
-    h+='<div class="scBrief">'+String(c.brief||'').replace(/\n/g,'<br>')+'</div>';
-    h+='<div class="scObj">目标：'+c.obj.map(o=>o.label).join(' ／ ')+'</div>';
-    h+='<div class="scKit">配装：M4 + M1911 · 手雷×2 · 医疗包×2 · 手术包×1 · 全景夜视仪（自动配备，无需选择 · 按 N 开关夜视）</div>';
-    h+='<button class="optBtn scPlay" data-brief="'+(i+1)+'">▶ 播 放 简 报（英文配音）</button>';
-    const rw=c.reward||{};
-    h+='<div class="scRw">奖励：'+(rw.money?('¥'+formatMoney(rw.money)):'—')+(rw.xp?(' · '+rw.xp+' XP'):'')+'</div>';
-    h+= un
-      ? '<button class="bigBtn scBtn" data-story="'+i+'">'+(done?'再 打 一 次':'开 始 行 动')+(c.requiresPass?'（部署时选择撤离通行证）':'')+'</button>'
-      : '<button class="bigBtn scBtn" disabled style="opacity:.45">需先完成第 '+(c.no-1)+' 章</button>';
-    h+='</div>';
-  });
-  if(storyCleared()) h+='<div class="storyFoot">你离开了瓦尔登。<br><button class="optBtn" id="storyResetBtn" style="margin-top:8px">重置剧情进度</button></div>';
-  box.innerHTML=h;
-  box.querySelectorAll('[data-story]').forEach(b=>{
-    b.onclick=()=>{ if(typeof AudioSys!=='undefined'&&AudioSys.click) AudioSys.click(1400,0.18,0.03); storyStart(parseInt(b.dataset.story,10)); };
-  });
-  // 简报配音: 中文原文已经显示在卡片里, 这里只放英文语音, 不再叠加字幕
-  box.querySelectorAll('[data-brief]').forEach(b=>{
-    b.onclick=(ev)=>{ if(ev&&ev.stopPropagation) ev.stopPropagation(); if(typeof VO!=='undefined') VO.playBrief(parseInt(b.dataset.brief,10)); };
-  });
-  const rb=document.getElementById('storyResetBtn');
-  if(rb) rb.onclick=()=>{ if(confirm('重置剧情进度？只清剧情章节，仓库与货币不动。')){ storyReset(); storyRenderPanel(); } };
+  const completed=STORY_CHAPTERS.filter((_,i)=>storyDone(i)).length;
+  const status=i=>storyDone(i)?'已完成':storyUnlocked(i)?'可行动':'待解锁';
+  const chapters=STORY_CHAPTERS.map((ch,i)=>`<button type="button" data-chapter="${i}" aria-controls="storyDetail">
+    <span>第 ${ch.no} 章</span><small>${status(i)}</small><strong>${ch.name}</strong></button>`).join('');
+  const options=STORY_CHAPTERS.map((ch,i)=>`<option value="${i}">第 ${ch.no} 章　${ch.name}（${status(i)}）</option>`).join('');
+  box.innerHTML=`<aside class="chapterIndex" aria-label="章节目录">
+    <p><b>章节</b><span>已完成 ${completed} / ${STORY_CHAPTERS.length}</span></p>
+    <div class="chapterLinks">${chapters}</div>
+    <select class="chapterPicker" aria-label="选择剧情章节" aria-controls="storyDetail">${options}</select>
+  </aside><article id="storyDetail" aria-labelledby="chapterTitle" tabindex="0"></article>
+  <footer class="chapterActions"><div><span>行动奖励</span><strong id="chapterReward"></strong></div>
+    <button type="button" class="bigBtn" data-story></button></footer>`;
+  const detail=box.querySelector('#storyDetail'), picker=box.querySelector('.chapterPicker');
+  const start=box.querySelector('[data-story]');
+  function select(i){
+    const c=STORY_CHAPTERS[i];
+    if(typeof VO!=='undefined') VO.stop();
+    picker.value=String(i);
+    for(const b of box.querySelectorAll('[data-chapter]')) b.setAttribute('aria-pressed',String(Number(b.dataset.chapter)===i));
+    detail.innerHTML=`<p class="chapterLocation">第 ${c.no} 章　/　${c.tag}</p><h3 id="chapterTitle">${c.name}</h3>
+      <section class="chapterGoals"><h4>行动目标</h4><ol>${c.obj.map(o=>'<li>'+o.label+'</li>').join('')}</ol></section>
+      <section class="chapterBrief"><div><h4>行动简报</h4><button type="button" class="optBtn" data-brief="${c.no}" aria-pressed="false">播放英文简报</button></div>
+        <p>${c.brief.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')}</p></section>
+      <details class="menuFold"><summary>本章配发装备</summary><p>M4 和 M1911 各配一盒弹药。另配手雷 2 枚、医疗包 2 个、手术包 1 个及全景夜视仪。</p></details>
+      ${c.requiresPass?'<p class="chapterPass">终章需要港口登船通行证，出发前须在配装页带上。</p>':''}
+      ${storyCleared()?'<button type="button" class="optBtn" id="storyResetBtn">重置剧情进度</button>':''}`;
+    detail.scrollTop=0;
+    start.dataset.story=i;
+    start.disabled=!storyUnlocked(i);
+    start.textContent=start.disabled?'完成第 '+(c.no-1)+' 章后解锁':c.requiresPass?'前往配装':storyDone(i)?'重玩本章':'开始行动';
+    box.querySelector('#chapterReward').textContent='¥'+formatMoney(c.reward.money)+'　'+c.reward.xp+' XP';
+  }
+  box.onclick=e=>{
+    const b=e.target.closest('button');
+    if(!b) return;
+    if(b.hasAttribute('data-chapter')) select(Number(b.dataset.chapter));
+    else if(b.hasAttribute('data-story')){
+      if(typeof AudioSys!=='undefined'&&AudioSys.click) AudioSys.click(1400,0.18,0.03);
+      storyStart(Number(b.dataset.story));
+    }else if(b.hasAttribute('data-brief')&&typeof VO!=='undefined'){
+      if(b.getAttribute('aria-pressed')==='true') VO.stop();
+      else VO.playBrief(Number(b.dataset.brief));
+    }else if(b.id==='storyResetBtn'&&confirm('重置全部剧情章节的进度？仓库和货币将保留。')){
+      storyReset(); storyRenderPanel(); document.querySelector('#mStory .mSubTitle')?.focus();
+    }
+  };
+  picker.onchange=()=>select(Number(picker.value));
+  select(storyUnlocked(STORY.cur)?STORY.cur:0);
 }
+document.addEventListener('walden:voicechange',e=>{
+  const b=document.querySelector('#storyList [data-brief]');
+  if(!b) return;
+  const playing=e.detail==='s'+b.dataset.brief+'_brief';
+  b.setAttribute('aria-pressed',String(playing));
+  b.textContent=playing?'停止播放':'播放英文简报';
+});
 function storyStart(i){
   if(!storyUnlocked(i)) return;
   const ch=STORY_CHAPTERS[i];

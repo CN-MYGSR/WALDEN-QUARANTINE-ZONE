@@ -4,6 +4,7 @@
 // 等玩家选好出生点、按下「部署」, 才真正建局并落地。这样部署界面不用等建局。
 // _pendingRaid 保证一局只建一次 —— 从暂停菜单(≡)再进部署界面、再点部署不会重建整局。
 let _pendingRaid=false;
+let menuFaction=FACTION_PICK;
 function armRaidStart(){
 _pendingRaid=true;
 // 结算会冻结上一局剩余的重生冷却；军械库返回同图时不会重载页面。
@@ -21,7 +22,7 @@ function eloRenderUI(){
 if(typeof eloRecalc==='function') eloRecalc();   // 刷新装备估值维度(读 META.loadout)
 const box=el('eloBox'); if(!box) return;
 const btn=el('eloToggle');
-if(btn){ btn.textContent=ELO.auto?'动 态 难 度 ： 开':'动 态 难 度 ： 关'; btn.classList.toggle('sel',ELO.auto); }
+if(btn){ btn.textContent=ELO.auto?'动态难度已开启':'动态难度已关闭'; btn.classList.toggle('sel',ELO.auto); btn.setAttribute('aria-pressed',String(ELO.auto)); }
 const col=ELO.rating>=1330?'#f0c070':(ELO.rating>=980?'#9fe6b4':'#9fc8f0');
 const d=ELO.lastDelta;
 const dTxt=d?` · 上局 <b style="color:${d>0?'#9fe6b4':'#e09080'}">${d>0?'+':''}${d}</b>`:'';
@@ -37,37 +38,78 @@ box.innerHTML=
 +gTxt
 +`<div style="color:#d0d0d0;font-size:12px">打得越好敌人越强，连续阵亡会自动放水。已结算 ${ELO.raids} 局 · 峰值 ${ELO.peak}</div>`;
 }
+function placeMenuNavigation(screen,route){
+const nav=el('fieldNav'), host=el(screen).querySelector('.panel');
+if(nav.parentElement!==host) host.prepend(nav);
+nav.hidden=!route;
+for(const b of nav.querySelectorAll('[data-route]')){
+ if(b.dataset.route===route) b.setAttribute('aria-current','page');
+ else b.removeAttribute('aria-current');
+}
+}
+function leaveRaidPreparation(){
+if(!_pendingRaid||el('deployBackBtn').hidden) return false;
+if(typeof netResetDeploy==='function') netResetDeploy();
+if(typeof storyPendingIdx==='function'&&storyPendingIdx()>=0) storyClearPending();
+_pendingRaid=false;
+el('deploy').classList.add('hidden');
+el('menu').classList.remove('hidden');
+return true;
+}
+function showMenuPanel(id,armoryTab){
+const previous=document.querySelector('#menu .mSub:not(.hidden)');
+if(previous?.id==='mNet'&&id!=='mNet'&&typeof netCancelManualJoin==='function') netCancelManualJoin();
+if(typeof VO!=='undefined'&&id!=='mStory') VO.stop();
+el('mHome').classList.toggle('hidden',id!=='mHome');
+document.querySelectorAll('#menu .mSub').forEach(p=>p.classList.toggle('hidden',p.id!==id));
+placeMenuNavigation('menu',id==='mHome'?'':id);
+if(id==='mStory'&&typeof storyRenderPanel==='function') storyRenderPanel();
+if(id==='mArmory') renderArmory(armoryTab||'warehouse');
+if(id==='mPlay'){ renderMapCards(); refreshLoadoutSelects(); eloRenderUI(); }
+if(id==='mNet'){ if(typeof netRenderLobby==='function') netRenderLobby(); if(typeof vibeRenderAuth==='function') vibeRenderAuth(); if(typeof vibeRenderBoard==='function') vibeRenderBoard(); }
+const body=el(id)?.querySelector('.menuBody');
+if(body) body.scrollTop=0;
+const focus=id==='mHome'&&previous ? document.querySelector('[data-p="'+previous.id+'"]') : el(id)?.querySelector('.mSubTitle');
+focus?.focus({preventScroll:true});
+}
 function initMenuUI(){
-// 撤离突袭模式: 玩家永远扮演 TEAM_FACTION[0], 强制 team=0 并同步 UI 高亮。
-// 旧 localStorage 可能残留 team=1 (bfruins 美德对峙模式), 这里兜底。
 SETTINGS.team=0;
-const _usBtn=el('teamUS'), _gerBtn=el('teamGER');
-if(_usBtn) _usBtn.classList.add('sel');
-if(_gerBtn){ _gerBtn.classList.remove('sel'); _gerBtn.classList.add('disabled'); }
-// 保险赔付: 阵亡时投保装备 70% 概率返还, 回到主菜单时发放
 if(typeof deliverInsurance==='function'){
 const n=deliverInsurance();
 if(n) setTimeout(()=>showScorePop('保险赔付 · 返还 '+n+' 件装备入库'),600);
 }
-// 主菜单导航
-const showPanel=(id)=>{
-// 离开剧情面板就停掉简报配音, 避免声音跟着菜单跑
-if(typeof VO!=='undefined'&&id!=='mStory') VO.stop();
-el('mHome').classList.toggle('hidden',id!=='mHome');
-// 注意: 用 el(pid) 的存在性判断 —— 主页的「选择战役」面板已删除, 但 _reg.html 等旧副本可能还在,
-// 直接 el(pid).classList 会在元素缺失时抛错并让整个主菜单导航失效。
-['mPlay','mStory','mArmory','mCamp','mSet','mNet'].forEach(pid=>{ const e=el(pid); if(e) e.classList.toggle('hidden',pid!==id); });
-if(id==='mStory'&&typeof storyRenderPanel==='function') storyRenderPanel();
-if(id==='mArmory') renderArmory(ARMORY_TAB||'store');
-if(id==='mPlay'){ refreshLoadoutSelects(); eloRenderUI(); }
-if(id==='mNet'){ if(typeof netRenderLobby==='function') netRenderLobby(); if(typeof vibeRenderAuth==='function') vibeRenderAuth(); if(typeof vibeRenderBoard==='function') vibeRenderBoard(); }
-};
 const bmHint=el('bigmapHint');
 if(bmHint) bmHint.textContent='[M] 关闭 · 绿=友军 红=暴露敌军 · 散点标记为敌方步兵';
-document.querySelectorAll('.navBtn').forEach(b=>{
-b.onclick=()=>{ AudioSys.resume&&AudioSys.resume(); showPanel(b.dataset.p); };
+document.querySelectorAll('.navBtn[data-p]').forEach(b=>{
+b.onclick=()=>{ AudioSys.resume&&AudioSys.resume(); showMenuPanel(b.dataset.p); };
 });
-document.querySelectorAll('.backBtn').forEach(b=>{ b.onclick=()=>showPanel('mHome'); });
+document.querySelectorAll('.backBtn').forEach(b=>{ b.onclick=()=>showMenuPanel('mHome'); });
+el('fieldNav').onclick=e=>{
+ const button=e.target.closest('[data-route]');
+ if(!button) return;
+ if(!el('deploy').classList.contains('hidden')){
+  if(!leaveRaidPreparation()) return;
+ }else if(!el(button.dataset.route).classList.contains('hidden')) return;
+ showMenuPanel(button.dataset.route);
+};
+el('deployBackBtn').onclick=()=>{
+ const route=el('deploy').classList.contains('chapterVisit')?'mStory':'mPlay';
+ if(leaveRaidPreparation()) showMenuPanel(route);
+};
+el('inspectSpawn').onclick=()=>{
+ const target=el('deploySpawn').hidden?el('deployMap'):(el('spawnList').querySelector('.sel')||el('spawnList').querySelector('button'));
+ if(target){ target.focus({preventScroll:true}); target.scrollIntoView({block:'start'}); }
+};
+el('menu').addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&!e.defaultPrevented&&!e.target.closest('input,select,textarea')){
+  el('menu').querySelector('.mSub:not(.hidden) .backBtn')?.click();
+ }
+});
+el('deploy').addEventListener('keydown',e=>{
+ if(e.key==='Escape'&&!e.defaultPrevented&&!el('deployBackBtn').hidden&&!e.target.closest('input,select,textarea')){
+  el('deployBackBtn').click();
+ }
+});
 // 触控按键大小
 {
 const stored=parseInt(localStorage.getItem('sf_tsize')||'100');
@@ -81,49 +123,61 @@ applyTouchScale();
 }
 // 地图/战役选择已合并进「撤离部署」面板 (见 43_maps.js 的地图卡片), 主页不再单独提供选择入口。
 // 这里只把当前地图显示在标题下, 作为信息提示。
-el('menuSub').textContent=`—— ${CAMPAIGN.title} · ${CAMPAIGN.sub} ——`;
+el('menuSub').textContent='当前地图　'+(CAMPAIGN.mapName||CAMPAIGN.title);
 // 天气模式: 晴朗/迷雾/雨天/雷暴雨/黑夜 (切换后重载重建世界)
 {
 // 2026-09-19: 天气已改为**随机**（见 01_data 的 WEATHER_POOL），玩家不再能选。
 // 这里只把本局掷到的天气显示出来。
-const desc={clear:'正常能见度',overcast:'阴天 · 亮度略低',dusk:'黄昏 · 能见度下降',fog:'能见度极低 · 亮度低',rain:'能见度/亮度降低',storm:'雷暴雨 · 能见度/亮度低',night:'黑夜 · 亮度极低',
+const desc={clear:'正常能见度',overcast:'亮度略低',dusk:'能见度下降',fog:'能见度极低、光照较弱',rain:'能见度与亮度降低',storm:'能见度与亮度低',night:'亮度极低',
  labhaze:'地下设施 · 浮尘 · 能见度极低',seahaze:'海雾 · 湿冷 · 能见度偏低',airporthaze:'清晨薄霾 · 开阔地视距最好',anvilhaze:'工业尘霾 · 中距轮廓被吃掉'};
 const dEl=el('weatherDesc');
 if(dEl){
  // ⚠️ 必须容错: 剧情章节用 CAMPAIGN.forceWeather 直通, 天气名可能不在 WEATHER_MODES 里。
  //    这里一旦抛错会让整个 initMenuUI 中断 —— 主菜单的导航/地图卡片/部署按钮全部失效 (线上实测)。
  const wm=WEATHER_MODES[WEATHER_MODE];
- dEl.textContent='本局天气：'+(wm?wm.name:WEATHER_MODE)+' · '+(desc[WEATHER_MODE]||'')+'（随机决定，不可选）';
+ dEl.textContent='天气 · '+[wm?wm.name:WEATHER_MODE,desc[WEATHER_MODE]].filter(Boolean).join('，');
 }
 }
 // 「选择阵营」= 选你以哪一方出击 (USEC / PMC), 两边都可点。
 // 玩家永远是 team 0, 这栏只决定 team 0 是哪一方; 本图敌方见下方 #foeHint。
-const pickBtn=(btn,fkey)=>{
-if(!btn) return;
-const on=FACTION_PICK===fkey;
-btn.innerHTML=`${FACTIONS[fkey].sym} ${FACTIONS[fkey].short}`;
-btn.classList.toggle('sel',on);
-btn.classList.remove('disabled');
-btn.style.opacity=on?'1':'0.78';
-btn.style.cursor='pointer';
-btn.title=on?('当前: '+FACTIONS[fkey].name):('以 '+FACTIONS[fkey].name+' 出击');
-btn.onclick=()=>{ if(FACTION_PICK===fkey) return; try{ localStorage.setItem('sf_faction',fkey); }catch(e){} location.reload(); };
+const factionButtons=[[el('teamUS'),'usec'],[el('teamGER'),'pmc']];
+const pickFaction=key=>{
+ menuFaction=key;
+ for(const [btn,fkey] of factionButtons){
+  btn.classList.toggle('sel',key===fkey);
+  btn.setAttribute('aria-pressed',String(key===fkey));
+ }
 };
-pickBtn(el('teamUS'),'usec');
-pickBtn(el('teamGER'),'pmc');
+for(const [btn,fkey] of factionButtons){
+ btn.textContent=FACTIONS[fkey].sym+' '+FACTIONS[fkey].short;
+ btn.title=FACTIONS[fkey].name;
+ btn.onclick=()=>pickFaction(fkey);
+}
+pickFaction(FACTION_PICK);
 const foeEl=el('foeHint');
 if(foeEl) foeEl.textContent='本图敌方：'+TEAM_FACTION[1].sym+' '+TEAM_FACTION[1].name;
 document.querySelector('.t0h').textContent=TEAM_NAME[0];
 document.querySelector('.t1h').textContent=TEAM_NAME[1];
 // 操控模式: 由 MOBILE 自动检测, 无需手动切换
 // 阵营按钮的文案 / 高亮 / 点击已在上面 pickBtn() 里统一处理 —— 这里是「选边」而非「选敌方阵容」。
-document.querySelectorAll('.diffBtn').forEach(b=>b.onclick=()=>{
-SETTINGS.diff=+b.dataset.d;
-document.querySelectorAll('.diffBtn').forEach(x=>x.classList.toggle('sel',x===b));
-// 基准档变了 → 重算 ELO 乘区与显示
-if(typeof eloRecalc==='function') eloRecalc();
-eloRenderUI();
+try{
+ const saved=localStorage.getItem('sf_diff');
+ if(saved!==null&&/^[012]$/.test(saved)) SETTINGS.diff=Number(saved);
+}catch(e){}
+const diffButtons=document.querySelectorAll('.diffBtn');
+function syncDifficulty(){
+ for(const b of diffButtons){
+  const on=Number(b.dataset.d)===SETTINGS.diff;
+  b.classList.toggle('sel',on); b.setAttribute('aria-pressed',String(on));
+ }
+ eloRenderUI();
+}
+diffButtons.forEach(b=>b.onclick=()=>{
+ SETTINGS.diff=Number(b.dataset.d);
+ try{ localStorage.setItem('sf_diff',String(SETTINGS.diff)); }catch(e){}
+ syncDifficulty();
 });
+syncDifficulty();
 // ELO 动态难度: 开关 + 读数
 {
 const btn=el('eloToggle');
@@ -174,23 +228,6 @@ syncNvgUI();
 };
 });
 }
-el('startBtn').onclick=()=>{
-AudioSys.init();
-player.team=SETTINGS.team;
-matchOver=false;
-player.deployed=false; player.alive=false; player.kills=0; player.deaths=0; player.score=0;
-RUN.kills=0; RUN.searches=0; RUN.loot={}; RUN.extracting=false; RUN.scav=false; RUN.scavLoadout=null; RUN.passBrought=false; RUN.nvgBrought=false; RUN.nvgKey=''; RUN.timeout=false;
-RUN.failComp=0; RUN.autoKit=null; RUN.lostGear=null; RUN.returnedGear=null;
-// ELO: 按当前评分浮动兵力规模 (乘区在 00b_elo 里按基准档算好)
-eloRecalc();
-eloApplyForceSize();
-armRaidStart();          // 建局推迟到「点部署」时 (见文件顶部说明)
-// 拾荒者阵营要在部署界面上显示本局随机到的主武器 —— 提前掷一次(幂等), 别等 startMatch
-if(typeof ensureScavLoadout==='function') ensureScavLoadout();
-el('menu').classList.add('hidden');
-if(GAMEMODE==='extract') showDeploy(false);
-else startIntroCut(()=>showDeploy(false));
-};
 el('againBtn').onclick=()=>location.reload();
 const grid=el('classGrid');
 CLASSES.forEach((c,i)=>{
@@ -222,7 +259,7 @@ arsenalSel.appendChild(og);
 });
 const refreshArsenalStats=()=>{
 const d=WPN_DEFS[PLAYER_ARSENAL_KEY];
-if(d) el('arsenalStats').textContent=`当前主武器：${d.name} · 伤害 ${d.dmg} · 弹匣 ${d.mag} / 备弹 ${d.reserve}`;
+if(d) el('arsenalStats').textContent=`伤害 ${d.dmg} · 弹匣容量 ${d.mag} 发`;
 };
 arsenalSel.value=PLAYER_ARSENAL_KEY;
 refreshArsenalStats();
@@ -254,6 +291,8 @@ lockPointer();
 renderer.domElement.addEventListener('click',()=>{
 // 背包面板打开时鼠标已解锁, 点画布不能把指针锁回去 (否则无法拖拽物品)
 if(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open) return;
+if(typeof LOOT_UI!=='undefined'&&LOOT_UI.open) return;
+if(typeof AMMO_UI!=='undefined'&&AMMO_UI.open) return;
 if(player.alive&&player.deployed&&!pointerLocked&&!matchOver) lockPointer();
 });
 }
@@ -288,9 +327,32 @@ return (player.killerName?`你被 <b>${player.killerName}</b> 击杀了<br>`:'')
 })();
 el('resumeBtn').style.display=(player.alive&&player.deployed)?'inline-block':'none';
 el('deployBtn').style.display=player.alive&&player.deployed?'none':'inline-block';
+const storyPrep=typeof storyPendingIdx==='function'&&STORY_CHAPTERS[storyPendingIdx()];
+const chapterTicket=!!(_pendingRaid&&storyPrep?.requiresPass);
+const canChangePlan=_pendingRaid&&!CAMPAIGN.rangeOnly&&!storyPrep;
+const inRaid=player.alive&&player.deployed;
+const showRoster=inRaid&&!CAMPAIGN.rangeOnly;
+el('deployBackBtn').hidden=!canChangePlan&&!chapterTicket;
+el('deployBackBtn').textContent=chapterTicket?'返回章节':'重选地图';
+placeMenuNavigation('deploy',chapterTicket?'mStory':canChangePlan?'mPlay':'');
+if(chapterTicket||el('deploy').classList.contains('chapterVisit')) el('passOptions').open=chapterTicket;
+el('deploy').classList.toggle('chapterVisit',chapterTicket);
+el('chapterKit').hidden=!chapterTicket;
+el('deployPhase').textContent=inRaid?'对局进行中':canChangePlan?'出击准备 · 2 / 2':(CAMPAIGN.rangeOnly?'训练靶场':storyPrep?'剧情行动':'部署');
+el('deployTitle').textContent=inRaid?'战术菜单':chapterTicket?'第 '+storyPrep.no+' 章 · '+storyPrep.name:(CAMPAIGN.rangeOnly?'选择训练武器':'确认配装');
+el('raidOverview').hidden=!showRoster;
+el('deployLeft').hidden=showRoster;
+if(showRoster) el('raidWeapons').textContent=player.slots.map(w=>w.def.name).join('　/　');
+el('deploySpawn').hidden=inRaid&&GAMEMODE==='extract';
+el('inspectSpawn').textContent=el('deploySpawn').hidden?'查看地图':'查看出生点';
+el('deploy').classList.toggle('rangeVisit',!!CAMPAIGN.rangeOnly);
+el('deployFlex').scrollTop=0;
+el('deploy').querySelector('.mSubTitle').focus({preventScroll:true});
 buildSpawnList();
-refreshLoadoutSelects();
-if(typeof buildDeployConsumables==='function') buildDeployConsumables();
+if(!showRoster){
+ refreshLoadoutSelects();
+ if(typeof buildDeployConsumables==='function') buildDeployConsumables();
+}
 drawDeployMap();
 }
 function buildSpawnList(){
@@ -423,7 +485,8 @@ p.hp=p.maxHp; p.alive=true; p.deployed=true; p.crouch=false; p.prone=false; p.ch
 p.limbs={head:100,arms:100,torso:100,legs:100};
 p.stamina=1; p.suppressV=0; p.bloom=0;
 p.ads=false; p.holdBreath=false; VM.adsBlend=0;
-p.yaw=Math.atan2(-sx,-sz); p.pitch=0;
+// 相机沿本地 -Z 看向前方，出生时朝向地图中心。
+p.yaw=Math.atan2(p.pos.x,p.pos.z); p.pitch=0;
 let primaryKey=loan?(CAMPAIGN.rangeOnly?rangeWeapon():'m4'):META.loadout.primary;
 // SCAV 拾荒者: 主武器由 ensureScavLoadout() 每局随机, 不走仓库校验 (随机到的枪不需要玩家拥有)
 const _scavL=(!loan&&typeof ensureScavLoadout==='function')?ensureScavLoadout():null;
@@ -463,7 +526,7 @@ p.nadeIsAT=false; p.nadeHeld=false; p.nadeIsSmoke=false; p.nadeIsFlash=false;
 ensurePlayerBody();
 if(loan){
  RUN.medItems=[]; RUN.foodItems=[]; RUN.throwables=null; RUN.insured=false;
- RUN.passBrought=!!(SRAID.live&&SRAID.ch.requiresPass&&META.loadout.pass&&hasPass());
+ RUN.passBrought=!!(SRAID.live&&SRAID.ch.requiresPass&&el('passSelect').value==='pass'&&hasPass());
 } else if(typeof applyDeployLoadout==='function') applyDeployLoadout();
 if(typeof initRaidBody==='function') initRaidBody(p,{armor:p.armorDef});
 document.getElementById('deathQuote').style.opacity='0';
@@ -519,6 +582,7 @@ if(typeof storyMapBlocked==='function'&&storyMapBlocked()){
 }
 // 新的一局: 允许 applyDeployLoadout 发放带入的弹药盒(重生时不重复)
 RUN._loadoutApplied=false;
+RUN.stowedWeapons={};
 clearTimeout(RUN.deathTimer); RUN.deathTimer=0; RUN.lossSettled=false;
 RUN.secure=[]; RUN.grid={pack:{},chest:{}};
 clearRaidActors();
@@ -592,7 +656,8 @@ if(GAMEMODE==='extract'){
 el('flagIcons').style.display='none';
 el('capPanel').style.display='none';
 matchTime=5*60;   // 5 分钟一局 (2026-09-18)
-RUN.kills=0; RUN.searches=0; RUN.loot={}; RUN.extracting=false; RUN.scav=false; RUN.scavLoadout=null; RUN.passBrought=false; RUN.nvgBrought=false; RUN.nvgKey=''; RUN.timeout=false;
+// 本局 SCAV 武器在部署面板已掷出；保留它，让玩家按预览带的弹药能用。
+RUN.kills=0; RUN.searches=0; RUN.loot={}; RUN.extracting=false; RUN.passBrought=false; RUN.nvgBrought=false; RUN.nvgKey=''; RUN.timeout=false;
 RUN.failComp=0; RUN.autoKit=null; RUN.lostGear=null; RUN.returnedGear=null;
 if(EXTRACT_POINTS.length) for(const ep of EXTRACT_POINTS) ep.progress=0;
 } else {

@@ -1,0 +1,306 @@
+/* Keep the sightline open. Navigation sits above the world, body and weapon readouts below it. */
+#ui, #touchUI {
+  --field-ink: #f4f2e9;
+  --field-muted: #c1c6bf;
+  --field-amber: #f2c678;
+  --field-line: rgba(198, 207, 196, .32);
+  --field-pane: rgba(19, 25, 23, .87);
+  --hud-edge: clamp(12px, 1.8vmin, 22px);
+  --map-size: clamp(104px, 16vmin, 152px);
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-variant-numeric: tabular-nums;
+}
+body.fieldMenu #ui, body.fieldMenu #questHud { visibility: hidden; }
+body.fieldMenu #voSub.on { visibility: visible; }
+#ui kbd {
+  display: inline-block; padding: 1px 5px; border: 1px solid var(--field-line);
+  border-radius: 3px; color: var(--field-ink); font-family: inherit;
+  font-size: 12px; font-weight: 600; line-height: 1.4;
+}
+#mapDock {
+  position: absolute; left: max(var(--hud-edge), env(safe-area-inset-left));
+  top: max(var(--hud-edge), env(safe-area-inset-top));
+  display: flex; flex-direction: column; align-items: flex-start; gap: 4px;
+}
+#minimapWrap {
+  position: static; width: var(--map-size); height: var(--map-size);
+  border-radius: 50%; border: 1px solid var(--field-line); background: var(--field-pane);
+}
+#mapDock #mmHint {
+  position: static; transform: none; text-align: center; width: var(--map-size);
+  color: var(--field-ink); font-size: 12px; letter-spacing: 0; text-shadow: 0 1px 3px #000;
+}
+#squadHUD { position: static; padding: 4px 8px; color: var(--field-ink); }
+#mapDock #lootHud { position: static; text-align: left; color: #c4edd7; font-weight: 600; font-size: 13px; }
+#mapDock #lootHud:empty { display: none !important; }
+#topBar {
+  top: max(var(--hud-edge), env(safe-area-inset-top));
+  display: grid; grid-template-columns: auto auto; align-items: center; justify-content: center;
+  gap: 2px 12px; max-width: 40vw;
+}
+#tickets, #timeTxt {
+  margin: 0; padding: 3px 8px; letter-spacing: 0; border-radius: 4px;
+  color: var(--field-ink); background: var(--field-pane); font-size: 14px; line-height: 1.4;
+}
+#tickets { justify-self: end; }
+#timeTxt { justify-self: start; color: var(--field-amber); font-weight: 650; }
+#timeTxt.urgent { color: #ff9e88; }
+#flagIcons { grid-column: 1/-1; grid-row: 2; }
+#compass { grid-column: 1/-1; width: min(37vw, 400px); height: 34px; margin: 2px 0 0; }
+#rangeHud { top: calc(var(--hud-edge) + 48px); padding: 5px 10px; }
+#rangeHud b { display: inline; margin: 0 6px 0 0; }
+#fieldIntel {
+  position: absolute; top: max(var(--hud-edge), env(safe-area-inset-top));
+  right: max(var(--hud-edge), env(safe-area-inset-right)); width: clamp(170px, 18vw, 240px);
+  display: flex; flex-direction: column; align-items: flex-end; gap: 6px;
+}
+#fieldIntel > :is(#storyHud, #nvgInd, #faceInd, #killfeed) {
+  position: static; width: auto; max-width: 100%; margin: 0;
+}
+#fieldIntel #storyHud { width: 100%; }
+#bigmapWrap {
+  display: grid; grid-template-areas: "title title" "map tasks" "legend tasks";
+  grid-template-columns: auto auto; align-items: start; gap: 6px 12px;
+  max-width: 96vw; padding: 12px; border: 1px solid var(--field-line); border-radius: 8px; background: rgba(15, 21, 19, .95);
+}
+#bigmapTitle { grid-area: title; margin: 0; text-align: left; letter-spacing: .08em; }
+#bigmap { grid-area: map; width: min(72dvh, 60vw, 740px); height: auto; }
+#mapObjectives { grid-area: tasks; text-align: left; }
+#mapObjectives:empty { display: none; }
+#mapObjectives #questHud { position: static; width: min(180px, 26vw); }
+#bigmapHint { grid-area: legend; margin: 0; font-size: 12px; line-height: 1.45; color: var(--field-muted); letter-spacing: 0; }
+#fieldIntel #killfeed { order: 1; max-height: 6.7em; overflow: hidden; }
+#fieldIntel #killfeed:empty, #lootHud:empty, #nadeN:empty { display: none; }
+body.uiOpen #fieldIntel, body.uiOpen #fieldKeys { visibility: hidden; }
+body.uiOpen #ui :is(#ammoAction,#zoomN,#clsTip,#carryInd,#flashInd,#braceInd,#nadeInd) { display: none !important; }
+#healthPanel, #ammoPanel {
+  bottom: max(var(--hud-edge), env(safe-area-inset-bottom)); border: 1px solid var(--field-line);
+  background: var(--field-pane); border-radius: 7px; padding: 8px 12px; color: var(--field-ink);
+}
+#healthPanel {
+  left: max(var(--hud-edge), env(safe-area-inset-left)); display: grid; align-items: center;
+  grid-template-columns: 36px 1fr; grid-template-areas: "body hp" "body bars" "armor armor";
+  gap: 2px 10px; width: 192px;
+}
+#bodyWrap, #statBarWrap { display: contents; }
+#bodyFig { grid-area: body; width: 36px; height: 63px; }
+#bodyFig svg { width: 100%; height: 100%; }
+.healthReadout { grid-area: hp; display: flex; flex-wrap: wrap; align-items: baseline; gap: 1px 6px; }
+.healthReadout > span { color: var(--field-muted); font-size: 11px; }
+#hpTotal { font-size: 21px; line-height: 1.1; font-weight: 700; letter-spacing: -.03em; }
+#healthPanel:has(#hpTotal.bad) { border-color: #fb9785; }
+#hpTotal.hurt { color: #f1c683; }
+#hpTotal.bad { color: #ff9889; }
+#vitalsCol {
+  grid-area: bars; display: grid; grid-template-columns: auto 1fr;
+  align-items: center; gap: 2px 6px; padding: 0;
+}
+.vitalLabel { color: var(--field-muted); font-size: 11px; line-height: 1.2; }
+#stamBarWrap, #healthPanel .statBar { height: 5px; width: 100%; margin: 0; border: 0; background: #47504d; }
+#healthPanel .statBar i { display: block; height: 100%; width: 100%; }
+#armorHud {
+  grid-area: armor; position: static; margin-top: 3px; padding: 4px 0 0;
+  border: 0; border-top: 1px solid var(--field-line); border-radius: 0;
+  background: transparent; color: var(--field-muted); font-size: 12px; line-height: 1.35; letter-spacing: 0;
+}
+#armorHud:empty { display: none; }
+#ammoPanel { right: max(var(--hud-edge), env(safe-area-inset-right)); width: min(30vw, 246px); text-align: left; }
+#ammoPanel .weaponTitle { display: flex; align-items: center; gap: 6px; }
+#ammoPanel #wname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--field-ink); font-size: 16px; letter-spacing: .02em; }
+#wslot { flex: none; padding: 1px 4px; color: var(--field-amber); border: 1px solid #8c7656; border-radius: 3px; font-size: 11px; }
+#wslot:empty, #ammoAction:empty { display: none; }
+#ammoPanel #wmode { margin: 0; letter-spacing: 0; color: var(--field-muted); }
+#ammoPanel .ammoRow { display: flex; align-items: flex-end; gap: 12px; margin-top: 5px; }
+#ammoPanel .rounds, #ammoPanel .weaponSpec { display: flex; flex-direction: column; gap: 2px; }
+#ammoPanel .weaponSpec { flex: 1 1 auto; align-self: center; align-items: flex-end; text-align: right; }
+#ammoPanel .rounds.reserve { border-left: 1px solid var(--field-line); padding-left: 9px; }
+#ammoPanel .ammoCaption { font-size: 11px; font-weight: 400; color: var(--field-muted); }
+#ammoPanel:not(.hasRounds) .ammoCaption { display: none; }
+#ammoPanel #magN { font-size: 38px; line-height: .95; font-weight: 700; }
+#ammoPanel #resN { font-size: 22px; font-weight: 500; color: var(--field-muted); }
+#ammoPanel #ammoType, #ammoPanel #zoomN { margin: 0; color: var(--field-amber); font-size: 12px; letter-spacing: 0; }
+#ammoPanel #ammoType { font-weight: 500; }
+#ammoPanel #zoomN { margin-top: 4px; }
+#ammoPanel #ammoAction { margin-top: 6px; border-top: 1px solid #726247; padding-top: 4px; font-size: 13px; line-height: 1.3; color: var(--field-amber); font-weight: 600; }
+#ammoPanel:has(#ammoAction:not(:empty)) #nadeN { display: none; }
+#ammoPanel #nadeN { color: var(--field-muted); font-size: 12px; }
+#fieldKeys, #quickHud {
+  position: absolute; left: 50%; transform: translateX(-50%); bottom: var(--hud-edge);
+  width: max-content; max-width: 39vw; padding: 4px 8px; border-radius: 5px;
+  background: var(--field-pane); color: var(--field-muted); font-size: 12px; letter-spacing: 0;
+}
+#fieldKeys { left: var(--hud-edge); bottom: calc(var(--hud-edge) + 112px); transform: none; display: flex; align-items: center; gap: 6px; }
+#quickHud { bottom: calc(var(--hud-edge) + 36px); }
+#quickHud .injury { color: #ff9e88; font-weight: 650; }
+#carryInd, #flashInd { left: var(--hud-edge); transform: none; top: auto; bottom: calc(var(--hud-edge) + 134px); }
+#flashInd { bottom: calc(var(--hud-edge) + 157px); }
+#interact { left: 50%; top: auto; bottom: 20%; max-width: 72vw; text-align: center; background: var(--field-pane); border: 1px solid var(--field-line); }
+#interact b { color: var(--field-amber); }
+#ui #scorePop { top: 19%; padding: 3px 8px; max-width: 68vw; width: max-content; font-size: 14px; text-align: center; background: var(--field-pane); border-radius: 4px; }
+#ui #extractHud { top: auto; bottom: 20%; transform: translateX(-50%); }
+#ui:has(#extractHud:not(.hidden)) #interact, body.uiOpen #interact { visibility: hidden; }
+#ui:has(#bigmapWrap:not(.hidden)) > :is(#topBar,#fieldIntel,#fieldKeys,#msgC,#scorePop,#quickHud,#rangeHud,#interact) { visibility: hidden; }
+body:has(#bigmapWrap:not(.hidden)):not(.layoutEdit) #touchUI :is(.tbtn:not(#tMap),#tStickZone) { visibility: hidden; }
+#mapObjectives #questHud[style*="block"] { display: block !important; }
+#voSub { bottom: max(12.5%, 85px); width: max-content; max-width: min(60vw, 660px); }
+#ui #clsTip { bottom: calc(var(--hud-edge) + 119px); right: var(--hud-edge); }
+#fps { right: var(--hud-edge); bottom: 1px; font-size: 10px; }
+
+/* Native buttons stay reachable while the inventory itself scrolls. */
+#bagPanel, #lootPanel, #ammoShopPanel {
+  width: min(94vw, 620px); max-height: 90dvh; padding: 14px 16px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 8px; pointer-events: auto;
+  color: var(--field-ink); background: rgba(21, 27, 25, .98); border-color: #717a70;
+}
+#lootPanel { width: min(94vw, 680px); }
+#bagPanelHead, #lootTitle, #ammoShopHead { margin: 0; padding: 0 0 6px; }
+#lootTitle, #ammoShopTitle, #bagPanelTitle { font-size: 18px; letter-spacing: .08em; text-align: left; }
+#bagPanelHead, #ammoShopHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 10px; }
+#bagPanelStat, #ammoShopStat { font-size: 12px; color: var(--field-muted); letter-spacing: 0; }
+#ammoShopStat { width: 100%; text-align: left; }
+#bagPanelList, #lootList, #ammoShopList { flex: 1 1 auto; min-height: 0; max-height: none; overflow: auto; overscroll-behavior: contain; }
+#lootPanel .lootWrap { justify-content: flex-start; flex-wrap: wrap; max-height: none; overflow: visible; }
+#bagPanelList { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 238px), 1fr)); align-content: start; align-items: start; gap: 8px 12px; }
+#bagDetail { grid-column: 1/-1; }
+#lootList .invDetail, #bagPanelList .invDetail { margin: 0; padding: 8px 10px; }
+#ui .invHead, #ui .invHead span, #ui .invDHint { font-size: 12px; letter-spacing: 0; }
+#ui .invDName { font-size: 15px; }
+#ui .invDDesc { font-size: 13px; }
+#bagPanelBtns, .lootActions { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; }
+#ui :is(.bagAct, .apBuy, .invDBtns button) { min-height: 40px; padding: 6px 12px; letter-spacing: 0; font: inherit; font-size: 14px; }
+#ui :is(.bagAct, .apBuy, .invDBtns button, .invTile):focus-visible { outline: 2px solid var(--field-amber); outline-offset: -2px; }
+#lootTakeOne, #bagPanelBtns [data-bact="use"] { background: var(--field-amber); border: 1px solid var(--field-amber); color: #20251f; font-weight: 650; }
+#bagPanelBtns [data-bact="close"], #lootClose, #ammoClose { margin-left: auto; }
+#bagPanelHint, #ammoShopHint, #lootHint { margin: 0; padding: 4px 0 0; color: var(--field-muted); font-size: 12px; letter-spacing: 0; text-align: left; }
+
+/* Thumb controls. Saved positions remain pinned while the rest of the tools fold away. */
+#touchUI { --touch-edge: 10px; --combat-base: calc(116px + var(--sa-b)); }
+#touchUI .tbtn {
+  user-select: none; font-family: inherit; color: var(--field-ink); background: rgba(22, 29, 27, .72);
+  border: 1px solid rgba(235, 240, 230, .48); text-shadow: 0 1px 2px #000;
+}
+#touchUI .tbtn .tLbl { font-size: 12px; line-height: 1.2; letter-spacing: 0; opacity: 1; }
+#touchUI .tbtn.press, #touchUI .tbtn.on, #tToolsToggle[aria-expanded="true"] {
+  background: #6b593d; border-color: var(--field-amber);
+}
+#tToolsToggle { right: calc(var(--touch-edge) + var(--sa-r)); top: calc(var(--touch-edge) + var(--sa-t)); width: 48px; height: 44px; border-radius: 7px; }
+#tBag { right: calc(64px + var(--sa-r)); top: calc(var(--touch-edge) + var(--sa-t)); bottom: auto; width: 48px; height: 44px; border-radius: 7px; }
+#tMap {
+  top: max(var(--hud-edge), var(--sa-t)); left: max(var(--hud-edge), var(--sa-l)); width: var(--map-size); height: var(--map-size);
+  border-radius: 50%; justify-content: flex-end; padding-bottom: 8px;
+}
+#touchUI #tMap { background: transparent; border-color: transparent; }
+#tMap .tLbl { background: var(--field-pane); padding: 1px 7px; border-radius: 8px; }
+#tFire { right: calc(var(--touch-edge) + var(--sa-r)); bottom: calc(var(--combat-base) + 10px); width: 68px; height: 68px; }
+#touchUI #tFire { background: rgba(95, 59, 39, .85); border: 2px solid var(--field-amber); }
+#tFire .tIco { font-size: 23px; }
+#tAds { right: calc(84px + var(--sa-r)); bottom: calc(var(--combat-base) + 55px); width: 55px; height: 55px; }
+#tJump { right: calc(var(--touch-edge) + var(--sa-r)); bottom: calc(var(--combat-base) + 86px); width: 48px; height: 48px; }
+#tCrouch { right: calc(144px + var(--sa-r)); bottom: calc(var(--combat-base) + 54px); width: 48px; height: 48px; }
+#tReload { right: calc(84px + var(--sa-r)); bottom: var(--combat-base); width: 48px; height: 48px; }
+#tSwap { right: calc(139px + var(--sa-r)); bottom: var(--combat-base); width: 48px; height: 48px; }
+#tInteract {
+  top: auto; right: calc(var(--touch-edge) + var(--sa-r)); bottom: calc(var(--combat-base) + 142px);
+  min-width: 82px; max-width: 140px; height: 44px; padding: 3px 8px; border-radius: 6px;
+}
+#touchUI #tInteract { background: #624f38; border-color: var(--field-amber); }
+#tStick { left: 20px; bottom: calc(var(--combat-base) + 7px); width: 92px; height: 92px; }
+#tKnob { width: 34px; height: 34px; margin: -17px; }
+#tTools { display: contents; }
+body:not(.layoutEdit) #touchUI:not(.toolsOpen) #tTools .tbtn:not(.placed) { display: none; }
+body:not(.layoutEdit) #touchUI.toolsOpen #tTools, body.layoutEdit #tTools {
+  display: grid; position: absolute; z-index: 2; right: calc(var(--touch-edge) + var(--sa-r)); top: calc(60px + var(--sa-t));
+  grid-template-columns: repeat(4, minmax(48px, 1fr)); gap: 4px; width: min(278px, 90%); max-height: calc(100% - 70px);
+  padding: 7px; border: 1px solid var(--field-line); border-radius: 8px;
+  background: #1a211f; pointer-events: auto; overflow-y: auto; overscroll-behavior: contain;
+}
+#tTools .tbtn:not(.placed) {
+  position: static; width: auto; min-width: 0; height: 44px; padding: 1px;
+  border-radius: 4px; flex-direction: column; gap: 2px;
+}
+#tTools .tIco { font-size: 15px; }
+#tTools .tLbl { text-align: center; }
+#tShop { left: 16px; top: 58px; width: 56px; height: 44px; border-radius: 5px; }
+#touchUI.toolsOpen #tTools #questHud { position: static; grid-column: 1/-1; width: auto; padding: 6px 8px; box-shadow: none; }
+#touchUI.toolsOpen #tTools #questHud[style*="block"] { display: block !important; }
+body.layoutEdit #touchUI .tbtn.hiddenT { display: flex !important; }
+body.layoutEdit #menu { display: none; }
+body.layoutEdit #tLook { background: rgba(16, 22, 19, .64); }
+body.layoutEdit #tTools {
+  top: calc(var(--map-size) + 18px + var(--sa-t)); left: var(--touch-edge); right: auto;
+  width: min(280px, 72%); max-height: calc(100% - var(--map-size) - 108px);
+}
+body.layoutEdit .tbtn { touch-action: none; cursor: grab; }
+body.layoutEdit .tbtn.press { cursor: grabbing; }
+#touchUI #tToolsToggle:focus-visible { outline: 2px solid var(--field-amber); }
+body.touchui #ui, body.touchui #touchUI { --hud-edge: 8px; --map-size: clamp(64px, 13vmin, 112px); }
+body.touchui #fieldKeys, body.touchui #mmHint { display: none; }
+body.touchui #ui #quickHud:not(:empty) {
+  display: block !important; left: var(--hud-edge); transform: none; bottom: calc(var(--hud-edge) + 78px); max-width: 40vw;
+}
+body.touchui #ui #squadHUD span, body.touchui #clsTip { display: none; }
+body.touchui #fieldIntel { top: max(62px, calc(env(safe-area-inset-top) + 56px)); width: 180px; }
+body.touchui #healthPanel, body.touchui #ammoPanel { padding: 5px 8px; }
+body.touchui #ammoPanel { width: min(46vw, 198px); }
+body.touchui #ammoPanel #wname { font-size: 14px; }
+body.touchui #ammoPanel #magN { font-size: 28px; }
+body.touchui #ammoPanel #resN { font-size: 16px; }
+body.touchui #ammoPanel .ammoRow { gap: 6px; }
+body.touchui #ammoPanel .rounds.reserve { padding-left: 6px; }
+body.touchui #ammoPanel #ammoAction { font-size: 12px; margin-top: 3px; padding-top: 3px; }
+body.touchui #ammoPanel .ammoCaption { font-size: 10px; }
+body.touchui #ammoPanel #nadeN { display: none; }
+body.touchui #healthPanel { grid-template-columns: 26px 1fr; gap: 1px 6px; width: 141px; }
+body.touchui #bodyFig { width: 26px; height: 45px; }
+body.touchui #hpTotal { font-size: 16px; }
+body.touchui .healthReadout { gap: 2px 4px; }
+body.touchui #mapDock #lootHud:not(:empty) { display: block !important; font-size: 12px; padding: 2px 5px; }
+body.touchui .vitalLabel { font-size: 10px; }
+body.touchui #vitalsCol { gap: 1px 4px; }
+body.touchui #armorHud { margin-top: 2px; padding-top: 2px; font-size: 11px; }
+body.touchui #bagPanel { width: min(96vw, 630px); padding: 10px 12px; max-height: 94dvh; }
+body.touchui #bagPanelList { max-height: none; }
+body.touchui #bagPanel .bagAct, body.touchui #lootPanel button, body.touchui #ammoShopPanel button { min-height: 44px; }
+body.touchui #ui #voSub { bottom: 10px; max-width: 38vw; width: max-content; font-size: 13px; }
+
+@media (max-width: 760px), (max-height: 520px) {
+  #topBar { gap: 2px 4px; }
+  #tickets, #timeTxt { font-size: 12px; padding: 2px 5px; }
+  #rangeHud { font-size: 12px; }
+  #fieldIntel { width: min(29vw, 175px); }
+  #ui #clsTip { display: none !important; }
+  #ammoShopPanel .ammoRow { flex-wrap: wrap; gap: 3px 8px; }
+  #ammoShopPanel .apBuy { margin-left: auto; }
+  #bagPanel, #lootPanel, #ammoShopPanel { max-height: 96dvh; padding: 8px 10px; gap: 4px; }
+  #ui #bigmap { width: min(64vw, 72dvh); height: auto; }
+  body.touchui #ui #voSub { bottom: 83px; max-width: 40vw; }
+  body.touchui #ui #voSub .voWho { display: inline; margin-right: 4px; }
+  body.touchui #ui #voSub .voLine { display: inline; }
+}
+@media (max-width: 560px) {
+  body.touchui #ammoPanel { max-width: 51vw; }
+  body.touchui #fieldIntel { width: min(44vw, 174px); }
+  #fieldIntel #killfeed { max-height: 3.5em; }
+  body.touchui #ui #voSub { bottom: calc(310px + env(safe-area-inset-bottom, 0px)); max-width: 86vw; }
+  #lootPanel .lootCol { width: 100%; }
+  #bagPanelList { grid-template-columns: minmax(0, 1fr); }
+  #ui #extractHud { max-width: 86vw; }
+  #msgC { font-size: 18px; letter-spacing: 0; }
+  #topBar { max-width: calc(100vw - 206px); }
+  #compass { width: min(35vw, 164px); }
+  #ui #fieldKeys { max-width: 96vw; }
+  #bigmapWrap { grid-template-columns: 1fr; grid-template-areas: "title" "map" "legend" "tasks"; }
+  #ui #bigmap { width: min(85vw, 52dvh); }
+  #mapObjectives #questHud { width: 100%; }
+}
+@media (max-height: 480px) and (orientation: landscape) {
+  #touchUI { --combat-base: calc(108px + var(--sa-b)); }
+  #fieldIntel #storyHud { font-size: 11px; }
+  #quickHud { bottom: var(--hud-edge); }
+  #fieldKeys { display: none; }
+  body.touchui #ui #voSub { bottom: 10px; max-width: min(44vw, calc(100vw - 330px)); }
+  body:not(.layoutEdit) #touchUI.toolsOpen #tTools, body.layoutEdit #tTools { grid-template-columns: repeat(5, minmax(48px, 1fr)); width: min(330px, 83%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  #ui .bp, #ui .statBar i, #ui #voSub { transition: none; }
+}

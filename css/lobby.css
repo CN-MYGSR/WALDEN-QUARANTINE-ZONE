@@ -1,0 +1,40 @@
+/* 联机大厅与匹配 */
+#mNet [hidden] { display:none !important; }
+#mNet .lobbyBody { text-align:left; }
+.lobbyBody > section { width:min(640px,100%); margin:0 auto; }
+.lobbyBody h3 { margin:0 0 6px; font-size:20px; line-height:1.4; color:var(--ink); }
+#mNet .netAcct { margin:14px 0; padding:8px 12px; min-height:44px; border-color:var(--line); background:var(--surface); color:var(--ink); font-size:14px; }
+#mNet #vhUser { min-width:0; overflow-wrap:anywhere; }
+#mNet #netForm,#netRoom { margin-top:16px; }
+#mNet label { display:block; margin-bottom:6px; color:var(--ink); font-size:14px; font-weight:600; }
+#mNet .netRow { display:flex; flex-wrap:nowrap; gap:8px; }
+#mNet .netInput { min-width:0; min-height:44px; width:0; box-sizing:border-box; border:1px solid var(--line); background:#151b18; color:var(--ink); border-radius:6px; font-family:inherit; font-size:16px; font-weight:600; line-height:1.5; letter-spacing:.12em; }
+#mNet .netInput::placeholder { color:var(--sub); letter-spacing:0; font-weight:400; }
+#mNet .netInput[aria-invalid=true] { border-color:#e09b86; }
+#netRoom .netInput { color:var(--amber); font-size:20px; user-select:text; }
+#mNet .netRow button { flex:none; }
+#netForm #netCreate,#netRoom .netActions { margin-top:12px; }
+#netMembers,#mNet .netLog { margin:10px 0 0; color:var(--sub); font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+#mNet .netLog:empty { display:none; }
+#netRoom .netActions { display:flex; gap:8px; flex-wrap:wrap; }
+.lobbyBody .netBoard { margin-top:24px; padding-top:18px; border-top:1px solid var(--line); }
+#mNet .vhMe { display:flex; flex-wrap:wrap; gap:8px 20px; margin:12px 0; padding:0; background:none; border:0; }
+.vhMe dt { color:var(--sub); font-size:13px; }
+.vhMe dd { margin:2px 0 0; color:var(--ink); font-size:16px; font-weight:600; font-variant-numeric:tabular-nums; }
+#mNet .vhRows { width:100%; border:0; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+.vhRows :is(td,th) { padding:8px 5px; font-size:14px; text-align:right; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+.vhRows th { color:var(--sub); font-weight:500; }
+.vhRows :is(td,th):nth-child(2) { text-align:left; max-width:15em; }
+.vhRows .vhMine { color:var(--amber); background:var(--surface); }
+#mNet .vhWarn { color:#eab694; }
+#deploy #netSearch:not(.hidden) { display:flex; align-items:center; justify-content:flex-end; gap:12px; }
+#deploy #netSearch > span { flex:1; min-width:0; overflow-wrap:anywhere; }
+#deploy :is(#netSkip,#netRetry) { flex:none; }
+#deploy #netRetry[hidden] { display:none; }
+#deploy #netTeamNote { color:var(--amber); }
+@media (max-width:620px) {
+  #mNet .vhRows { table-layout:fixed; }
+  .vhRows :is(td,th) { padding:8px 2px; font-size:12px; }
+  .vhRows th:first-child,.vhRows th:nth-child(3) { width:10%; }
+  .vhRows th:nth-child(2) { width:28%; }
+}

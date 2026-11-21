@@ -291,8 +291,9 @@ if(w.def.type==='bolt'&&w.mag>0){
 VM.state='bolt'; VM.stateT=0; VM.stateDur=w.def.boltT||1.0;
 vmSndFlags={};
 }
-if(w.mag===0&&w.def.type!=='bolt'){ setTimeout(tryReload,350); }
-else if(w.mag===0){ setTimeout(tryReload,1000); }
+if(w.mag===0) setTimeout(()=>{
+ if(p.curW===w&&p.alive&&p.deployed&&!matchOver&&pointerLocked&&!BAG_UI.open&&!LOOT_UI.open&&!AMMO_UI.open) tryReload();
+},w.def.type==='bolt'?1000:350);
 }
 function updatePlayerMortar(dt){
 const p=player, m=p.onMortar;
@@ -380,42 +381,48 @@ tt='<b>'+keyLabelOf('build')+'</b> 工事: '+bn2+' ('+BUILD_COST[bt2]+'点) · <
 if(tip._last!==tt){ tip._last=tt; tip.innerHTML=tt; tip.style.display=tt?'block':'none'; }
 const el=document.getElementById('interact');
 const setInter=(html,short)=>{
-INTERACT_INFO=short?{label:short}:null;
-if(html){ el.style.display='block'; el.innerHTML=html; }
-else el.style.display='none';
+if(short!==INTERACT_INFO?.label) INTERACT_INFO=short?{label:short}:null;
+if(!html){ el.style.display='none'; return; }
+el.style.display='block';
+if(el._hint!==html){
+  el._hint=html;
+  el.innerHTML='<kbd data-k="interact"></kbd> '+html;
+  el.firstElementChild.textContent=keyLabelOf('interact');
+}
 };
-if(player.onMG){ setInter('<b>F</b> 离开机枪','离开机枪'); return; }
-if(player.onMortar){ setInter('<b>F</b> 离开迫击炮 · <b>左键</b> 发射 · <b>鼠标</b> 调整弹道','离开迫击炮'); return; }
+if(player.onMG){ setInter('离开机枪','离开机枪'); return; }
+if(player.onMortar){ setInter('离开迫击炮','离开迫击炮'); return; }
 
 if(!player.alive){ setInter(null,null); return; }
 for(const mg of MG42S){
 if(!mg.user&&Math.hypot(mg.x-player.pos.x,mg.z-player.pos.z)<2.6){
-setInter('<b>F</b> 使用 '+((mg.def&&mg.def.name)||'重机枪'),'上机枪'); return;
+setInter('使用 '+((mg.def&&mg.def.name)||'重机枪'),'上机枪'); return;
 }
 }
 for(const m of MORTARS){
 if(!m.alive||m.user) continue;
 if(Math.hypot(m.x-player.pos.x,m.z-player.pos.z)<2.8){
-setInter((m.owner===player)?'<b>F</b> 使用迫击炮 · <b>B</b> 回收':'<b>F</b> 使用迫击炮','上迫击炮');
+setInter('使用迫击炮','上迫击炮');
 return;
 }
 }
 // 倒地队友优先 (救命最要紧) —— 由 57_downed 提供
 if(typeof nearestDownedMateNear==='function'){
 const _dm=nearestDownedMateNear(player.pos.x,player.pos.z,DOWN_RESCUE_R+0.8);
-if(_dm){ setInter('<b>F</b> 救援 '+((_dm.name)||'队友'),'救援'); return; }
+if(_dm){ setInter('救援 '+((_dm.name)||'队友'),'救援'); return; }
 }
 if(GAMEMODE==='extract'&&typeof INTERACT_LOOT!=='undefined'&&INTERACT_LOOT){
 const isCorpse=INTERACT_LOOT.kind==='corpse';
 const open=typeof LOOT_UI!=='undefined'&&LOOT_UI.open;
-setInter(open?`<b>F</b> 拿取选中 · <b>↑/↓</b> 换选中`:`<b>F</b> ${isCorpse?'搜尸':'打开物资箱'} · <b>↑/↓</b> 选择物品`, isCorpse?'搜尸':'搜刮');
+const action=isCorpse?'搜查尸体':'打开物资箱';
+setInter(open?null:action,open?null:action);
 return;
 }
 if(player.resupplyCd<=0){
 for(const ac of AMMO_CRATES){
 if(Math.hypot(ac.x-player.pos.x,ac.z-player.pos.z)<2.6){
 const _as=(typeof ammoShopActive==='function')&&ammoShopActive();
-setInter(_as?'<b>F</b> 弹药商店 (付费补给)':'<b>F</b> 补充弹药',_as?'弹药商店':'补充弹药'); return;
+setInter(_as?'打开弹药商店':'补充弹药',_as?'弹药商店':'补充弹药'); return;
 }
 }
 }
@@ -423,7 +430,7 @@ if(player.bandResupCd<=0&&player.bandages<player.maxBandages){
 for(const c of MED_CRATES){
 if(c.team!==player.team||c.uses<=0) continue;
 if(Math.hypot(c.x-player.pos.x,c.z-player.pos.z)<2.6){
-setInter('<b>F</b> 拿取绷带','拿取绷带'); return;
+setInter('拿取绷带','拿取绷带'); return;
 }
 }
 }

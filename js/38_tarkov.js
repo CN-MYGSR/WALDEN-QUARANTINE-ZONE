@@ -178,7 +178,7 @@ if(HEADSET_DEFS[key]){ const e=HEADSET_DEFS[key]; return `耳机 · 听力范围
 if(HELMET_DEFS[key]){ const h=HELMET_DEFS[key]; return `头盔 Lv${h.level} · 护头耐久 ${h.hp} · 减伤 ${Math.round(h.resist*100)}% · 重量 ${h.weight}`; }
 if(ARMOR_DEFS[key]){ const a=ARMOR_DEFS[key]; return `护甲 Lv${a.level} · 胸腹耐久 ${a.hp} · 减伤 ${Math.round(a.resist*100)}% · 重量 ${a.weight}`; }
 const d=WPN_DEFS[key];
-return d?`${d.mode} · 伤害 ${d.dmg} · 弹匣 ${d.mag} / 备弹 ${d.reserve}`:'';
+return d?`${d.mode} · 伤害 ${d.dmg} · 弹匣容量 ${d.mag} 发`:'';
 }
 // 覆盖 37_meta 版本: 全物品统一名称/分类/价格/描述
 function itemName(key){
@@ -727,9 +727,9 @@ const wb=el('waterBar'),fb=el('foodBar');
 if(wb&&fb){
 const hv=idle?100:clamp(p.hydration||0,0,100), fv=idle?100:clamp(p.satiety||0,0,100);
 wb.firstElementChild.style.width=hv+'%';
-wb.firstElementChild.style.background=hv>50?'#d8d8d8':(hv>25?'#e0e0e0':'#e07060');
+wb.firstElementChild.style.background=hv>25?'#94c2da':'#f39477';
 fb.firstElementChild.style.width=fv+'%';
-fb.firstElementChild.style.background=fv>50?'#d8d8d8':(fv>25?'#e0e0e0':'#e07060');
+fb.firstElementChild.style.background=fv>25?'#c9b17b':'#f39477';
 }
 // 总血量读数: 当前全身总血量 / 上限(440 + 护甲胸甲加成)
 const ht=el('hpTotal');
@@ -744,15 +744,19 @@ ht.className=r>0.8?'':(r>0.45?'hurt':'bad');
 }
 const q=el('quickHud');
 if(q){
-if(idle||!p.alive||!p.body){ q.style.display='none'; return; }
-q.style.display='block';
+if(idle||!p.alive||!p.body){ setHudHTML(q,''); q.style.display='none'; return; }
 const med=(p.medItems||[]).find(m=>m.uses>0);
 const fd=(p.foodItems||[])[p.foodSel||0];
-const bleed=(p.bleedHeavy||0)+(p.bleedLight||0)>0?'<span style="color:#e07060">⬤出血</span>':'';
-const frac=(p.fractures&&p.fractures.length)?'<span style="color:#e0e0e0">⬤骨折</span>':'';
+const bleed=(p.bleedHeavy||0)+(p.bleedLight||0)>0?'<span class="injury">出血</span>':'';
+const frac=(p.fractures&&p.fractures.length)?'<span class="injury">骨折</span>':'';
 const pk=painPower(p);
-const pkTxt=pk>0?`<span style="color:#9fe0ff">⬤止痛${pk>1.2?'·吗啡':''} ${Math.ceil(p.painT)}s</span>`:(playerInPain(p)?'<span style="color:#ff9c7a">⬤疼痛</span>':'');
-setHudHTML(q,`[H] ${med?MED_DEFS[med.key].name+'×'+med.uses:'<span style="opacity:.5">无药品</span>'} · [K] ${fd?FOOD_DEFS[fd.key].name:'<span style="opacity:.5">无食物</span>'}${(p.foodItems&&p.foodItems.length>1)?' [J]换':''} · ${bleed}${frac}${pkTxt}`);
+const pkTxt=pk>0?`<span>止痛${pk>1.2?'·吗啡':''} ${Math.ceil(p.painT)}s</span>`:(playerInPain(p)?'<span class="injury">疼痛</span>':'');
+const ready=[];
+if(!TOUCHUI&&med) ready.push(keyLabelOf('heal')+' '+MED_DEFS[med.key].name+' ×'+med.uses);
+if(!TOUCHUI&&fd) ready.push(keyLabelOf('eat')+' '+FOOD_DEFS[fd.key].name);
+const contents=[...ready,bleed,frac,pkTxt].filter(Boolean).join(' · ');
+setHudHTML(q,contents);
+q.style.display=contents?'block':'none';
 }
 }
 
@@ -972,14 +976,19 @@ return null;
 function openLootPanel(t){
 LOOT_UI.open=true; LOOT_UI.kind=t.kind; LOOT_UI.ref=t.ref;
 LOOT_UI.sel=0;
+releaseAllInputs();
+player.ads=false;
+if(document.pointerLockElement) document.exitPointerLock();
 renderLootPanel();
+el('lootTakeOne')?.focus({preventScroll:true});
 AudioSys.click(700,0.2,0.05);
 }
-function lootPanelClose(){
+function lootPanelClose(resume=true){
 if(!LOOT_UI.open) return;
 LOOT_UI.open=false; LOOT_UI.ref=null;
 const pnl=el('lootPanel');
 if(pnl) pnl.classList.add('hidden');
+if(resume) bagRelockPointer();
 }
 function lootSelMove(d){
 if(!LOOT_UI.open) return;
@@ -994,15 +1003,27 @@ function recordLootPickup(){
  addXP(6);
  questEvent('search',null,1);
 }
+// 计数仍由 loot 管理，只有带余弹的枪才随同一件物品在局内容器间转移状态。
+function moveStowedWeapons(from,to,key,n){
+const slots=from.stowedWeapons?.[key];
+if(!slots?.length) return;
+const dst=to.stowedWeapons||={};
+(dst[key]||=[]).push(...slots.splice(-n));
+if(!slots.length) delete from.stowedWeapons[key];
+}
+function takeLootItem(ref,key){
+if(!ref?.loot[key]||!addLootToBag(key,1)) return false;
+if(--ref.loot[key]===0) delete ref.loot[key];
+moveStowedWeapons(ref,RUN,key,1);
+return true;
+}
 function lootTakeSelected(){
 if(!LOOT_UI.open||!LOOT_UI.ref) return;
 const entries=lootEntries(LOOT_UI.ref);
 if(!entries.length){ lootPanelClose(); return; }
 const i=Math.min(LOOT_UI.sel,entries.length-1);
 const key=entries[i][0];
-if(addLootToBag(key,1)){
-LOOT_UI.ref.loot[key]--;
-if(LOOT_UI.ref.loot[key]<=0) delete LOOT_UI.ref.loot[key];
+if(takeLootItem(LOOT_UI.ref,key)){
 recordLootPickup();
 showScorePop("拿取: "+itemLabel(key));
 const left=Object.keys(LOOT_UI.ref.loot).length;
@@ -1035,9 +1056,6 @@ rows+=`<div class="lootRow${i===LOOT_UI.sel?' sel':''}${cant?' cant':''}"><span 
 if(!rows) rows='<div class="lootRow empty">空空如也</div>';
 el('lootList').innerHTML=rows;
 el('lootHint').innerHTML=`背包 ${bagUsed()}/${bagCapacity()}格 · <b>↑/↓</b> 选择 · <b>F</b> 拿取选中 · 移动离开关闭`;
-// 触屏按钮
-const tb=el('tSelUp'),tb2=el('tSelDown'),tb3=el('tTake');
-if(tb) tb.style.display=tb2.style.display=tb3.style.display=(TOUCHUI&&entries.length)?'flex':'none';
 }
 function updateLootUI(){
 if(!LOOT_UI.open){
@@ -1047,8 +1065,8 @@ return;
 }
 const r=LOOT_UI.ref;
 const gone=!r||(LOOT_UI.kind==='crate'?(r.searched||!Object.keys(r.loot).length):((r.searched||!Object.keys(r.loot).length)));
-const far=Math.hypot(r.x-player.pos.x,r.z-player.pos.z)>3.4;
-if(gone||far||!player.alive){ lootPanelClose(); INTERACT_LOOT=lootTargetNear(); return; }
+const far=r&&Math.hypot(r.x-player.pos.x,r.z-player.pos.z)>3.4;
+if(gone||far||!player.alive||matchOver){ lootPanelClose(); INTERACT_LOOT=lootTargetNear(); return; }
 INTERACT_LOOT={kind:LOOT_UI.kind,ref:r};
 }
 let INTERACT_LOOT=null;
@@ -1073,7 +1091,7 @@ function toggleBagPanel(){
 if(!player.alive||matchOver) return;
 BAG_UI.open=!BAG_UI.open;
 if(typeof bagDisarmDropAll==='function') bagDisarmDropAll();   // 开关面板都清掉"待确认"状态
-if(BAG_UI.open){ BAG_UI.sel=0; BAG_UI.key=bagEntryKeys()[0]||null; lootPanelClose(); }
+if(BAG_UI.open){ BAG_UI.sel=0; BAG_UI.key=bagEntryKeys()[0]||null; lootPanelClose(false); }
 renderRaidBag();   // 内部会同步刷新面板, 并隐藏/恢复左下角常驻背包 HUD
 if(BAG_UI.open){
 // 打开背包: 释放按键状态 → 取消开镜 → 退出指针锁定, 让鼠标能拖拽/旋转物品
@@ -1087,19 +1105,22 @@ bagRelockPointer();
 AudioSys.click(600,0.16,0.04);
 }
 }
-function bagPanelClose(){
+function bagPanelClose(resume=true){
 if(!BAG_UI.open) return;
 BAG_UI.open=false;
 if(typeof releaseAllInputs==='function') releaseAllInputs();
-bagRelockPointer();
+if(resume) bagRelockPointer();
 renderRaidBag();   // 内部会隐藏面板并恢复常驻 HUD
 }
 function bagSelMove(d){
 if(!BAG_UI.open) return;
 const ks=bagEntryKeys(); if(!ks.length) return;
+bagDisarmDropAll();
 BAG_UI.sel=(BAG_UI.sel+d+ks.length)%ks.length;
 BAG_UI.key=ks[BAG_UI.sel];
-renderBagPanel(); AudioSys.click(1400,0.1,0.03);
+renderBagPanel();
+el('bagPanelList').querySelector('.invTile.sel')?.scrollIntoView({block:'nearest'});
+AudioSys.click(1400,0.1,0.03);
 }
 // 丢弃选中物: 会从背包移除; 若是武器/护甲则直接回到仓库(避免误丢高价值装备)
 function bagDropSelected(all){
@@ -1107,8 +1128,7 @@ if(!player.alive||matchOver) return;
 // 触屏"丢弃"按钮可能在面板关闭时被触发: 这里自动开面板, 避免静默失效
 if(!BAG_UI.open) toggleBagPanel();
 const ks=bagEntryKeys(); if(!ks.length) return;
-const i=Math.min(BAG_UI.sel,ks.length-1);
-const key=ks[i];
+const key=bagActKey();
 const n=all?RUN.loot[key]:1;
 const isGear=!!(WPN_DEFS[key]||ARMOR_DEFS[key]);
 if(isGear){
@@ -1120,6 +1140,8 @@ showScorePop('丢弃: '+itemLabel(key)+' ×'+n);
 }
 RUN.loot[key]-=n;
 if(RUN.loot[key]<=0) delete RUN.loot[key];
+const stowed=RUN.stowedWeapons?.[key];
+if(stowed&&stowed.length>(RUN.loot[key]||0)) stowed.length=RUN.loot[key]||0;
 BAG_UI.sel=Math.min(BAG_UI.sel,Math.max(0,bagEntryKeys().length-1));
 saveMeta();
 renderBagPanel();
@@ -1143,16 +1165,24 @@ if(player.onMG||player.onAT||player.onAA||(typeof handsFreeVeh==='function'&&!ha
 showScorePop('当前姿态无法换武器'); return false;
 }
 const old=player.slots[slotIdx];
+if(old&&old.key===key){ showScorePop('此栏已装备'+itemLabel(key)); return false; }
 const newSize=itemSizeOf(key);
-if(old&&old.key&&old.key!==key&&bagFree()+newSize<itemSizeOf(old.key)){
+const oldSize=old?itemSizeOf(old.key):0;
+const bigFree=bagPackSlots()-bagUsedBig()+(newSize>CHEST_MAX_SIZE?newSize:0);
+if(old&&(bagFree()+newSize<oldSize||(oldSize>CHEST_MAX_SIZE&&bigFree<oldSize))){
 showScorePop('背包放不下换下来的「'+itemLabel(old.key)+'」');
 return false;
 }
 const md=(typeof moddedDef==='function'&&moddedDef(key))||WPN_DEFS[key];
-const slot={key:key,def:md,mag:0,reserve:0,ammo:''};
+const stowed=RUN.stowedWeapons||(RUN.stowedWeapons={});
+const slot=stowed[key]?.pop()||{key,mag:0,reserve:0,ammo:''};
+slot.def=md;
 RUN.loot[key]--;
 if(RUN.loot[key]<=0) delete RUN.loot[key];
-if(old&&old.key&&old.key!==key) RUN.loot[old.key]=(RUN.loot[old.key]||0)+1;
+if(old&&old.key){
+ RUN.loot[old.key]=(RUN.loot[old.key]||0)+1;
+ if(old.mag||old.reserve||old.loanAmmoBox) (stowed[old.key]||=[]).push(old);
+}
 // 槽位: 副武器槽可能还不存在(slots 是 [主武器, 副武器] 过滤掉空值建出来的)
 if(!player.slots.length) slotIdx=0;
 if(slotIdx===0) player.slots[0]=slot;
@@ -1170,16 +1200,10 @@ return true;
 }
 // 面板底部提示: 桌面列快捷键, 手机显示触屏说明(手机没有键盘, 列快捷键只会误导)
 function bagHintHTML(){
-const hasUse=(typeof bagUsableKeys==='function')&&bagUsableKeys().length>0;
-const key=bagActKey();
-const isWpn=!!(key&&typeof WPN_DEFS!=='undefined'&&WPN_DEFS[key]);
 if(typeof TOUCHUI!=='undefined'&&TOUCHUI){
-return isWpn?'点一行选中 · 武器可用下面的按钮装备到快捷栏':'点一行选中 · 用下面的按钮操作';
+return el('bagPanel').dataset.view==='grid'?'拖动物品换位，点「旋转」调整方向':'点选物品，再点下方按钮操作';
 }
-let s='<b>↑/↓</b> 选择';
-if(hasUse) s+=' · <b>E</b> 立即使用';
-if(isWpn) s+=' · <b>1/2</b> 装备到主/副武器';
-return s+' · <b>G</b> 丢弃 1 个 · <b>Shift+G</b> 全部丢弃(装备类放回仓库) · <b>Q</b> 存入安全箱 · <b>Tab</b> 关闭';
+return '<b>↑ ↓</b> 选物品　<b>← →</b> 选操作　<b>Enter</b> 确认　<b>Esc</b> 关闭';
 }
 // 操作条作用于"选中项", 与键盘 G/Q 用的是同一个游标 BAG_UI.sel
 function bagActKey(){
@@ -1212,20 +1236,29 @@ const key=bagActKey();
 // 武器不能进安全箱, 但有"装备到快捷栏"的需求 —— 选中武器时把「存入安全箱」换成两个装备键
 const isWpn=!!(key&&typeof WPN_DEFS!=='undefined'&&WPN_DEFS[key]);
 const isAmmo=!!(key&&typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[key]);
+const ammoIssue=isAmmo?ammoBoxIssue(AMMO_DEFS[key],currentAmmoWeapon()):'';
 const usable=!!(key&&(isAmmo||((typeof bagUsableKeys==='function')&&bagUsableKeys().indexOf(key)>=0)));
 let html='';
-if(usable) html+=`<button class="bagAct" data-bact="use">${isAmmo?'装填':'使用'}</button>`;
+if(usable) html+=`<button class="bagAct" data-bact="use" ${ammoIssue?'disabled':''}>${isAmmo?'装填':'使用'}</button>`;
 if(key) html+=`<button class="bagAct" data-bact="rotate">旋转</button>`;
 if(isWpn){
 html+=`<button class="bagAct eq" data-bact="eq0">装备到主武器</button>`
 +`<button class="bagAct eq" data-bact="eq1">装备到副武器</button>`;
-}else{
+}else if(key&&canSecure(key)){
 html+=`<button class="bagAct" data-bact="secure">存入安全箱</button>`;
 }
-html+=`<button class="bagAct" data-bact="drop1">丢弃 1 个</button>`
-+`<button class="bagAct danger${bagDropAllArmed?' armed':''}" data-bact="dropall">${bagDropAllArmed?'确认全部丢弃?':'全部丢弃'}</button>`
-+`<button class="bagAct ghost" data-bact="close">关闭</button>`;
+if(key) html+=`<button class="bagAct" data-bact="drop1">丢弃 1 个</button>`
++`<button class="bagAct danger${bagDropAllArmed?' armed':''}" data-bact="dropall">${bagDropAllArmed?'确认丢弃整组？':'丢弃整组'}</button>`;
+html+='<button class="bagAct ghost" data-bact="close">关闭</button>';
 box.innerHTML=html;
+const detail=el('bagDetail');
+if(detail){
+ detail.querySelector('.bagAmmoHelp')?.remove();
+ if(ammoIssue){
+  const hint=document.createElement('div'); hint.className='bagAmmoHelp'; hint.textContent=ammoIssue;
+  detail.append(hint);
+ }
+}
 if(box._bound) return;
 box._bound=true;
 box.addEventListener('click',ev=>{
@@ -1407,8 +1440,11 @@ if(insured&&Math.random()<0.7){ META.insurance.push({key:k,n:1}); returned.push(
 else lost.push(k);
 }
 }
-if(RUN.secure&&RUN.secure.length){
-for(const k of RUN.secure){ META.loot[k]=(META.loot[k]||0)+1; }
+// 死亡动画结束才显示战报，此时背包和安全箱的实物计数已清空。
+RUN.lossReport={bag:{...RUN.loot},secure:Object.create(null)};
+for(const k of RUN.secure||[]){
+ META.loot[k]=(META.loot[k]||0)+1;
+ RUN.lossReport.secure[k]=(RUN.lossReport.secure[k]||0)+1;
 }
 RUN.lostGear=lost; RUN.returnedGear=returned;
 RUN.loot={};
@@ -1434,6 +1470,7 @@ function settleRaidLoss(){
  META.stats.kills+=RUN.kills||0;
  META.stats.deaths+=player.deaths||0;
  raidDeathPenalty();
+ if(RUN.returnedGear.length) deliverInsurance();
  if(!usesLoanKit()){
   RUN.failComp=grantFailCompensation(Math.min(200,(RUN.kills||0)*40));
   RUN.autoKit=ensureSafetyKit('fail');
@@ -1441,6 +1478,8 @@ function settleRaidLoss(){
 }
 function onPlayerRaidDeath(){
 if(GAMEMODE!=='extract'||matchOver||RUN.deathTimer) return;
+lootPanelClose(false);
+closeMedWheel();
 if(typeof bagPanelClose==='function') bagPanelClose();
 settleRaidLoss();
 if(RUN.timeout){ finishRaid(false); return; }
@@ -1482,6 +1521,79 @@ return 1;
 function playerLevel(){ return META.level||1; }
 
 // ---------- 部署: 背包/药品/食物/保险/NVG ----------
+function deployAmmoCapacity(){
+const L=META.loadout;
+return (PACK_DEFS[L.pack]||PACK_DEFS.packSmall).slots+(CHEST_DEFS[L.chest]?.slots||0);
+}
+function ammoStock(key){ return ownedCount(key)+(META.loot[key]||0); }
+function deployAmmoWeapons(){
+const L=META.loadout;
+return [RUN.scavLoadout?.primary||L.primary,L.secondary].filter((k,i,a)=>WPN_DEFS[k]&&a.indexOf(k)===i);
+}
+function plannedAmmo(limit=deployAmmoCapacity()){
+const picked=[],counts={};
+// 首次配装按实际主副武器各备一盒。玩家手动选过之后，空清单也照常尊重。
+const selection=META.loadout.ammo??[...new Set(deployAmmoWeapons().map(k=>ammoKeyOfCaliber(ammoCaliberOf(k))))];
+for(const k of selection){
+ if(picked.length>=limit) break;
+ if(!AMMO_DEFS[k]||(counts[k]||0)>=ammoStock(k)) continue;
+ picked.push(k); counts[k]=(counts[k]||0)+1;
+}
+return picked;
+}
+function renderDeployAmmo(){
+const list=el('deployAmmoList');
+if(!list||typeof AMMO_DEFS==='undefined') return;
+const help=el('deployAmmoHelp'), count=el('deployAmmoCount');
+const loan=usesLoanKit()||(typeof storyPendingIdx==='function'&&storyPendingIdx()>=0);
+if(loan){
+ count.textContent=''; list.replaceChildren();
+ help.textContent=CAMPAIGN.rangeOnly?'靶场提供无限弹药':'剧情配装随主副武器配发弹盒';
+ return;
+}
+const L=META.loadout, cap=deployAmmoCapacity(), plan=plannedAmmo(cap);
+const weapons=deployAmmoWeapons();
+const families=weapons.map(ammoCaliberOf);
+const needed=weapons.map((w,i)=>{
+ const cal=families[i], packed=plan.some(k=>AMMO_DEFS[k].cal===cal);
+ return WPN_DEFS[w].name+' 用'+AMMO_CAL_NAME[cal]+(packed?'':'（未携带）');
+});
+count.textContent=`${plan.length} 盒 / ${cap} 格`;
+const reload=TOUCHUI?'点「换弹」':'按 '+keyLabelOf('reload');
+help.textContent=needed.join('，')+'。开局弹匣为空，'+reload+' 拆盒装填。';
+const rows=AMMO_PACK_DEFS.filter(d=>ammoStock(d.id)>0||families.some(cal=>AMMO_KEYS_BY_CAL[cal]===d.id));
+rows.sort((a,b)=>Number(families.includes(b.cal))-Number(families.includes(a.cal))||a.tier-b.tier);
+list.innerHTML=rows.map(d=>{
+ const n=plan.filter(k=>k===d.id).length, stock=ammoStock(d.id), full=plan.length>=cap;
+ const buy=d.id===AMMO_KEYS_BY_CAL[d.cal]&&families.includes(d.cal)&&n>=stock;
+ return `<div class="deployAmmoLine" data-ammo-key="${d.id}"><div><b>${d.name}</b><small>每盒 ${d.rounds} 发 · 库存 ${stock} 盒</small></div>`
+  +`<div class="deployAmmoQty"><button type="button" aria-label="少带一盒${d.name}" data-ammo-step="-1" ${n?'':'disabled'}>−</button><output aria-label="携带盒数">${n}</output><button type="button" aria-label="多带一盒${d.name}" data-ammo-step="1" ${full||n>=stock?'disabled':''}>＋</button></div>`
+  +(buy?`<button type="button" class="deployAmmoBuy" data-ammo-buy ${full||META.wallet<d.price?'disabled':''}>${META.wallet<d.price?'余额不足':'¥'+d.price+' 买入并携带'}</button>`:'')+'</div>';
+}).join('');
+list.onclick=ev=>{
+ const b=ev.target.closest('button'), row=b&&b.closest('[data-ammo-key]');
+ if(!row||b.disabled) return;
+ const key=row.dataset.ammoKey, next=plannedAmmo();
+ if(b.hasAttribute('data-ammo-buy')){
+  if(next.length>=deployAmmoCapacity()) return;
+  const before=ammoStock(key);
+  buyItem(key);
+  if(ammoStock(key)<=before) return;
+  next.push(key);
+ } else if(b.dataset.ammoStep==='1'){
+  if(next.length>=deployAmmoCapacity()||next.filter(k=>k===key).length>=ammoStock(key)) return;
+  next.push(key);
+ } else {
+  const i=next.lastIndexOf(key); if(i<0) return;
+  next.splice(i,1);
+ }
+ L.ammo=next;
+ saveMeta(); renderDeployAmmo(); updateConsumSummary();
+ const active=list.querySelector('[data-ammo-key="'+key+'"]');
+ const action=b.dataset.ammoStep?'[data-ammo-step="'+b.dataset.ammoStep+'"]':'[data-ammo-buy]';
+ (active?.querySelector(action+':enabled')||active?.querySelector('button:enabled'))?.focus({preventScroll:true});
+};
+}
 function buildDeployConsumables(){
 const L=META.loadout;
 L.pack=L.pack||'packSmall';
@@ -1489,8 +1601,6 @@ L.meds=Array.isArray(L.meds)?L.meds:['','',''];
 while(L.meds.length<3) L.meds.push('');
 L.foods=Array.isArray(L.foods)?L.foods:['',''];
 while(L.foods.length<2) L.foods.push('');
-L.ammo=Array.isArray(L.ammo)?L.ammo:['',''];
-while(L.ammo.length<2) L.ammo.push('');
 const fill=(sel,cur,kind,allowEmpty,defList)=>{
 if(!sel) return;
 sel.innerHTML='';
@@ -1516,7 +1626,7 @@ if(ps){
 fill(ps,L.pack,'pack',false);
 ps.value=PACK_DEFS[L.pack]?L.pack:'packSmall';
 if(!ownedCount(ps.value)&&ps.value!=='packSmall') ps.value='packSmall';
-ps.onchange=()=>{ L.pack=ps.value||'packSmall'; saveMeta(); updateConsumSummary(); };
+ps.onchange=()=>{ L.pack=ps.value||'packSmall'; saveMeta(); renderDeployAmmo(); updateConsumSummary(); };
 }
 ['medSel1','medSel2','medSel3'].forEach((id,i)=>{
 const s=el(id);
@@ -1530,25 +1640,7 @@ if(!s) return;
 fill(s,L.foods[i],'food',true);
 s.onchange=()=>{ L.foods[i]=s.value; saveMeta(); updateConsumSummary(); };
 });
-// 弹药: 从仓库(owned + 战利品)选 2 盒带入局内, 局内按 E 装填
-['ammoSel1','ammoSel2'].forEach((id,i)=>{
-const s=el(id);
-if(!s) return;
-s.innerHTML='';
-const o0=document.createElement('option'); o0.value=''; o0.textContent='— 不带 —'; s.appendChild(o0);
-const ammoKeys=(typeof AMMO_DEFS!=='undefined')?Object.keys(AMMO_DEFS):[];
-for(const k of ammoKeys){
-const n=(META.owned[k]||0)+(META.loot[k]||0);
-if(n<=0) continue;
-const o=document.createElement('option'); o.value=k;
-o.textContent=`${itemLabel(k)} ×${n} · ${AMMO_DEFS[k].rounds}发 · T${AMMO_DEFS[k].tier}`;
-s.appendChild(o);
-}
-const cur=L.ammo[i];
-s.value=(cur&&((META.owned[cur]||0)+(META.loot[cur]||0)>0))?cur:'';
-if(s.selectedIndex<0) s.selectedIndex=0;
-s.onchange=()=>{ L.ammo[i]=s.value; saveMeta(); updateConsumSummary(); };
-});
+renderDeployAmmo();
 // 撤离通行证槽: 仓库里有证才能携带。携带后才算「持证」, 才能在「港口」登船离开禁区。
 const psel=el('passSelect');
 if(psel){
@@ -1565,7 +1657,10 @@ psel.appendChild(o1);
 }
 psel.value=L.pass?'pass':'';
 psel.disabled=n<=0;
-psel.onchange=()=>{ L.pass=psel.value==='pass'; saveMeta(); updateConsumSummary(); };
+psel.onchange=()=>{
+ if(!el('deploy').classList.contains('chapterVisit')){ L.pass=psel.value==='pass'; saveMeta(); }
+ updateConsumSummary();
+};
 }
 const chk=el('insureChk');
 if(chk) chk.onchange=()=>{ RUN.insureWanted=chk.checked; updateConsumSummary(); };
@@ -1580,7 +1675,16 @@ const L=META.loadout;
 const cost=insuranceCost();
 const _scav=!!(TEAM_FACTION[player.team]&&TEAM_FACTION[player.team].scav);
 const _passN=ownedCount('pass');
-sum.innerHTML=`背包: ${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].name:'Flyye MBSS 背包'} (${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].slots:16}格) · 医疗: ${L.meds.filter(Boolean).length||'无'} · 食物: ${L.foods.filter(Boolean).length||'无'} · 弹药: ${(L.ammo||[]).filter(Boolean).length||'无'}盒${RUN.insureWanted&&!_scav?` · 保险 ¥${formatMoney(cost)}`:''}`
+if(el('deploy').classList.contains('chapterVisit')){
+ sum.textContent=_passN===0?'仓库没有通行证。完成全部任务后可到军械库的后勤市集购买。'
+  :(el('passSelect').value==='pass'?'已选择登船。成功登船时消耗一张通行证。':'未携带通行证仍可普通撤离，终章目标将保留。');
+ return;
+}
+if(usesLoanKit()||(typeof storyPendingIdx==='function'&&storyPendingIdx()>=0)){
+ sum.textContent=CAMPAIGN.rangeOnly?'靶场配装 · 弹药无限':'剧情配装 · 主副武器各配一盒弹药';
+ return;
+}
+sum.innerHTML=`背包: ${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].name:'Flyye MBSS 背包'} (${PACK_DEFS[L.pack]?PACK_DEFS[L.pack].slots:16}格) · 医疗: ${L.meds.filter(Boolean).length||'无'} · 食物: ${L.foods.filter(Boolean).length||'无'} · 弹药: ${plannedAmmo().length} 盒${RUN.insureWanted&&!_scav?` · 保险 ¥${formatMoney(cost)}`:''}`
  +(_passN>0?(L.pass?'<br><span style="color:#d8b878">撤离通行证：已携带 · 在「港口」登船成功时消耗，解锁结局与重生</span>':'<br><span style="color:#9a9a9a">撤离通行证：未携带 · 带在身上才能在「港口」登船离开禁区</span>'):'')
  +(_scav?'<br><span style="color:#d8d8d8">拾荒者出击 · 主武器每局从二战兵器里随机抽取, 仓库里的主武器不会带出</span>':'');
 }
@@ -1604,10 +1708,8 @@ RUN.foodItems.push({key:k});
 }
 }
 // 弹药盒: 每局第一次部署时从仓库扣除并放进背包(之后重生不重复发放)
-L.ammo=Array.isArray(L.ammo)?L.ammo:['',''];
 if(!RUN._loadoutApplied){
-for(const k of L.ammo){
-if(!k||typeof AMMO_DEFS==='undefined'||!AMMO_DEFS[k]) continue;
+for(const k of plannedAmmo(bagFree())){
 if((META.owned[k]||0)>0) META.owned[k]--;
 else if((META.loot[k]||0)>0) META.loot[k]--;
 else continue;
@@ -1698,12 +1800,11 @@ if(!md) return false;
 let touched=false;
 player.slots.forEach(s=>{
 if(!s||s.key!==key) return;
-const oldMag=s.mag;
+const oldMag=s.mag||0;
 s.def=md;
-// 扩容/快拔弹匣会改容量: 保留已装填量, 夹到新容量范围内, 至少留 1 发
-const newMax=Math.max(1,md.mag||1);
-s.mag=Math.max(1,Math.min(oldMag==null?newMax:oldMag,newMax));
-if(s.reserve==null) s.reserve=md.reserve;
+// 换回较小弹匣时，卸下来的弹归入备弹，下次购买或拆盒仍受正常上限限制。
+s.mag=Math.min(oldMag,md.mag);
+s.reserve=(s.reserve||0)+oldMag-s.mag;
 touched=true;
 });
 if(!touched) return false;

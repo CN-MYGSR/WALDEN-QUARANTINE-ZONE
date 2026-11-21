@@ -22,10 +22,62 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await new Promise(r => ws.on('open', r));
   const rpc = (me, pa) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method: me, params: pa || {} })); });
   await rpc('Page.enable'); await rpc('Runtime.enable');
+  await rpc('Network.enable');
+  await rpc('Network.setBlockedURLs',{urls:['*://gamesvibe.app/*','*://vibe.lumigrav.space/*']});
   const ev = async e => { const o = await rpc('Runtime.evaluate', { expression: e, returnByValue: true, awaitPromise: true }); if (o.result && o.result.exceptionDetails) return 'EXC:' + ((o.result.exceptionDetails.exception || {}).description || '').split('\n')[0]; return o.result && o.result.result ? o.result.result.value : String(o); };
+  const until=async expression=>{
+    const end=Date.now()+45000;
+    while(Date.now()<end){ if(await ev(expression)===true) return; await sleep(100); }
+    log('等待超时 '+expression); finish(1);
+  };
 
+  const freeze=await rpc('Page.addScriptToEvaluateOnNewDocument',{source:"const nextFrame=requestAnimationFrame.bind(window);window.requestAnimationFrame=fn=>fn.name==='loop'?0:nextFrame(fn);"});
   await rpc('Page.navigate', { url: URL });
-  await sleep(15000);
+  await until("document.readyState==='complete'&&typeof el==='function'&&typeof el('netForm').onsubmit==='function'");
+  const lobby=await ev(`(async()=>{
+    let join, joined=0, released=0, unlisted=0;
+    const user={id:'fixture',name:'测试队员'};
+    const room=host=>({isHost:host,peerId:'p',peers:()=>[],onPeer(){},onMessage(){},send(){},async announce(){},async close(){unlisted++;throw Error('offline')},leave(){released++}});
+    const client={user:null,onAuthChange(fn){this.auth=fn},logout(){this.auth(null)},
+      global:{get:async()=>[]},save:{get:async()=>null,set:async()=>{}},
+      rooms:{get:async code=>code==='MISS1'?null:{open:true,players:1,max:4,slug:WORK_SLUG}},
+      room:{join:async()=>{joined++;return new Promise(resolve=>join=resolve)}}};
+    window.VibeHub={init:async()=>client};
+    await vibeBoot(); client.auth(user);
+    const check=(ok,name)=>{if(!ok)throw Error(name)};
+    check(!el('netForm').hidden,'登录事件须更新大厅');
+    await netJoinRoom('miss1'); check(joined===0&&!NET.room,'无效房间码不应新建房间');
+    const wait=netJoinRoom('ROOM1'); await Promise.resolve(); netCancelManualJoin();
+    join(room(false)); await wait; check(released===1&&!NET.room,'迟到的连接应释放');
+    const created=netCreateRoom(); join(room(true)); await created;
+    check(NET.isHost&&!el('netRoom').hidden,'创建后须显示房间操作');
+    vibeLogout(); await Promise.resolve();
+    check(unlisted===1&&released===2&&!NET.room&&!NET.enabled&&!el('vhLogin').hidden,'退出账号须释放房间，即使下架失败');
+    client.auth(user);
+    NET.returnRoom={code:'MISS1',user:user.id,host:false};
+    const restore=netPrepareDeployment(); await new Promise(r=>setTimeout(r,0));
+    check(!el('netRetry').hidden&&NET.matchAttempt.error&&!NET.room,'原队伍关闭时不能自动部署');
+    el('netSkip').click();check(await restore&&NET.returnRoom===null,'允许明确改为单人');
+    const enter=netJoinRoom('ROOM1'); await Promise.resolve(); join(room(false)); await enter;
+    check(NET.roomId==='ROOM1','切图前已加入好友');
+    return true;
+  })()`);
+  log('大厅登录、查房、取消、登出与切图重连：'+lobby);
+  if(lobby!==true) return finish(1);
+  const mapSdk=await rpc('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.VibeHub={init:async()=>({
+      user:{id:'fixture',name:'测试队员'},onAuthChange(){},global:{get:async()=>[]},save:{get:async()=>null,set:async()=>{}},
+      rooms:{get:async code=>code==='ROOM1'?{open:true,players:1,max:4,slug:WORK_SLUG}:null,quickJoin:async()=>{throw Error('切图不应自动找陌生队伍')}},
+      room:{join:async code=>({isHost:false,peerId:'me',peers:()=>[],onPeer(){},onMessage(){},send(){},sendRealtime(){},leave(){}})}
+    })};`});
+  const map=await ev('CAMPAIGNS.findIndex((c,i)=>i!==CAMPAIGN_IDX&&!c.storyOnly&&!c.rangeOnly)');
+  await ev("showMenuPanel('mPlay');el('mapRow').querySelector('[data-map-index=\""+map+"\"]').click();el('startBtn').click()");
+  await until("CAMPAIGN_IDX==="+map+"&&!el('deploy').classList.contains('hidden')&&NET.returnRoom?.code==='ROOM1'");
+  await ev("el('deployBtn').click()");
+  await until("player.alive&&player.deployed&&NET.roomId==='ROOM1'&&!NET.isHost&&!NET.returnRoom");
+  log('从大厅选择其他沙盒地图，页面重载后队员重连同一房间并部署：true');
+  await rpc('Page.removeScriptToEvaluateOnNewDocument',{identifier:mapSdk.result.identifier});
+  await rpc('Page.removeScriptToEvaluateOnNewDocument',{identifier:freeze.result.identifier});
   await ev(`(function(){ localStorage.setItem('sf_campaign','3'); localStorage.setItem('sf_autodeploy','0'); return 1; })()`);
   await rpc('Page.navigate', { url: URL });
   await sleep(17000);

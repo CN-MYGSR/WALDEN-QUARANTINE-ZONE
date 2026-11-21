@@ -23,6 +23,7 @@ const VIBE={
   client:null,
   user:null,
   ready:false,
+  boot:null,
   err:'',
   lb:[],            // 本地缓存的排行榜
   lbWritable:null,  // null=未测 / true=可写 / false=只读
@@ -40,51 +41,53 @@ async function vibeBoot(){
   try{
     // 本地也是静态游戏服务器；登录与联机请求应使用项目配置的平台后端。
     VIBE.client=await VibeHub.init({ work: WORK_SLUG, apiBase:'https://vibe.lumigrav.space' });
-    VIBE.user=VIBE.client.user||null;
-    VIBE.ready=true;
-    // 规范要求: 监听 onAuthChange 同步 UI，并在 init 后先读 user 渲染初始状态
-    VIBE.client.onAuthChange(function(u){
-      VIBE.user=u||null;
-      vibeRenderAuth();
-      if(u){ vibeLoadBoard(); vibeSyncSave(); }
-      else vibeRenderBoard();
-    });
+    VIBE.ready=true; VIBE.err='';
+    VIBE.client.onAuthChange(vibeSetUser);
+    vibeSetUser(VIBE.client.user||null);
+    return;
   }catch(e){
     VIBE.err=(e&&e.message)||String(e);
   }
   vibeRenderAuth();
   vibeRenderBoard();
-  if(VIBE.user){ vibeLoadBoard(); vibeSyncSave(); }
 }
 
 // ---------------- 登录 UI ----------------
+function vibeSetUser(user){
+  if(VIBE.user&&(!user||VIBE.user.id!==user.id)){
+    netResetDeploy(); netCancelManualJoin();
+    if(NET.room) netLeave();
+    NET.returnRoom=null;
+    NET.msg.length=0;
+    el('netCode').value='';
+    VIBE.lbWritable=null; VIBE.lbErr='';
+  }
+  VIBE.user=user||null;
+  vibeRenderAuth(); vibeRenderBoard();
+  if(user){ vibeLoadBoard(); vibeSyncSave(); }
+}
 function vibeRenderAuth(){
   const st=document.getElementById('vhUser');
   const lb=document.getElementById('vhLogin');
   const lo=document.getElementById('vhLogout');
   if(!st) return;
-  if(!VIBE.ready){
-    st.textContent=VIBE.err?('未连接 · '+VIBE.err):'连接中…';
-    st.style.color='#d0a0a0';
-  }else if(VIBE.user){
-    st.textContent='已登录：'+(VIBE.user.name||'玩家');
-    st.style.color='#9fe6b4';
-  }else{
-    st.textContent='未登录（游客）';
-    st.style.color='#d2d2d2';
-  }
-  if(lb) lb.style.display=(VIBE.ready&&!VIBE.user)?'block':'none';
-  if(lo) lo.style.display=VIBE.user?'block':'none';
+  st.textContent=!VIBE.ready?(VIBE.err?'VibeHub 离线':'正在连接账号…'):
+    (VIBE.user?'已登录 · '+(VIBE.user.name||'玩家'):'尚未登录 VibeHub');
+  if(lb) lb.hidden=!VIBE.ready||!!VIBE.user;
+  if(lo) lo.hidden=!VIBE.user;
+  if(typeof netRenderLobby==='function') netRenderLobby();
 }
 async function vibeLogin(){
   if(!VIBE.client) return;
-  try{ await VIBE.client.login(); }catch(e){ showScorePop('登录失败：'+((e&&e.message)||e)); }
+  const button=el('vhLogin');
+  button.disabled=true;
+  try{ await VIBE.client.login(); }catch(e){ netSetMsg('登录失败：'+((e&&e.message)||e)); }
+  finally{ button.disabled=false; }
 }
 function vibeLogout(){
   if(!VIBE.client) return;
+  vibeSetUser(null);
   VIBE.client.logout();          // 规范: 同步清除本实例 token/用户/缓存
-  VIBE.user=null;
-  vibeRenderAuth(); vibeRenderBoard();
 }
 
 // ---------------- 战绩(存在玩家自己的存档里) ----------------
@@ -172,36 +175,47 @@ function vibeRenderBoard(){
   const box=document.getElementById('vhBoard');
   if(!box) return;
   const me=VIBE.user?vibeStatSnapshot():null;
-  let html='';
-  // 自己的三项
+  box.replaceChildren();
   if(me){
-    html+='<div class="vhMe">'
-      +'<span><b>KD</b> '+me.kd.toFixed(2)+'</span>'
-      +'<span><b>作战货币</b> ¥'+formatMoney(me.wallet)+'</span>'
-      +'<span><b>仓库价值</b> ¥'+formatMoney(me.stash)+'</span>'
-      +'</div>';
-  }else{
-    html+='<div class="vhTip">登录后显示你的 KD / 作战货币 / 仓库价值，并参与全服排行。</div>';
+    const stats=document.createElement('dl');
+    stats.className='vhMe'; stats.setAttribute('aria-label','我的战绩');
+    for(const [label,value] of [['我的 K/D',me.kd.toFixed(2)],['作战货币','¥'+formatMoney(me.wallet)],['仓库价值','¥'+formatMoney(me.stash)]]){
+      const group=document.createElement('div'), term=document.createElement('dt'), count=document.createElement('dd');
+      term.textContent=label; count.textContent=value;
+      group.append(term,count); stats.append(group);
+    }
+    box.append(stats);
   }
-  // 榜单
-  if(!VIBE.ready){
-    html+='<div class="vhTip">未连接 VibeHub：'+(VIBE.err||'…')+'</div>';
-  }else if(!VIBE.lb.length){
-    html+='<div class="vhTip">'+(VIBE.lbErr?('排行榜不可用：'+VIBE.lbErr):'榜单还没有数据 · 打完一局就会上榜')+'</div>';
+  const tip=(message,warn=false)=>{
+    const p=document.createElement('p');
+    p.className=warn?'fieldNote vhWarn':'fieldNote';
+    p.textContent=message; box.append(p);
+  };
+  if(!VIBE.ready) tip(VIBE.err?'连接联机服务后可查看排行。':'正在连接排行榜…');
+  else if(!VIBE.user&&!VIBE.lb.length) tip('登录后可以查看战绩和全服排行。');
+  else if(!VIBE.lb.length){
+    tip(VIBE.lbErr?'排行榜暂时无法读取。':'当前还没有上榜记录。');
   }else{
-    html+='<div class="vhRows"><div class="vhRow vhHead"><span>#</span><span>玩家</span><span>KD</span><span>货币</span><span>仓库</span></div>';
-    VIBE.lb.slice(0,12).forEach(function(r,i){
-      const mine=VIBE.user&&r.id===VIBE.user.id;
-      html+='<div class="vhRow'+(mine?' vhMine':'')+'"><span>'+(i+1)+'</span><span>'
-        +String(r.name||'玩家').replace(/[<>&]/g,'')+'</span><span>'+(r.kd||0).toFixed(2)+'</span><span>¥'
-        +formatMoney(r.wallet||0)+'</span><span>¥'+formatMoney(r.stash||0)+'</span></div>';
+    const table=document.createElement('table');
+    table.className='vhRows'; table.setAttribute('aria-labelledby','netRanks');
+    const header=table.createTHead().insertRow();
+    for(const name of ['名次','玩家','K/D','货币','仓库']){
+      const cell=document.createElement('th');
+      cell.scope='col'; cell.textContent=name; header.append(cell);
+    }
+    const body=table.createTBody();
+    VIBE.lb.filter(r=>r&&typeof r==='object').slice(0,12).forEach((r,i)=>{
+      const row=body.insertRow();
+      if(VIBE.user&&r.id===VIBE.user.id) row.className='vhMine';
+      for(const value of [i+1,r.name||'玩家',(Number(r.kd)||0).toFixed(2),'¥'+formatMoney(r.wallet),'¥'+formatMoney(r.stash)]){
+        row.insertCell().textContent=value;
+      }
     });
-    html+='</div>';
+    box.append(table);
   }
   if(VIBE.lbWritable===false){
-    html+='<div class="vhTip vhWarn">本作品的全服榜写入被平台限制（'+VIBE.lbErr+'）—— 你的战绩已存在本机存档，仍可正常查看。</div>';
+    tip('这次战绩已保存在本机，全服排行更新失败。',true);
   }
-  box.innerHTML=html;
 }
 
 // ---------------- 结算钩子 ----------------
@@ -217,4 +231,4 @@ function vibeRenderBoard(){
   };
 })();
 
-window.addEventListener('load',function(){ setTimeout(vibeBoot,0); });
+window.addEventListener('load',function(){ VIBE.boot=vibeBoot(); });

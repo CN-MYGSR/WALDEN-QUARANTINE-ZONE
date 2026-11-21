@@ -220,19 +220,15 @@ player.die=function(attacker,isHead){
   return r;
 };
 // 结算界面追加持久化的「死亡分析」(死亡视角只有 2.6 秒)
-function deathAnalysisHTML(){
+function appendDeathAnalysis(){
   const h=player.lastHit;
-  if(!h) return '';
+  if(!h||el('endStats').querySelector('.deathBox')) return;
   const L=hitLog();
-  const rows=[];
-  for(const k of PART_ORDER){ const n=L[k]||0; if(n) rows.push(`${PART_CN[k]} ×${n} · ${Math.round(L['dmg_'+k]||0)}伤害`); }
-  return `<div class="deathBox">`
-   +`<div class="dbTitle">死 亡 分 析</div>`
-   +`<div>被 <b>${h.name}</b>（${kcTeamName(h.team)}）用 <b>${h.wpn}</b> 在 <b>${h.dist} m</b> 外击杀</div>`
-   +`<div>致命部位：<b class="dbPart">${PART_CN[h.part]||h.part}</b>${h.part==='head'?' · 爆头':''}`
-   +` · 致命伤 <b>${h.applied}</b>${h.hpBefore!=null?`（当时剩余血量 ${h.hpBefore}）`:''}</div>`
-   +`<div class="dbHit">本局共被命中 <b>${L.count}</b> 次 / <b>${Math.round(L.totalDmg)}</b> 点伤害<br>${hitSummaryText()}</div>`
-   +`</div>`;
+  reportGroup('死亡分析',[
+    `${h.name}（${kcTeamName(h.team)}）在 ${h.dist} m 外使用 ${h.wpn} 击杀了你。`,
+    `致命部位 ${PART_CN[h.part]||h.part}${h.part==='head'?' · 爆头':''} · 伤害 ${h.applied}${h.hpBefore!=null?' · 当时剩余血量 '+h.hpBefore:''}`,
+    `累计被命中 ${L.count} 次，受到 ${Math.round(L.totalDmg)} 点伤害。`,hitSummaryText()
+  ]).classList.add('deathBox');
 }
 
 // ============================ 4) 开镜视野保护 ============================
@@ -273,10 +269,7 @@ updateViewModel=function(dt,p){
         hideKillInfo();
         const b=document.getElementById('kcBanner'); if(b) b.classList.remove('show');
         // 只有"阵亡"才给死亡分析; 超时未撤离不算 (那时 lastHit 是几秒前的旧伤)
-        if(!extracted&&!player.alive){
-          const box=document.getElementById('endStats');
-          if(box&&box.insertAdjacentHTML) box.insertAdjacentHTML('beforeend',deathAnalysisHTML());
-        }
+        if(!extracted&&!player.alive) appendDeathAnalysis();
       }catch(e){}
       return r;
     };

@@ -1,9 +1,9 @@
 'use strict';
 // ===================== 撤离突袭结算 =====================
 function startExtraction(){
- if(!player.alive||GAMEMODE!=='extract'||matchOver) return;
+ if(!player.alive||GAMEMODE!=='extract'||matchOver||RUN.extracting) return;
  RUN.extracting=true;
- showScorePop('正在撤离...');
+ showScorePop('到达撤离点 · 保持区域内');
 }
 function updateExtraction(dt){
  if(GAMEMODE!=='extract'||matchOver||RUN.deathTimer||CAMPAIGN.rangeOnly){
@@ -41,7 +41,7 @@ function updateExtraction(dt){
  const hold=ex.holdTime||3;   // 3 秒 (2026-09-18: 5 分钟局里 6 秒太长)
  // 通行证不再是"撤离点的准入卡": 任何人都可以在撤离点撤离(普通结算)。
  // 持有「撤离通行证」时, 这次撤离才算"离开瓦尔登禁区", 解锁结局并可重生 (见 39_quests)。
- if(!RUN.extracting){ RUN.extracting=true; showScorePop('到达撤离点 · 保持区域内'); }
+ if(!RUN.extracting) startExtraction();
  ex.progress=Math.min(hold,ex.progress+dt);
  if(hud){
   hud.classList.remove('hidden');
@@ -55,78 +55,130 @@ function updateExtraction(dt){
  }
  if(ex.progress>=hold) finishRaid(true);
 }
+// 各模式共用同一份结算布局。物品名和玩家名可能来自工坊或联机房间。
+// 同一个字幕节点跟随战报显隐，直接重开或切换面板时也会回到 HUD。
+new MutationObserver(()=>{
+ const end=el('end'), sub=el('voSub');
+ if(end.classList.contains('hidden')) el('ui').append(sub);
+ else end.querySelector('.reportActions').before(sub);
+}).observe(el('end'),{attributes:true,attributeFilter:['class']});
+function reportElement(tag,text){
+ const node=document.createElement(tag);
+ if(text!=null) node.textContent=String(text);
+ return node;
+}
+function reportMetrics(entries){
+ const dl=reportElement('dl'); dl.className='reportMetrics';
+ for(const [label,value] of entries){
+  const pair=reportElement('div');
+  pair.append(reportElement('dt',label),reportElement('dd',value)); dl.append(pair);
+ }
+ el('endStats').append(dl);
+}
+function reportGroup(title,lines=[],items={}){
+ const group=reportElement('section'); group.className='reportGroup';
+ group.append(reportElement('h2',title));
+ for(const line of lines) if(line) group.append(reportElement('p',line));
+ const entries=Object.entries(items).filter(([,n])=>n>0);
+ if(entries.length){
+  const list=reportElement('ul'); list.className='reportItems';
+  for(const [key,n] of entries){
+   const li=reportElement('li'); li.append(reportElement('span',itemName(key)),reportElement('b','×'+n)); list.append(li);
+  }
+  group.append(list);
+ }
+ el('endStats').append(group);
+ return group;
+}
+function prepareReport(result,win,storyResult=null){
+ const end=el('end'), box=el('endStats'), title=el('endTitle'), again=el('againBtn'), back=el('armoryBtn');
+ if(document.pointerLockElement) document.exitPointerLock();
+ document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('hidden',s!==end));
+ box.replaceChildren(); box.scrollTop=0;
+ el('rebirthBtn')?.remove();
+ title.textContent=result; title.className=win?'win':'lose';
+ const chapter=storyResult&&SRAID.ch;
+ el('reportMap').textContent=(CAMPAIGN.mapName||CAMPAIGN.title)+(chapter?'　/　第'+chapter.no+'章 '+chapter.name:'');
+ const choose=id=>{ end.classList.add('hidden'); el('menu').classList.remove('hidden'); showMenuPanel(id); };
+ if(CAMPAIGN.rangeOnly){ again.textContent='再练一次'; again.onclick=rangeOpen; }
+ else if(chapter&&!storyResult.ok){ again.textContent='重试本章'; again.onclick=()=>storyStart(SRAID.idx); }
+ else if(chapter){ again.textContent='选择剧情章节'; again.onclick=()=>choose('mStory'); }
+ else{ again.textContent='准备下一局'; again.onclick=()=>choose('mPlay'); }
+ back.textContent=CAMPAIGN.rangeOnly?'返回主菜单':'回到仓库';
+ back.onclick=CAMPAIGN.rangeOnly?rangeLeave:openArmoryFromEnd;
+ title.focus({preventScroll:true});
+}
+function finishRangeTraining(){
+ matchOver=true;
+ if(typeof VO!=='undefined') VO.stop();
+ prepareReport('训练结束',true);
+ reportMetrics([['射击',RANGE.shots],['命中',RANGE.hits],['命中率',(RANGE.shots?Math.round(RANGE.hits/RANGE.shots*100):0)+'%']]);
+ reportGroup('靶场训练',['靶场的装备与物资不计入仓库。']);
+}
 function finishRaid(extracted){
  if(matchOver) return;
  matchOver=true;
+ lootPanelClose(false);
+ bagPanelClose();
+ closeMedWheel();
  clearTimeout(RUN.deathTimer); RUN.deathTimer=0;
+ if(CAMPAIGN.rangeOnly){ finishRangeTraining(); return; }
  // 剧情模式: 判定本章成败并推进 (必须在 mergeRunLoot 之前 —— 目标要读 RUN.loot 里的样本/文件)
- if(typeof storyOnRaidEnd==='function'){ try{ storyOnRaidEnd(extracted); }catch(e){ console.error('[story] onRaidEnd failed:',e); } }
+ let storyResult=null;
+ if(typeof storyOnRaidEnd==='function'){ try{ storyResult=storyOnRaidEnd(extracted); }catch(e){ console.error('[story] onRaidEnd failed:',e); } }
  const lootSnapshot=extracted?extractedLoot():{...RUN.loot};
  const lootValue=Object.entries(lootSnapshot).reduce((v,[k,n])=>v+itemSellPrice(k)*n,0);
- const lootTotal=Object.values(lootSnapshot).reduce((v,n)=>v+n,0);
- if(extracted&&!CAMPAIGN.rangeOnly){
+ if(extracted){
   META.stats.kills+=RUN.kills||0;
   META.stats.deaths+=player.deaths||0;
   mergeRunLoot(lootSnapshot);
- } else if(!extracted) settleRaidLoss();
+ }else settleRaidLoss();
  // ELO 动态难度: 结算本局评分。撤离成功/阵亡/超时都收口到这里, 是唯一的评分入口。
  // lootValue 必须在 mergeRunLoot() 之前取 (成功后 RUN.loot 会被清空)。
- const eloRes=(!CAMPAIGN.rangeOnly&&typeof eloApplyRaid==='function')?eloApplyRaid(extracted,lootValue):null;
+ const eloRes=typeof eloApplyRaid==='function'?eloApplyRaid(extracted,lootValue):null;
  // 必须在消耗前记录: 持证人在「港口」登船 = 离开瓦尔登隔离禁区, 解锁结局并可重生。
  // 通行证是一张"船票", 只在港口有效; 别的地图持证撤离同样只是普通结算。
  const hadPass=extracted&&typeof passUsable==='function'?passUsable():false;
  // 只有真正用上了那张船票才消耗 (见 39_quests 的 PASS_MAP)
  if(extracted&&hadPass&&typeof consumeExtractionPass==='function') consumeExtractionPass();
  RUN.hadPass=hadPass;
- if(document.exitPointerLock) document.exitPointerLock();
- document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
- const end=document.getElementById('end');
- const endTitle=document.getElementById('endTitle');
- const endStats=document.getElementById('endStats');
  const hud=document.getElementById('extractHud');
  if(hud) hud.classList.add('hidden');
- if(end) end.classList.remove('hidden');
- const armoryBtn=document.getElementById('armoryBtn');
- if(armoryBtn) armoryBtn.onclick=openArmoryFromEnd;
- if(endTitle){
-  endTitle.textContent=!extracted?(RUN.timeout?'无 线 电 信 号 丢 失':'任 务 失 败'):(hadPass?'离 开 瓦 尔 登 · 结 局':'撤 离 成 功');
-  endTitle.className=extracted?'win':'lose';
+ let result='撤离成功';
+ if(!extracted) result=RUN.timeout?'无线电信号丢失':'撤离失败';
+ else if(storyResult&&!storyResult.ok) result='已撤离，章节未完成';
+ else if(hadPass) result='离开瓦尔登';
+ else if(storyResult) result='章节完成';
+ prepareReport(result,extracted,storyResult);
+ const loss=extracted?null:RUN.lossReport;
+ const kept=extracted?lootSnapshot:(loss?.secure||{});
+ const keptCount=Object.values(kept).reduce((total,n)=>total+n,0);
+ reportMetrics([['击杀',RUN.kills||0],['搜索',RUN.searches||0],[extracted?'带出物资':'安全箱保留',keptCount+' 件']]);
+ if(storyResult) reportGroup('剧情进度',[storyResult.msg]);
+ if(extracted){
+  reportGroup('撤离物资',[keptCount?'战利品已存入仓库 · 预计出售价值 ¥'+formatMoney(lootValue):'本局没有携出物资。'],kept);
+ }else{
+  if(keptCount) reportGroup('安全箱已保留',['以下物品已存入仓库。'],kept);
+  const lost=loss?.bag||{};
+  reportGroup('背包损失',Object.keys(lost).length?[]:['背包里没有丢失的物资。'],lost);
+  if(RUN.lostGear?.length) reportGroup('丢失装备',[RUN.lostGear.map(itemName).join('、')]);
+  if(RUN.returnedGear?.length) reportGroup('保险返还',['已返还至装备库存：'+RUN.returnedGear.map(itemName).join('、')]);
+  if(RUN.failComp>0||RUN.autoKit?.length){
+   reportGroup('补偿与补给',[
+    RUN.failComp>0?'失败补偿 +¥'+formatMoney(RUN.failComp)+' · 当前余额 ¥'+formatMoney(META.wallet):'',
+    RUN.autoKit?.length?'保底补给已发放至仓库 · '+RUN.autoKit.map(itemName).join('、'):''
+   ]);
+  }
  }
- const lootRows=Object.entries(lootSnapshot).length
-  ?Object.entries(lootSnapshot).map(([k,n])=>`${itemName(k)} ×${n}`).join(' · ')
-  :'无';
- let gearLine='';
- if(RUN.lostGear&&RUN.lostGear.length) gearLine+=`<div style="margin-top:6px;color:#e09080;font-size:13px">丢失装备: ${RUN.lostGear.map(k=>itemName(k)).join(' · ')}</div>`;
- if(RUN.returnedGear&&RUN.returnedGear.length) gearLine+=`<div style="margin-top:4px;color:#e8e8e8;font-size:13px">保险赔付(主菜单领取): ${RUN.returnedGear.map(k=>itemName(k)).join(' · ')}</div>`;
- // 失败补偿 + 保底补给提示
- if(!extracted&&RUN.failComp>0){
-  gearLine+=`<div style="margin-top:8px;padding:7px 10px;background:rgba(120,200,140,.12);border:1px solid rgba(120,200,140,.35);border-radius:4px;color:#9fe6b4;font-size:13px">`
-   +`失败补偿 <b>+${formatMoney(RUN.failComp)}</b> 作战货币 · 当前余额 <b>${formatMoney(META.wallet)}</b>`
-   +(RUN.autoKit&&RUN.autoKit.length?`<br><span style="color:#e0e0e0">保底补给: <b>${RUN.autoKit.map(k=>itemName(k)).join(' · ')}</b> 已发放至仓库</span>`:'')
-   +`</div>`;
+ if(extracted){
+  const passage=hadPass?'已持撤离通行证从港口登船，解锁结局。':CAMPAIGN.id==='port'
+   ?'普通撤离。本次未持通行证，尚未解锁结局。完成全部任务后可在市集购买船票。'
+   :'普通撤离。持撤离通行证从瓦尔登港登船可以解锁结局。';
+  reportGroup('撤离记录',[passage]);
  }
- // ELO 结算行: 让玩家看得见"为什么下一局会更难/更简单"
-let eloLine='';
-if(eloRes){
-  const up=eloRes.delta>0, c=up?'#9fe6b4':(eloRes.delta===0?'#d2d2d2':'#e09080');
-  eloLine=`<div style="margin-top:8px;padding:7px 10px;background:rgba(120,160,220,.10);border:1px solid rgba(120,160,220,.30);border-radius:4px;color:#e8e8e8;font-size:13px">`
-   +`ELO 动态难度 · <b>${eloRes.from}</b> → <b style="color:${c};font-size:15px">${eloRes.to}</b> `
-   +`<b style="color:${c}">(${up?'+':''}${eloRes.delta})</b> · ${eloRes.tier}`
-   +`<div style="margin-top:3px;color:#d0d0d0;font-size:12px">本局表现 ${Math.round(eloRes.perf*100)}% · 下一局 ${eloSummary()}</div>`
-   +`</div>`;
-}
-if(endStats){
-  endStats.innerHTML=
-   `<div style="font-size:14px;color:#e8e8e8">击杀 <b>${RUN.kills}</b> · 搜索 <b>${RUN.searches}</b> · 带出 <b>${lootTotal}</b> 件</div>`+
-   `<div style="margin-top:8px;color:#d8d8d8;font-size:13px">${lootRows}</div>`+
-   `<div style="margin-top:8px;color:#e0e0e0">${extracted?`战利品已存入仓库 · 预计出售价值 ${formatMoney(lootValue)} 作战货币`:'未撤离，战利品与携带装备已丢失'}</div>`+
-   (extracted?(hadPass
-     ?`<div style="margin-top:8px;color:#ffffff;font-size:13px">持「撤离通行证」从港口登船 · 已离开瓦尔登隔离禁区，解锁结局</div>`
-     :(CAMPAIGN.id==='port'
-      ?`<div style="margin-top:8px;color:#d0d0d0;font-size:13px">普通撤离 · 未持通行证，不解锁结局（完成全部任务后可在市集买一张船票）</div>`
-      :`<div style="margin-top:8px;color:#d0d0d0;font-size:13px">普通撤离 · 「撤离通行证」是瓦尔登港的船票，只在「港口」有效，本地图不解锁结局</div>`)):'')+
-   gearLine+eloLine;
- }
- // 持证撤离成功 → 结算画面追加「重生」按钮 (见 39_quests)
+ if(eloRes) reportGroup('ELO 动态难度',[
+  eloRes.from+' → '+eloRes.to+'（'+(eloRes.delta>0?'+':'')+eloRes.delta+'） · '+eloRes.tier,
+  '本局表现 '+Math.round(eloRes.perf*100)+'% · 下一局 '+eloSummary()
+ ]);
  if(extracted&&hadPass&&typeof addRebirthButton==='function') addRebirthButton();
 }

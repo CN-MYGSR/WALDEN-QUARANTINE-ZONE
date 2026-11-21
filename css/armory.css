@@ -1,0 +1,76 @@
+#mArmory [hidden] { display:none!important; }
+#mArmory .menuHead { gap:14px; align-items:center; }
+#mArmory .menuHead .arWallet { margin:0 0 0 auto; font-size:14px; line-height:1.4; white-space:nowrap; color:var(--amber); }
+#mArmory .menuHead .backBtn { margin:0; }
+#mArmory #arDepartments { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); margin:0; gap:0; padding:0 var(--inset); border-bottom:1px solid var(--line); }
+#mArmory #arDepartments button { min-width:0; min-height:49px; margin:0; padding:6px 4px; border:0; border-bottom:3px solid transparent; border-radius:0; background:transparent; box-shadow:none; font-size:15px; color:var(--sub); }
+#mArmory #arDepartments button.sel { border-bottom-color:var(--amber); color:var(--amber); }
+#mArmory #arDepartments button:hover { background:var(--surface); color:var(--ink); }
+#arToolbar { padding:10px var(--inset) 0; display:grid; gap:9px; }
+#arToolbar:has(>#arFilters[hidden]) { padding:0; }
+#mArmory .arSwitch { display:flex; gap:4px; }
+#mArmory .arSwitch button { min-height:36px; padding:5px 12px; border:1px solid transparent; border-radius:4px; background:transparent; color:var(--sub); font:inherit; cursor:pointer; }
+#mArmory .arSwitch button.sel { color:var(--ink); background:var(--surface); border-color:var(--line); }
+#arFilters { display:flex; gap:8px; min-width:0; }
+#mArmory #arSearch,#mArmory #arCategory,#mArmory #arLayoutBtn { height:40px; min-height:40px; margin:0; border:1px solid var(--line); border-radius:4px; background:var(--surface); color:var(--ink); font:inherit; font-size:14px; }
+#mArmory #arSearch { flex:1; min-width:0; width:auto; padding:0 12px; }
+#mArmory #arCategory,#mArmory #arLayoutBtn { padding:0 9px; }
+#mArmory #arList { margin:10px var(--inset) 0; padding:0; max-height:none; min-height:0; flex:1 1 0; overflow:auto; }
+#arList[data-section=warehouse] .arInventory { height:100%; min-height:0; display:grid; grid-template-columns:minmax(0,1.5fr) minmax(215px,1fr); gap:14px; }
+#arList .arStockItems { min-height:0; overflow:auto; }
+#arList #arGridHost { padding:0; }
+#arGridHost .arStockList { display:flex; flex-direction:column; gap:3px; }
+#arGridHost .arStockItem { position:static; display:grid; width:100%; min-height:44px; grid-template-columns:30px minmax(0,1fr) auto; align-items:center; gap:9px; padding:6px 10px; border:1px solid var(--line); border-radius:4px; text-align:left; background:var(--surface); color:var(--ink); font:inherit; font-size:14px; line-height:1.35; touch-action:pan-y; cursor:pointer; }
+#arGridHost .arStockItem.sel { border-color:var(--amber); outline:none; box-shadow:none; background:#3b3a2c; }
+#arGridHost .arStockItem:focus-visible { outline:2px solid var(--amber); outline-offset:-3px; }
+#arGridHost .arAmount { justify-self:end; color:var(--sub); font-variant-numeric:tabular-nums; }
+#arGridHost .arItemLabel { overflow-wrap:anywhere; }
+#mArmory .arGlyph { display:grid; place-items:center; width:28px; height:28px; border-radius:4px; background:#1b2420; font-size:16px; }
+#mArmory #arDetail { margin:0; padding:12px; overflow:auto; align-self:start; max-height:100%; border:1px solid var(--line); border-radius:5px; background:#202824; }
+#mArmory .arDetailTop { display:flex; align-items:center; gap:8px; font-size:17px; }
+#mArmory .arDetailTop strong { color:var(--ink); }
+#mArmory .arFacts { display:flex; flex-wrap:wrap; gap:14px; margin:12px 0; }
+#mArmory .arFacts dt { color:var(--sub); font-size:12px; }
+#mArmory .arFacts dd { margin:2px 0 0; font-size:15px; color:var(--ink); }
+#mArmory .invDBtns { display:flex; flex-wrap:wrap; gap:6px; }
+#mArmory .invDBtns .arBtn,#mArmory .invDBtns .optBtn,#mArmory .arProduct button { min-height:38px; padding:6px 10px; }
+#mArmory .arSellAll { margin:8px 0; }
+#mArmory .arProduct { display:grid; grid-template-columns:minmax(0,1fr) auto minmax(68px,auto); gap:10px; padding:10px 8px; margin:0; border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; }
+#mArmory .arProduct .arPrice { min-width:0; font-variant-numeric:tabular-nums; }
+#mArmory .arProduct .arName,#mArmory .arProduct .arOwned { letter-spacing:0; }
+#mArmory .arTradeButtons { display:grid; gap:3px; }
+#mArmory .arBtn:disabled { cursor:default; opacity:.63; box-shadow:none; color:var(--sub); }
+#mArmory .arEmpty { padding:20px 8px; }
+#mArmory .arSearchEmpty { display:flex; flex-direction:column; align-items:center; gap:8px; }
+#mArmory .arReady { display:flex; flex:none; align-items:center; gap:10px; justify-content:space-between; padding:10px var(--inset); border-top:1px solid var(--line); background:var(--desk); }
+#mArmory .arReady>div { min-width:0; display:grid; gap:1px; line-height:1.3; }
+#mArmory .arReady span { color:var(--sub); font-size:12px; }
+#mArmory .arReady strong { color:var(--ink); font-size:14px; font-weight:550; }
+#mArmory #arCheckoutBtn { margin:0; flex:none; padding:8px 14px; min-height:42px; font-size:15px; letter-spacing:0; background:var(--amber); color:#24231a; border-color:var(--amber); }
+#mArmory :is(button,input,select):focus-visible { outline:2px solid var(--amber); outline-offset:-2px; }
+@media(max-width:640px) {
+ #mArmory .menuHead { gap:8px; }
+ #mArmory .menuHead .arWallet { font-size:12px; }
+ #mArmory #arDepartments { padding-inline:6px; }
+ #mArmory #arDepartments button { font-size:14px; min-height:44px; }
+ #mArmory #arToolbar { gap:6px; padding-top:6px; }
+ #mArmory #arFilters { gap:4px; }
+ #mArmory #arCategory,#mArmory #arLayoutBtn { max-width:32%; font-size:13px; padding:0 5px; }
+ #mArmory #arList { margin-top:6px; }
+ #arList[data-section=warehouse] .arInventory { grid-template-columns:1fr; grid-template-rows:minmax(74px,1fr) auto; gap:5px; }
+ #mArmory #arDetail { align-self:stretch; padding:8px; max-height:24dvh; }
+ #mArmory .arFacts { margin:5px 0; gap:10px; }
+ #mArmory .arFacts div { display:flex; align-items:baseline; gap:4px; }
+ #mArmory .arFacts dd { font-size:13px; }
+ #mArmory .arDetailTop { font-size:15px; }
+ #mArmory .arDetailTop .arGlyph { display:none; }
+ #mArmory .arReady { padding-block:7px; }
+ #mArmory .arProduct { gap:5px; }
+}
+@media(max-height:470px) {
+ #mArmory #arToolbar { display:flex; gap:8px; align-items:center; }
+ #mArmory #arFilters { flex:1; }
+ #mArmory .arReady { padding-block:3px; }
+ #arList[data-section=warehouse] .arInventory { grid-template-columns:1fr 1fr; grid-template-rows:auto; }
+ #mArmory #arDetail { max-height:100%; }
+}

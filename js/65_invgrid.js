@@ -33,6 +33,7 @@ const INVGRID=(()=>{
   function dims(key,rot){ const f=foot(key); return rot?{w:f.h,h:f.w}:{w:f.w,h:f.h}; }
 
   function fits(layout,key,x,y,rot,cols,rows,ignore){
+    if(!Number.isInteger(x)||!Number.isInteger(y)) return false;
     const d=dims(key,rot);
     if(x<0||y<0||x+d.w>cols||y+d.h>rows) return false;
     for(const k in layout){
@@ -94,7 +95,7 @@ const INVGRID=(()=>{
     cfg.overflow=0;
     if(un.length){
       const extra=Math.ceil(un.reduce((a,k)=>a+area(k),0)/cfg.cols)+1;
-      const still=packInto(un,cfg.layout,cfg.cols,rows+extra);
+      const still=packInto(keys,cfg.layout,cfg.cols,rows+extra);
       cfg.overflow=still.length;
       rows=Math.max(rows+extra,extent(keys,cfg.layout,cfg.cols));
     }
@@ -131,6 +132,14 @@ const INVGRID=(()=>{
       t.innerHTML='<span class="itIco">'+((typeof itemIconOf==='function')?itemIconOf(k):'📦')+'</span>'
         +'<span class="itName">'+nm+'</span>'
         +(n>1?'<span class="itQty">×'+n+'</span>':'');
+      if(cfg.id==='lootSrc'){
+        const take=document.createElement('button');
+        take.type='button'; take.className='takeItem'; take.textContent='拿取';
+        take.setAttribute('aria-label','拿取一件'+nm);
+        take.disabled=!canCarry(k,1);
+        if(take.disabled) take.textContent='放不下';
+        t.appendChild(take);
+      }
       g.appendChild(t);
     }
     host.appendChild(g);
@@ -150,6 +159,7 @@ const INVGRID=(()=>{
   function bindGrid(g,cfg){
     g.addEventListener('pointerdown',ev=>{
       if(ev.button!==undefined&&ev.button!==0) return;
+      if(g.closest('[data-view="list"]')) return;
       const t=ev.target&&ev.target.closest?ev.target.closest('.invTile'):null;
       if(!t) return;
       const key=t.dataset.key;
@@ -158,9 +168,10 @@ const INVGRID=(()=>{
       drag={gid:cfg.id,key:key,x0:ev.clientX,y0:ev.clientY,moved:false,
             rot:(cfg.layout[key]&&cfg.layout[key].rot)||0,
             gx:Math.floor((ev.clientX-tr.left)/cell), gy:Math.floor((ev.clientY-tr.top)/cell)};
-      try{ (cfg.id==='arGrid'?t:g).setPointerCapture(ev.pointerId); }catch(e){}
+      try{ t.setPointerCapture(ev.pointerId); }catch(e){}
     });
     g.addEventListener('dblclick',ev=>{
+      if(ev.target.closest('.takeItem')) return;
       const t=ev.target&&ev.target.closest?ev.target.closest('.invTile'):null;
       if(!t) return;
       if(cfg.onDouble) cfg.onDouble(t.dataset.key);
@@ -169,9 +180,14 @@ const INVGRID=(()=>{
     g.addEventListener('click',ev=>{
       const tile=ev.target.closest?.('.invTile');
       if(tile){
-        if(cfg.id==='arGrid') cfg.onSelect(tile.dataset.key);
+        if(ev.target.closest('.takeItem')){ lootTakeToBag(tile.dataset.key); return; }
+        if(cfg.onSelect){
+          selected={gid:cfg.id,key:tile.dataset.key};
+          cfg.onSelect(tile.dataset.key);
+        }
         return;
       }
+      if(g.closest('[data-view="list"]')) return;
       const c=cellAt(g,ev.clientX,ev.clientY); if(!c||!selected) return;
       const dst=grids.get(c.gid); if(!dst) return;
       if(selected.gid===c.gid){ if(dst.cfg.onMove) dst.cfg.onMove(selected.key,c.x,c.y,0); }
@@ -220,10 +236,9 @@ const INVGRID=(()=>{
       cleanGhost(); drag=null;
       return;
     }
-    const src=grids.get(d.gid);
     drag=null; cleanGhost();
-    if(src&&src.cfg.onSelect){ selected={gid:d.gid,key:d.key}; src.cfg.onSelect(d.key); }
   });
+  addEventListener('pointercancel',()=>{ drag=null; cleanGhost(); });
 
   // 拖拽时 R 旋转 (捕获阶段, 避免触发换弹)
   addEventListener('keydown',ev=>{
@@ -277,16 +292,28 @@ function invCellPx(){ return (typeof TOUCHUI!=='undefined'&&TOUCHUI)?38:46; }
 function invName(k){ try{ return (typeof itemLabel==='function')?itemLabel(k):((typeof itemName==='function')?itemName(k):String(k)); }catch(e){ return String(k); } }
 function invDesc(k){ try{ return (typeof itemDesc==='function')?itemDesc(k):''; }catch(e){ return ''; } }
 
+for(const panel of [el('bagPanel'),el('lootPanel')]){
+  const views=panel.querySelector('.inventoryViews');
+  views.addEventListener('click',ev=>{
+    const button=ev.target.closest('button[data-view]');
+    if(!button) return;
+    panel.dataset.view=button.dataset.view;
+    for(const choice of views.children) choice.setAttribute('aria-pressed',String(choice===button));
+    if(panel.id==='bagPanel') renderBagPanel(); else renderLootPanel();
+  });
+}
+
 function renderBagPanelGrid(){
   const pnl=el('bagPanel');
   if(!pnl) return;
   if(!BAG_UI.open||!player.alive){ pnl.classList.add('hidden'); return; }
   pnl.classList.remove('hidden');
+  const focusedAction=document.activeElement?.dataset.bact;
   const bagScroll=(el('bagPanelList')&&el('bagPanelList').scrollTop)||0;
   const ks=bagEntryKeys();
   const used=bagUsed(), cap=bagCapacity();
   if(BAG_UI.sel>=ks.length) BAG_UI.sel=Math.max(0,ks.length-1);
-  if(BAG_UI.key&&!RUN.loot[BAG_UI.key]) BAG_UI.key=null;
+  BAG_UI.key=ks[BAG_UI.sel]||null;
   el('bagPanelStat').textContent=used+'/'+cap+' 格 · '+bagWeight()+' kg · ¥'+formatMoney(bagValue())+' · 安全箱 '+secureUsed()+'/'+SECURE_SLOTS;
   const oldSec=el('secBox'); if(oldSec) oldSec.classList.add('hidden');
 
@@ -301,7 +328,7 @@ function renderBagPanelGrid(){
   for(const k of packKeys) delete RUN.grid.chest[k];
   const cols=5, chestCols=4;
   const baseRows=Math.max(1,Math.ceil(bagPackSlots()/cols));
-  const chestBase=Math.max(1,Math.ceil(bagChestSlots()/chestCols));
+  const chestBase=Math.ceil(bagChestSlots()/chestCols);
   let un=INVGRID.packInto(packKeys,RUN.grid.pack,cols,baseRows);
   const spill=un.filter(k=>itemSizeOf(k)<=CHEST_MAX_SIZE);
   un=un.filter(k=>itemSizeOf(k)>CHEST_MAX_SIZE);
@@ -310,7 +337,7 @@ function renderBagPanelGrid(){
   for(const k of un2){ un.push(k); delete RUN.grid.chest[k]; }
   if(un.length){
     const extra=Math.ceil(un.reduce((a,k)=>a+INVGRID.area(k),0)/cols)+1;
-    INVGRID.packInto(un,RUN.grid.pack,cols,baseRows+extra);
+    INVGRID.packInto(ks.filter(k=>!RUN.grid.chest[k]),RUN.grid.pack,cols,baseRows+extra);
   }
   const packList=ks.filter(k=>RUN.grid.pack[k]);
   const chestList=ks.filter(k=>RUN.grid.chest[k]);
@@ -320,13 +347,13 @@ function renderBagPanelGrid(){
   const selGid=selKey&&RUN.grid.chest[selKey]?'bagChest':(selKey&&RUN.grid.pack[selKey]?'bagPack':null);
 
   el('bagPanelList').innerHTML=
-    '<div id="bagDetail" class="invDetail"></div>'
-    +'<div class="invSection"><div class="invHead">背包 <span>'+bagPackSlots()+' 格</span></div><div id="bagPackHost" class="invHost"></div></div>'
+    '<div class="invSection"><div class="invHead">背包 <span>'+bagPackSlots()+' 格</span></div><div id="bagPackHost" class="invHost"></div></div>'
     +(bagChestSlots()>0?'<div class="invSection"><div class="invHead">胸挂 <span>'+bagChestSlots()+' 格 · 只收 ≤2 格</span></div><div id="bagChestHost" class="invHost"></div></div>':'')
     +'<div class="invSection"><div class="invHead">安全箱 <span>'+secureUsed()+'/'+SECURE_SLOTS+'</span></div><div id="bagSecHost" class="invHost"></div></div>';
 
   INVGRID.setSelected(selGid,selKey);
   const pick=function(k){
+    if(BAG_UI.key!==k) bagDisarmDropAll();
     BAG_UI.key=k;
     BAG_UI.sel=bagEntryKeys().indexOf(k);
     renderBagPanel();
@@ -365,7 +392,7 @@ function renderBagPanelGrid(){
     let sh='<div class="invGrid invSecGrid" style="width:'+(SECURE_SLOTS*c)+'px;height:'+c+'px">';
     for(let i=0;i<SECURE_SLOTS;i++){
       const k=sec[i]; if(!k) continue;
-      sh+='<div class="invTile sm k-'+itemKind(k)+' secTile" data-sk="'+encodeURIComponent(k)+'" style="left:'+(i*c)+'px;top:0;width:'+(c-2)+'px;height:'+(c-2)+'px" title="'+invName(k)+' · 点击取出"><span class="itIco">'+itemIconOf(k)+'</span></div>';
+      sh+='<button type="button" class="invTile sm k-'+itemKind(k)+' secTile" data-sk="'+encodeURIComponent(k)+'" style="left:'+(i*c)+'px;top:0;width:'+(c-2)+'px;height:'+(c-2)+'px" title="'+invName(k)+' · 点击取出"><span class="itIco">'+itemIconOf(k)+'</span><span class="itName">'+invName(k)+'</span><span class="secTakeLabel">取出</span></button>';
     }
     sh+='</div>';
     secHost.innerHTML=sh;
@@ -384,13 +411,17 @@ function renderBagPanelGrid(){
     if(selKey&&RUN.loot[selKey]){
       detail.innerHTML='<div class="invDName">'+itemIconOf(selKey)+' '+itemLabel(selKey)+' ×'+RUN.loot[selKey]+'</div>'
         +'<div class="invDDesc">'+itemDesc(selKey)+'</div>'
-        +'<div class="invDHint">'+itemSizeOf(selKey)+' 格 · ¥'+formatMoney(itemSellPrice(selKey))+' · 拖拽换位 · R 旋转</div>';
+        +'<div class="invDHint">每件 '+itemSizeOf(selKey)+' 格 · 售价 ¥'+formatMoney(itemSellPrice(selKey))+'</div>';
     } else {
-      detail.innerHTML='<div class="invDHint">背包是空的 · 在物资箱或尸体上按 F 搜刮</div>';
+      detail.textContent='背包是空的。靠近物资箱或尸体，'+(TOUCHUI?'点屏幕上的搜刮按钮':'按 '+keyLabelOf('interact'))+' 取物。';
     }
   }
   el('bagPanelHint').innerHTML=bagHintHTML();
   renderBagActions();
+  if(focusedAction){
+    const actions=el('bagPanelBtns');
+    (actions.querySelector('[data-bact="'+focusedAction+'"]')||actions.querySelector('[data-bact="close"]')).focus({preventScroll:true});
+  }
   const bl=el('bagPanelList'); if(bl) bl.scrollTop=bagScroll;
 }
 
@@ -399,10 +430,7 @@ function renderBagPanelGrid(){
 // =====================================================================
 function lootTakeToBag(key,x,y,rot){
   const ref=LOOT_UI.ref;
-  if(!ref||!ref.loot||!ref.loot[key]) return false;
-  if(!addLootToBag(key,1)) return false;
-  ref.loot[key]--;
-  if(ref.loot[key]<=0) delete ref.loot[key];
+  if(!takeLootItem(ref,key)) return false;
   if(ref.grid) delete ref.grid[key];
   RUN.grid=RUN.grid||{pack:{},chest:{}};
   if(INVGRID.fitsAt('lootBag',key,x,y,rot)) INVGRID.moveIn('lootBag',key,x,y,rot);
@@ -428,6 +456,7 @@ function lootPutBack(key,x,y,rot){
   delete RUN.loot[key];
   if(RUN.grid){ delete RUN.grid.pack[key]; delete RUN.grid.chest[key]; }
   ref.loot[key]=(ref.loot[key]||0)+n;
+  moveStowedWeapons(RUN,ref,key,n);
   ref.grid=ref.grid||{};
   if(INVGRID.fitsAt('lootSrc',key,x,y,rot)) INVGRID.moveIn('lootSrc',key,x,y,rot);
   showScorePop('放回: '+itemLabel(key)+' ×'+n);
@@ -451,11 +480,13 @@ function renderLootPanelGrid(){
   RUN.grid=RUN.grid||{pack:{},chest:{}};
   const bagPackKeys=bagKeys.filter(k=>!RUN.grid.chest[k]);
   const bagRows=Math.max(3,Math.ceil(bagPackSlots()/5));
+  LOOT_UI.sel=Math.min(LOOT_UI.sel,Math.max(0,entries.length-1));
   const selEntry=entries[LOOT_UI.sel];
   const selKey=selEntry?selEntry[0]:null;
 
   el('lootTitle').textContent=LOOT_UI.kind==='corpse'?'尸 体':'物 资 箱';
-  el('lootList').innerHTML='<div id="lootDetail" class="invDetail"></div><div class="lootWrap">'
+  el('lootSpace').textContent='背包剩余 '+bagFree()+' 格';
+  el('lootList').innerHTML='<div class="lootWrap">'
     +'<div class="lootCol"><div class="invHead">'+(LOOT_UI.kind==='corpse'?'尸体':'物资箱')+' <span>'+srcKeys.length+' 种</span></div><div id="lootSrcHost" class="invHost"></div></div>'
     +'<div class="lootCol"><div class="invHead">背包 <span>'+bagUsed()+'/'+bagCapacity()+' 格</span></div><div id="lootBagHost" class="invHost"></div></div>'
     +'</div>';
@@ -466,8 +497,12 @@ function renderLootPanelGrid(){
     items:srcKeys.map(k=>({key:k,n:ref.loot[k]})),selected:selKey,
     onSelect:function(k){
       const i=lootEntries(ref).findIndex(e=>e[0]===k);
-      LOOT_UI.sel=Math.max(0,i);
-      renderLootPanel();
+      if(i<0) return;
+      LOOT_UI.sel=i;
+      for(const tile of el('lootSrcHost').querySelectorAll('.invTile')){
+        tile.classList.toggle('sel',tile.dataset.key===k);
+      }
+      showLootDetail(k);
     },
     onMove:function(k,x,y,rot){ if(INVGRID.moveIn('lootSrc',k,x,y,rot)) renderLootPanel(); },
     onDrop:function(src,k,x,y,rot){ if(src==='lootBag') lootPutBack(k,x,y,rot); },
@@ -481,20 +516,24 @@ function renderLootPanelGrid(){
     onDrop:function(src,k,x,y,rot){ if(src==='lootSrc') lootTakeToBag(k,x,y,rot); }
   });
 
-  const detail=el('lootDetail');
-  if(detail){
-    detail.innerHTML=selKey
-      ? '<div class="invDName">'+itemIconOf(selKey)+' '+itemLabel(selKey)+' ×'+(ref.loot[selKey]||0)+'</div>'
-        +'<div class="invDDesc">'+itemDesc(selKey)+'</div>'
-        +'<div class="invDHint">'+itemSizeOf(selKey)+' 格 · 拖到背包 / 双击快速拿取</div>'
+  function showLootDetail(key){
+    const take=el('lootTakeOne');
+    take.disabled=!key||!canCarry(key,1);
+    take.textContent=key&&take.disabled?'背包放不下':'拿取所选';
+    el('lootDetail').innerHTML=key
+      ? '<div class="invDName">'+itemIconOf(key)+' '+itemLabel(key)+' ×'+ref.loot[key]+'</div>'
+        +'<div class="invDDesc">'+itemDesc(key)+'</div>'
+        +'<div class="invDHint">每件占 '+itemSizeOf(key)+' 格</div>'
         +'<div class="invDBtns"><button class="optBtn" id="lootRotate">旋转</button></div>'
-      : '<div class="invDHint">拖拽物品到背包，或双击快速拿取；背包满了会提示</div>';
+      : '<div class="invDHint">容器已空</div>';
     const rb=el('lootRotate');
-    if(rb) rb.onclick=function(){ if(INVGRID.rotate('lootSrc',selKey)) renderLootPanel(); else showScorePop('旋转后放不下'); };
+    if(rb) rb.onclick=function(){ if(INVGRID.rotate('lootSrc',key)) renderLootPanel(); else showScorePop('旋转后放不下'); };
   }
-  el('lootHint').innerHTML='背包 '+bagUsed()+'/'+bagCapacity()+' 格 · 拖拽拿取 · 双击快速拿取 · <b>F</b> 拿取选中';
-  const tb=el('tSelUp'),tb2=el('tSelDown'),tb3=el('tTake');
-  if(tb) tb.style.display=tb2.style.display=tb3.style.display=(TOUCHUI&&entries.length)?'flex':'none';
+  showLootDetail(selKey);
+  el('lootTakeOne').onclick=lootTakeSelected;
+  el('lootClose').onclick=()=>lootPanelClose();
+  el('lootHint').textContent=TOUCHUI?(pnl.dataset.view==='grid'?'拖到背包可拿取':'点物品看详情') :
+    keyLabelOf('lootUp')+' / '+keyLabelOf('lootDown')+' 选择　'+keyLabelOf('interact')+' 拿取　Esc 关闭';
 }
 
 // =====================================================================
@@ -507,8 +546,9 @@ function armoryTileKey(e){
   if(e.code==='KeyR'){
     e.preventDefault(); e.stopPropagation();
     if(e.repeat) return;
-    el('arRotate').click();
-    el('arGridHost').querySelector('.sel').focus();
+    if(!armoryGridMode){ armoryGridMode=true; renderArmory(ARMORY_TAB); }
+    el('arRotate')?.click();
+    el('arGridHost').querySelector('.sel')?.focus();
     return;
   }
   const step={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];
@@ -537,22 +577,19 @@ function renderArmoryGrid(tab){
   if(!list) return;
   const arScroll=list.scrollTop||0;
   const isOwned=tab==='warehouse';
-  const ammoOwned=(isOwned&&typeof AMMO_DEFS!=='undefined')
-    ? Object.keys(AMMO_DEFS).filter(k=>ownedCount(k)>0) : [];
-  const plateOwned=(isOwned&&typeof ownedPlateList==='function')?ownedPlateList():[];
-  const keys=(isOwned
-    ? ownedWeaponList().concat(ownedArmorList()).concat(ownedHelmetList()).concat(ownedHeadsetList()).concat(ownedPackList()).concat(ownedChestList()).concat(ownedNvgList()).concat(ammoOwned).concat(plateOwned)
-    : Object.keys(META.loot||{})).filter(k=>isOwned?ownedCount(k)>0:(META.loot[k]|0)>0);
+  const stock=(isOwned?META.owned:META.loot)||{};
+  const keys=Object.keys(stock).filter(k=>stock[k]>0&&/^[\w-]+$/.test(k));
   const layout=isOwned?(META.gridOwned=META.gridOwned||{}):(META.gridLoot=META.gridLoot||{});
   INVGRID.dropMissing(keys,layout);
   if(!keys.length){
-    list.innerHTML='<div class="arEmpty">'+(isOwned?'仓库是空的。去商店或市集购买装备。':'还没有带出战利品。搜刮物资箱/尸体并成功撤离后带出。')+'</div>';
+    list.innerHTML='<div class="arEmpty">'+(isOwned?'仓库暂无物品。可从补给采购补货。':'暂无撤离战利品。成功撤离后可在这里入库或出售。')+'</div>';
     return;
   }
-  if(!ARMORY_GRID_SEL||keys.indexOf(ARMORY_GRID_SEL)<0) ARMORY_GRID_SEL=keys[0];
+  if(!keys.includes(ARMORY_GRID_SEL)) ARMORY_GRID_SEL=keys[0];
   const rows=Math.max(10,INVGRID.extent(keys,layout,10)+2);
-  list.innerHTML='<div id="arDetail" class="invDetail"></div><div id="arGridHost" class="invHost"></div>'
-    +(isOwned?'':'<div class="center" style="margin-top:10px"><button class="bigBtn" id="sellAllLoot">全部卖出 ('+formatMoney(keys.reduce((a,k)=>a+META.loot[k]*itemSellPrice(k),0))+')</button></div>');
+  list.innerHTML='<div class="arInventory"><div class="arStockItems"><div id="arGridHost" class="invHost"></div>'
+    +(isOwned?'':'<button type="button" class="optBtn arSellAll" id="sellAllLoot">出售全部战利品 · ¥'+formatMoney(keys.reduce((a,k)=>a+stock[k]*itemSellPrice(k),0))+'</button>')
+    +'</div><aside id="arDetail" class="invDetail" aria-label="所选物品"></aside></div>';
   const host=el('arGridHost');
   function selectItem(k){
     if(!k||ARMORY_GRID_SEL===k) return;
@@ -567,49 +604,69 @@ function renderArmoryGrid(tab){
     renderArmoryDetail(tab,k);
   }
   INVGRID.setSelected('arGrid',ARMORY_GRID_SEL);
-  INVGRID.render(host,{
-    id:'arGrid',cols:10,rows:rows,layout:layout,
-    items:keys.map(k=>({key:k,n:isOwned?ownedCount(k):META.loot[k]})),
-    selected:ARMORY_GRID_SEL,
-    onSelect:selectItem,
-    onMove:function(k,x,y,rot){
-      if(INVGRID.moveIn('arGrid',k,x,y,rot)){ if(isOwned) saveMeta(); renderArmoryGrid(tab); }
+  if(armoryGridMode){
+    INVGRID.render(host,{
+      id:'arGrid',cols:10,rows,layout,
+      items:keys.map(k=>({key:k,n:stock[k]})),
+      selected:ARMORY_GRID_SEL,onSelect:selectItem,
+      onMove(k,x,y,rot){ if(INVGRID.moveIn('arGrid',k,x,y,rot)){ saveMeta(); renderArmoryGrid(tab); } }
+    });
+  } else {
+    const entries=document.createElement('div');
+    entries.className='arStockList';
+    for(const k of keys){
+      const b=document.createElement('button');
+      b.type='button'; b.className='invTile arStockItem';
+      b.dataset.key=k; b.dataset.name=(invName(k)+' '+invDesc(k)).toLowerCase();
+      b.classList.toggle('sel',k===ARMORY_GRID_SEL); b.setAttribute('aria-pressed',String(k===ARMORY_GRID_SEL));
+      b.innerHTML='<span class="arGlyph" aria-hidden="true"></span><span class="arItemLabel"></span><span class="arAmount"></span>';
+      b.children[0].textContent=itemIconOf(k); b.children[1].textContent=invName(k); b.children[2].textContent='×'+stock[k];
+      entries.appendChild(b);
     }
-  });
+    host.appendChild(entries);
+    host.addEventListener('click',e=>selectItem(e.target.closest('[data-key]')?.dataset.key));
+  }
   host.addEventListener('focusin',e=>selectItem(e.target.dataset.key));
   host.addEventListener('keydown',armoryTileKey);
   renderArmoryDetail(tab,ARMORY_GRID_SEL);
-  const sa=el('sellAllLoot'); if(sa) sa.onclick=sellAllLoot;
+  const sa=el('sellAllLoot');
+  if(sa) sa.onclick=()=>{
+    if(sa.dataset.confirm){ sellAllLoot(); return; }
+    sa.dataset.confirm='1';
+    sa.textContent='确认出售全部战利品？';
+    const cancel=document.createElement('button');
+    cancel.type='button'; cancel.className='optBtn'; cancel.textContent='取消';
+    cancel.onclick=()=>{ renderArmoryGrid(tab); el('sellAllLoot')?.focus(); };
+    sa.after(cancel); cancel.focus();
+  };
   if(typeof shopApplyFilter==='function') shopApplyFilter();
   list.scrollTop=arScroll;
 }
 function renderArmoryDetail(tab,k){
-  const isOwned=tab==='warehouse';
-  const n=isOwned?ownedCount(k):(META.loot[k]|0);
-  const isAmmo=!!(typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[k]);
-  const isPlate=!!(typeof PLATE_DEFS!=='undefined'&&PLATE_DEFS[k]);
-  const noEquip=isAmmo||isPlate;
-  const acts=isOwned
-    ? (noEquip
-      ? '<button class="optBtn arBtn" data-key="'+k+'" data-action="sell">出售</button>'
-      : '<button class="optBtn arBtn" data-key="'+k+'" data-action="equip">装备</button><button class="optBtn arBtn" data-key="'+k+'" data-action="sell">出售</button>')
-    : '<button class="optBtn arBtn" data-key="'+k+'" data-action="loot-keep">入库</button><button class="optBtn arBtn" data-key="'+k+'" data-action="loot-sell">出售</button>';
-  const d=el('arDetail');
-  if(d){
-    d.innerHTML='<div class="invDName">'+itemIconOf(k)+' '+invName(k)+' ×'+n+'</div>'
-      +'<div class="invDDesc">'+invDesc(k)+'</div>'
-      +'<div class="invDHint">'+itemSizeOf(k)+' 格 · ¥'+formatMoney(itemSellPrice(k))+' · 拖拽换位 · R 旋转</div>'
-      +'<div class="invDBtns">'+acts+'<button class="optBtn" id="arRotate">旋转</button></div>';
-    const rb=el('arRotate');
-    if(rb) rb.onclick=function(){ if(INVGRID.rotate('arGrid',k)){ if(isOwned) saveMeta(); renderArmoryGrid(tab); } else showScorePop('旋转后放不下'); };
+  const owned=tab==='warehouse', n=owned?ownedCount(k):META.loot[k]||0;
+  const kind=itemKind(k), L=META.loadout;
+  const slots={armor:'armor',helmet:'helmet',headset:'headset',pack:'pack',chest:'chest',gear:'nvg',plate:'plate'};
+  const action=(id,label,disabled=false)=>'<button class="optBtn arBtn" data-key="'+k+'" data-action="'+id+'" '+(disabled?'disabled':'')+'>'+label+'</button>';
+  let acts='';
+  if(!owned) acts=action('loot-keep','移入仓库');
+  else if(kind==='weapon'){
+    acts=action('equip',L.primary===k?'已装备主武器':'装入主武器',L.primary===k)
+        +(L.primary!==k?action('equip-side',L.secondary===k?'已装备副武器':'装入副武器',L.secondary===k):'')
+        +action('workbench','改装此枪')+action('find-supply','查找配套弹药');
+  }else if(slots[kind]){
+    const active=L[slots[kind]]===k;
+    acts=action('equip',active?'已装备':'装备',active);
   }
+  if(owned&&kind!=='weapon'&&TRADE_KEYS.includes(k)) acts+=action('find-supply','同款补货');
+  const detail=el('arDetail');
+  detail.innerHTML='<div class="arDetailTop"><span class="arGlyph"></span><strong class="invDName"></strong></div><div class="invDDesc"></div>'
+    +'<dl class="arFacts"><div><dt>数量</dt><dd>'+n+'</dd></div><div><dt>单件占用</dt><dd>'+itemSizeOf(k)+' 格</dd></div><div><dt>单件售价</dt><dd>¥'+formatMoney(itemSellPrice(k))+'</dd></div></dl>'
+    +'<div class="invDBtns">'+acts+action(owned?'sell':'loot-sell','出售 1 件')+(armoryGridMode?'<button class="optBtn" id="arRotate">旋转格位</button>':'')+'</div>';
+  detail.querySelector('.arGlyph').textContent=itemIconOf(k);
+  detail.querySelector('strong').textContent=invName(k); detail.querySelector('.invDDesc').textContent=invDesc(k);
+  const rb=el('arRotate');
+  if(rb) rb.onclick=()=>{
+    if(INVGRID.rotate('arGrid',k)){ saveMeta(); renderArmoryGrid(tab); }
+    else showScorePop('旋转后放不下');
+  };
 }
-
-// 包在 48_shopsearch 的 renderArmory 外层: 先让原逻辑渲染, 再把仓库/战利品换成网格
-const _armoryBase=window.renderArmory;
-window.renderArmory=function(tab){
-  const r=_armoryBase.apply(this,arguments);
-  try{ if(tab==='warehouse'||tab==='loot') renderArmoryGrid(tab); }
-  catch(e){ console.warn('[inv] armory grid failed',e); }
-  return r;
-};

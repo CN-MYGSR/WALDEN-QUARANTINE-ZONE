@@ -70,5 +70,22 @@ const data = fs.readFileSync('js/01_data.js', 'utf8');
 t('CAMPAIGN_IDX 有 storyOnly 回退', /if\(CAMPAIGNS\[i\]&&CAMPAIGNS\[i\]\.storyOnly&&!localStorage\.getItem\('sf_story'\)\) i=0;/.test(data));
 t('两张剧情地图都标了 storyOnly', (data.match(/storyOnly:true/g) || []).length === 2);
 
+const story=fs.readFileSync('js/56_story.js','utf8');
+const objectives=story.slice(story.indexOf('function storyCarried('),story.indexOf('function storySpawnAt('));
+const inventory={loot:{ledx:2},secure:['ledx']}, actor={pos:{x:0,z:0}}, ally={alive:true,pos:{x:0,z:0}};
+const targets={obj:[{type:'fetch',key:'ledx',n:3},{type:'reach',x:0,z:0,r:2}]};
+const reached=new Function('RUN','SRAID','player','SQUAD',objectives+';return storyObjectivesMet;')(inventory,targets,actor,{members:[ally]});
+t('身上与安全箱的样本合计满足目标',reached());
+actor.pos.x=25;
+t('离开已抵达的地点仍完成地点目标',reached());
+inventory.loot.ledx=1;
+t('撤离前丢掉样本会撤销勾选并阻止通关',!reached()&&!targets.obj[0].met);
+inventory.loot.ledx=2;
+t('重新拿够后恢复样本目标',reached());
+targets.obj=[{type:'escort',x:0,z:0,r:2,n:1}];
+t('护送队友到位时完成目标',reached());
+ally.pos.x=10;
+t('队友离开撤离点后取消护送目标',!reached()&&!targets.obj[0].met);
+
 console.log('\n' + (fail ? '❌ ' + fail + ' 项失败 / ' + (pass + fail) + ' 项' : '✅ 全部 ' + pass + ' 项通过'));
 process.exit(fail ? 1 : 0);

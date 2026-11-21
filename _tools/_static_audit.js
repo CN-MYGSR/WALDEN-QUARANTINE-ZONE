@@ -633,7 +633,7 @@ log('=== 9. 剧情模式 (章节 / 地图接入 / 钩子) ===');
       ['storyApplyKit 存在', /function storyApplyKit\(\)/.test(st)],
       ['deployPlayer 被 wrap (配装生效)', /deployPlayer=function\(\)\{ const r=_storyOrigDeployPlayer/.test(st)],
       ['自动进场 (跳过装备选择)', /function storyAutoDeploy\(\)/.test(st) && /db\.onclick\(\)/.test(st)],
-      ['剧情面板标注配装', /scKit/.test(st)],
+      ['剧情面板标注配装', st.includes('本章配发装备')],
     ];
     for (const [label, okFlag] of checks) { if (okFlag) ok(label); else bad('剧情配装缺失: ' + label); }
     // 配装用到的键必须真实存在
@@ -652,21 +652,11 @@ log('=== 9. 剧情模式 (章节 / 地图接入 / 钩子) ===');
     else ok('56_story.js 在 46_throwables.js 之后加载 (手雷数不会被覆盖)');
   }
 
-  // ⑧ ⚠️ 目标判定必须用**局内锁存的 o.met**, 不能在结算时重新求值
-  //    线上事故: reach(抵达竖井口) 是瞬时目标 —— 玩家走到撤离点结算时 hypot() 必然 false
-  //    → 目标判为未达成 → STORY.done 不写 → **章节完成后无法继续下一章**。
+  // ⑧ 用实际章节判定检验到访、携带和护送，它们的完成条件不同。
   {
-    const fn = (st.match(/function storyObjectivesMet\(\)\{([\s\S]*?)\n\}/) || [])[1] || '';
-    if (!fn) bad('读不到 storyObjectivesMet');
-    else {
-      if (!/o\.met\)\s*continue/.test(fn)) bad('storyObjectivesMet 没有用锁存的 o.met —— reach 这类瞬时目标会在结算时判失败, 章节无法通关');
-      else ok('storyObjectivesMet 用局内锁存的 o.met 判定');
-      if (!/o\.type==='escort'\)\{ if\(!storyObjMet\(o\)\) return false/.test(fn)) log("     ⚠️ storyObjectivesMet 里 escort 没有单独重新求值 —— 护送应要求「撤离那一刻队友在位」");
-      else ok('escort 在结算时单独重新求值 (要求撤离时仍在位)');
-    }
-    const latch = (st.match(/for\(const o of SRAID\.obj\)\{\n\s*if\(o\.met\) continue;([\s\S]*?)\n\s*\}/) || [])[1] || '';
-    if (/o\.type==='extract'\|\|o\.type==='escort'\) continue/.test(latch)) ok('escort 不在局内锁存 (HUD 反映真实状态)');
-    else log('     ⚠️ escort 被局内锁存 —— HUD 会一直显示已完成');
+    const probe=require('node:child_process').spawnSync(process.execPath,[R('_tools/_storyonly_probe.js')],{cwd:ROOT,encoding:'utf8'});
+    if(probe.status===0) ok('剧情地图与目标行为检查通过');
+    else bad('剧情行为检查失败\n'+(probe.stderr||probe.stdout||probe.error));
   }
 
   // ⑨ 剧情模式的健壮性 —— 它挂在**主循环 / 建局 / 结算**三条主链路上, 抛错会拖垮整个游戏
@@ -677,7 +667,7 @@ log('=== 9. 剧情模式 (章节 / 地图接入 / 钩子) ===');
     const fnRaw = (st.match(/function storyApplyChapter\(\)\{([\s\S]*?)\n\}/) || [])[1] || '';
     // ⚠️ 必须先剥掉行注释再断言 —— 否则「注释里写的旧代码」也会被匹配到 (本次就踩了:
     //    注释里引用了 `if(SRAID.ch) storyClearPending();` 作为反例, 结果被当成真代码报错)
-    const fn = fnRaw.split('\n').map(l => l.replace(/\/\/.*$/, '')).join('\n');
+    const fn = fnRaw.replace(/\/\/[^\r\n]*/g,'');
     if (!fn) bad('读不到 storyApplyChapter');
     else {
       if (/if\(SRAID\.ch\)\s*storyClearPending\(\)/.test(fn)) bad('storyApplyChapter 只在采纳时清待打标记 —— 地图不匹配时标记残留, 之后每次加载都会被强制进场');
@@ -690,7 +680,7 @@ log('=== 9. 剧情模式 (章节 / 地图接入 / 钩子) ===');
     else ok('自动进场校验地图 (不匹配就清标记放弃)');
     if (!/try\{ storyUpdate\(dt\); \}/.test(st)) bad('每帧的 storyUpdate 没有 try/catch —— 抛错会让主循环后半段全不执行, 且每帧刷错');
     else ok('每帧钩子有 try/catch (剧情 bug 不会拖垮主循环)');
-    if (!/try\{ storyOnRaidEnd\(extracted\); \}/.test(ext)) bad('结算钩子没有 try/catch —— 抛错会让 finishRaid 中断, 永远结算不了');
+    if (!/try\s*\{\s*(?:\w+\s*=\s*)?storyOnRaidEnd\(extracted\);\s*\}\s*catch\(/.test(ext)) bad('结算钩子没有 try/catch —— 抛错会让 finishRaid 中断, 永远结算不了');
     else ok('结算钩子有 try/catch');
   }
 

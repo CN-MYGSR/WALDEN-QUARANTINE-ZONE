@@ -65,6 +65,9 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await ev(`(function(){ const b=document.getElementById('deployBtn'); if(b) b.click(); return 1; })()`);
   await sleep(3000);
   log('  部署后 helmetKey  = ' + await ev(`(function(){try{return player.helmetKey+' / '+(player.helmetDef?player.helmetDef.name:'无');}catch(e){return 'EXC';}})()`));
+  if (await ev(`el('loadoutSummary').textContent.includes('头盔: '+player.helmetDef.name)`) !== true) {
+    log('配装摘要与部署头盔不符'); return finish(1);
+  }
   log('  头盔减伤/耐久     = ' + await ev(`(function(){try{return Math.round(player.helmetResist*100)+'% / '+player.helmetDur+'/'+player.helmetMax;}catch(e){return 'EXC';}})()`));
   log('  护甲减伤/耐久     = ' + await ev(`(function(){try{return Math.round(player.armorResist*100)+'% / '+player.armorDur+'/'+player.armorMax;}catch(e){return 'EXC';}})()`));
 
@@ -138,8 +141,9 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   })()`));
 
   log('\n=== 9. HUD ===');
-  log('  helmetHud 文案 = ' + await ev(`(function(){try{ player.helmetDef=HELMET_DEFS.helm4; player.helmetResist=0.2; player.helmetDur=54; player.helmetMax=54; player.armorDef=ARMOR_DEFS.armor5; player.armorResist=0.22; player.armorDur=60; player.armorMax=60; if(typeof updateHUD==='function') updateHUD(0.016); return (document.getElementById('helmetHud')||{}).textContent||'NO_EL'; }catch(e){ return 'EXC '+e.message; }})()`));
-  log('  armorHud 文案  = ' + await ev(`(document.getElementById('armorHud')||{}).textContent||'NO_EL'`));
+  const armorText = await ev(`(()=>{ player.armorDef=ARMOR_DEFS.armor5; player.armorMax=60; player.armorDur=54; updateHUD(0.2); return el('armorHud').textContent; })()`);
+  log('  护甲 HUD = ' + armorText);
+  if (!String(armorText).includes('54/60')) return finish(1);
 
   log('\n=== 10. 尸体掉落头盔 ===');
   log('  ' + await ev(`(function(){

@@ -28,6 +28,7 @@ const NET={
   enabled:false,
   joining:false,
   matchAttempt:null,
+  returnRoom:null,
   remote:{},        // peerId -> Bot 代理
   lastSend:0,
   lastNpc:0,
@@ -43,6 +44,21 @@ const NET_CFG={
   autoMatchMs:30000,// 自动找房上限 30s，超时用 NPC
   codeLen:5,
 };
+
+// 只有主动切换地图/阵营时才保留队伍，普通刷新或退出仍按正常离房处理。
+function netRememberRoomForMap(idx){
+  const team=NET.room?{code:NET.roomId,user:VIBE.user?.id,host:NET.isHost}:NET.returnRoom;
+  if(!team?.user) return;
+  try{
+    sessionStorage.setItem('sf_net_map_room',JSON.stringify({...team,map:idx}));
+    NET.room?.leave();
+  }catch(e){}
+}
+try{
+  const team=JSON.parse(sessionStorage.getItem('sf_net_map_room'));
+  sessionStorage.removeItem('sf_net_map_room');
+  if(team?.map===CAMPAIGN_IDX&&team.user&&/^[A-Z0-9]{3,8}$/.test(team.code)) NET.returnRoom=team;
+}catch(e){}
 
 // ---------------- 房间码 ----------------
 const CODE_AB='ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // 去掉易混的 I/O/0/1
@@ -62,52 +78,84 @@ async function netCreateRoom(){
 async function netJoinRoom(code){
   if(!VIBE.client||!VIBE.user){ netSetMsg('请先登录 VibeHub'); return false; }
   code=String(code||'').trim().toUpperCase();
-  if(code.length<3){ netSetMsg('房间码太短'); return false; }
-  if(NET.room) await netLeave();
+  if(!/^[A-Z0-9]{3,8}$/.test(code)){
+    el('netCode').setAttribute('aria-invalid','true');
+    netSetMsg('请输入 3 至 8 位字母或数字的房间码。');
+    el('netCode').focus();
+    return false;
+  }
+  if(NET.room) return NET.roomId===code;
   return await netJoin(code,false);
 }
 async function netJoin(code,asHost,attempt){
   if(NET.joining) return false;
-  const joining=attempt||{};
+  const joining=attempt||{asHost};
+  const returning=NET.returnRoom?.code===code&&NET.returnRoom.user===VIBE.user.id?NET.returnRoom:null;
+  const active=()=>NET.joining===joining&&(!attempt||netMatchActive(attempt));
+  const formFocus=el('netForm').contains(document.activeElement);
   NET.joining=joining;
+  netRenderLobby();
+  if(formFocus) el('netCancel').focus();
+  let room, announced=false;
   try{
-    const room=await VIBE.client.room.join(code,{ topology:'host' });
-    if(attempt&&!netMatchActive(attempt)){
-      if(room!==NET.room) try{ await room.leave(); }catch(e){}
-      return false;
+    // SDK 的 join 也会创建新房间；手输的房间码应先确认存在。
+    if(!asHost&&!returning?.host&&(!attempt||returning)){
+      const info=await VIBE.client.rooms.get(code);
+      if(!active()) return false;
+      if(!info||!info.open||info.slug!==WORK_SLUG) throw Error('房间不存在或已关闭，请核对房间码。');
+      if(info.max&&info.players>=info.max) throw Error('房间已满。');
     }
+    room=await VIBE.client.room.join(code,{ topology:'host' });
+    if(!active()) return false;
+    if(asHost&&!room.isHost) throw Error('房间码已被使用，请重新创建。');
+    if(!asHost&&room.isHost&&!returning?.host&&(!attempt||returning)) throw Error('原房间已关闭，请联系好友确认。');
+    if(room.isHost){
+      announced=true;
+      await room.announce({ open:true, listed:true, max:NET_CFG.maxPlayers, mode:'coop', slug:WORK_SLUG });
+    }
+    if(!active()) return false;
+    room.onMessage((msg,from)=>{ if(NET.room===room) netOnMessage(msg,from); });
+    room.onPeer(ev=>{ if(NET.room===room) netOnPeer(ev); });
+    room.send({t:'hello', name:VIBE.user.name||'玩家'});
     NET.room=room; NET.roomId=code; NET.peerId=room.peerId; NET.isHost=!!room.isHost;
-    NET.enabled=true; NET.err='';
-    room.onMessage(netOnMessage);
-    room.onPeer(netOnPeer);
-    // 房主登记房间，让别人能通过 quickJoin 找到
-    if(NET.isHost){
-      try{ await room.announce({ open:true, listed:true, max:NET_CFG.maxPlayers, mode:'coop', slug:WORK_SLUG }); }catch(e){}
-    }
-    // 广播自己的加入，让房主安排 NPC 补位
-    room.send({t:'hello', name:(VIBE.user&&VIBE.user.name)||'玩家'});
-    netSetMsg('已进入房间 '+code+(NET.isHost?'（房主）':''));
-    netRenderLobby();
+    NET.returnRoom=null; NET.enabled=true; NET.err='';
+    netSetMsg(asHost?'房间已创建，可以把房间码发给好友。':'已加入队伍。');
     return true;
   }catch(e){
-    if(attempt&&!netMatchActive(attempt)) return false;
+    if(!active()) return false;
     NET.err=(e&&e.message)||String(e);
-    netSetMsg('加入失败：'+NET.err);
+    netSetMsg((asHost?'创建失败：':'加入失败：')+NET.err);
     return false;
-  }finally{ if(NET.joining===joining) NET.joining=false; }
+  }finally{
+    if(NET.joining===joining){
+      const returnFocus=document.activeElement===el('netCancel');
+      NET.joining=false;
+      netRenderLobby();
+      if(returnFocus) el(NET.room?'netCopy':(asHost?'netCreate':'netCode')).focus();
+    }
+    if(room&&room!==NET.room) await netReleaseRoom(room,announced);
+  }
+}
+async function netReleaseRoom(room,unlist=room.isHost){
+  try{ if(unlist) await room.close(); }catch(e){}
+  try{ await room.leave(); }catch(e){}
+}
+function netCancelManualJoin(){
+  if(!NET.joining||NET.joining===NET.matchAttempt) return;
+  NET.joining=false;
+  netSetMsg('已取消连接。');
 }
 async function netLeave(){
   const r=NET.room;
   NET.room=null; NET.enabled=false; NET.isHost=false; NET.roomId=''; NET.peerId='';
   for(const k in NET.remote){ netDropRemote(k); }
-  try{ if(r){ if(r.isHost) await r.close(); r.leave(); } }catch(e){}
   netSetMsg('已离开房间');
-  netRenderLobby();
+  if(r) await netReleaseRoom(r);
 }
 
 // ---------------- 自动找房（部署时，上限 30s） ----------------
 function netMatchActive(attempt){
-  return NET.matchAttempt===attempt&&Date.now()<attempt.deadline;
+  return NET.matchAttempt===attempt&&!attempt.error&&Date.now()<attempt.deadline;
 }
 async function netAutoMatch(attempt){
   while(netMatchActive(attempt)){
@@ -123,35 +171,27 @@ async function netAutoMatch(attempt){
 // ---------------- 大厅 UI ----------------
 function netSetMsg(s){ NET.msg.unshift(String(s)); NET.msg=NET.msg.slice(0,4); netRenderLobby(); }
 function netRenderLobby(){
-  const box=document.getElementById('netBox');
-  if(!box) return;
-  const inRoom=!!NET.room;
-  let h='';
-  if(!VIBE.ready){
-    h+='<div class="vhTip">未连接 VibeHub，联机不可用。</div>';
-  }else if(!VIBE.user){
-    h+='<div class="vhTip">联机需要先登录 VibeHub。</div>';
-  }else if(inRoom){
-    const peers=NET.room.peers?NET.room.peers():[];
-    const open=peers.filter(function(p){return p.open;}).length;
-    h+='<div class="netRoom"><b>房间码 '+NET.roomId+'</b>'+(NET.isHost?' · 你是房主':'')
-      +'<div class="vhTip">已在房 '+(open+1)+' 人 · 队友位缺的用 AI 补足（每队 4 人）</div>'
-      +'<button class="optBtn" id="netCopy">复制房间码</button> '
-      +'<button class="optBtn" id="netLeave">离开房间</button></div>';
-  }else{
-    h+='<div class="netRow"><input id="netCode" class="netInput" maxlength="8" placeholder="输入房间码" autocomplete="off">'
-      +'<button class="optBtn" id="netJoin">加入</button>'
-      +'<button class="optBtn" id="netCreate">创建房间</button></div>';
+  const online=VIBE.ready&&!!VIBE.user;
+  const joining=online&&NET.joining&&NET.joining!==NET.matchAttempt;
+  el('netForm').hidden=!online||!!NET.room||!!joining;
+  el('netRoom').hidden=!online||!NET.room;
+  el('netCancel').hidden=!joining;
+  let hint='登录后创建房间，或输入好友的房间码。每队最多 4 人。';
+  if(!VIBE.ready) hint=VIBE.err?'联机服务未连接。你仍可从「出击」开始单人行动。':'正在连接 VibeHub…';
+  else if(joining) hint=NET.joining.asHost?'正在创建房间…':'正在加入房间…';
+  else if(online) hint=NET.room?'把房间码发给好友，然后各自选择同一张出击地图。':'创建房间邀请好友，或输入房间码加入已有队伍。';
+  if(online&&!joining&&NET.returnRoom?.user===VIBE.user.id) hint='部署时会重新连接房间 '+NET.returnRoom.code+'，也可在此输入房间码提前加入。';
+  el('netHint').textContent=hint;
+  const note=el('netTeamNote');
+  note.hidden=!NET.returnRoom&&!NET.room;
+  if(!note.hidden) note.textContent=NET.room?'当前队伍 · '+NET.roomId:'部署时重连队伍 · '+NET.returnRoom.code;
+  if(NET.room){
+    const count=1+(NET.room.peers?.()||[]).filter(peer=>peer.open).length;
+    el('netShare').value=NET.roomId;
+    el('netMembers').textContent=(NET.isHost?'你是房主':'你是队员')+' · 队员 '+count+' / '+NET_CFG.maxPlayers+' 人，空位由 AI 补足';
   }
-  if(NET.msg.length) h+='<div class="netLog">'+NET.msg.map(function(m){return '<div>'+String(m).replace(/[<>&]/g,'')+'</div>';}).join('')+'</div>';
-  box.innerHTML=h;
-  const q=function(id){ return document.getElementById(id); };
-  if(q('netCreate')) q('netCreate').onclick=netCreateRoom;
-  if(q('netJoin')) q('netJoin').onclick=function(){ netJoinRoom(q('netCode')?q('netCode').value:''); };
-  if(q('netLeave')) q('netLeave').onclick=netLeave;
-  if(q('netCopy')) q('netCopy').onclick=function(){
-    try{ navigator.clipboard.writeText(NET.roomId); netSetMsg('房间码已复制：'+NET.roomId); }catch(e){ netSetMsg('房间码：'+NET.roomId); }
-  };
+  const log=NET.msg[0]||'';
+  if(el('netLog').textContent!==log) el('netLog').textContent=log;
 }
 
 // ---------------- 远端玩家代理 ----------------
@@ -248,7 +288,7 @@ function netOnPeer(ev){
   if(ev.type==='join'){ netSetMsg('有玩家接入'); }
   else if(ev.type==='leave'){ netDropRemote(ev.id); netSetMsg('有玩家断开 · AI 已顶替'); }
   else if(ev.type==='error'){ NET.err=ev.reason||'连接错误'; netSetMsg('连接错误：'+NET.err); }
-  netRenderLobby();
+  else netRenderLobby();
 }
 function netBroadcastRoster(){
   if(!NET.room) return;
@@ -449,23 +489,34 @@ function netAfterStart(){
 
 // ---------------- 部署时自动找房（上限 30s，超时用 NPC） ----------------
 function netShowSearching(on,t){
-  const el=document.getElementById('netSearch');
-  if(el){ if(on) el.classList.remove('hidden'); else el.classList.add('hidden'); }
-  const tt=document.getElementById('netSearchT');
-  if(tt) tt.textContent=t!=null?(' '+t+'s'):'';
+  const box=el('netSearch'), focus=on&&box.classList.contains('hidden')&&document.activeElement===el('deployBtn');
+  box.classList.toggle('hidden',!on);
+  el('netSearchT').textContent=t!=null?(t+' 秒'):'';
+  if(focus) el('netSkip').focus();
 }
 function netResetDeploy(){
   if(NET.matchAttempt) NET.matchAttempt.finish(false);
 }
 function netPrepareDeployment(){
   if(NET.matchAttempt) return false;
-  if(!VIBE.user||!VIBE.client||NET.room||
+  const team=NET.returnRoom;
+  if(NET.room||(!team&&(!VIBE.user||!VIBE.client))||
     (typeof storyPendingIdx==='function'&&storyPendingIdx()>=0)||CAMPAIGN.rangeOnly) return null;
   const attempt={deadline:Date.now()+NET_CFG.autoMatchMs};
   NET.matchAttempt=attempt;
   return new Promise(resolve=>{
     const update=()=>netShowSearching(true,Math.max(0,Math.ceil((attempt.deadline-Date.now())/1000)));
-    const timer=setTimeout(()=>attempt.finish(true),NET_CFG.autoMatchMs);
+    const failed=message=>{
+      if(NET.matchAttempt!==attempt||attempt.error) return;
+      attempt.error=message;
+      if(NET.joining===attempt) NET.joining=false;
+      clearInterval(countdown); clearTimeout(timer);
+      el('netSearchLabel').textContent='队伍未连接';
+      el('netSearchT').textContent='';
+      el('netSearchDetail').textContent=message;
+      el('netRetry').hidden=false;
+    };
+    const timer=setTimeout(()=>team?failed('连接超时，可以重试或单人出击。'):attempt.finish(true),NET_CFG.autoMatchMs);
     const countdown=setInterval(update,1000);
     attempt.finish=proceed=>{
       if(NET.matchAttempt!==attempt) return;
@@ -475,18 +526,61 @@ function netPrepareDeployment(){
       netShowSearching(false);
       resolve(proceed);
     };
+    el('netRetry').hidden=true;
+    el('netSearchLabel').textContent=team?'正在重连 '+team.code:'正在寻找队友';
+    el('netSearchDetail').textContent=team?'准备与原队伍会合':'缺席队友由 AI 补位';
+    el('netSkip').textContent=team?'单人出击':'跳过匹配';
     update();
-    netAutoMatch(attempt).then(()=>attempt.finish(true),()=>attempt.finish(true));
+    if(team){
+      Promise.resolve(VIBE.boot).then(async()=>{
+        if(!netMatchActive(attempt)) return;
+        if(!VIBE.client||VIBE.user?.id!==team.user){ failed('请到联机大厅登录原账号后重试。'); return; }
+        if(await netJoin(team.code,false,attempt)) attempt.finish(true);
+        else failed(NET.err||'没有找到原队伍。');
+      }).catch(()=>failed('联机服务暂时无法连接。'));
+    }else netAutoMatch(attempt).then(()=>attempt.finish(true),()=>attempt.finish(true));
   });
 }
 
 window.addEventListener('load',function(){
   netPatchFriendlyFire();
-  setTimeout(function(){
-    netRenderLobby();
-    const lg=document.getElementById('vhLogin'), lo=document.getElementById('vhLogout');
-    if(lg) lg.onclick=vibeLogin;
-    if(lo) lo.onclick=vibeLogout;
-  },0);
+  el('vhLogin').onclick=vibeLogin;
+  el('vhLogout').onclick=vibeLogout;
+  el('netCreate').onclick=netCreateRoom;
+  el('netForm').onsubmit=e=>{
+    e.preventDefault();
+    netJoinRoom(el('netCode').value);
+  };
+  el('netCode').oninput=()=>el('netCode').removeAttribute('aria-invalid');
+  el('netCancel').onclick=()=>{
+    const asHost=NET.joining&&NET.joining.asHost;
+    netCancelManualJoin();
+    el(asHost?'netCreate':'netCode').focus();
+  };
+  el('netCopy').onclick=async()=>{
+    const room=NET.room, code=NET.roomId;
+    try{
+      await navigator.clipboard.writeText(code);
+      if(room===NET.room) netSetMsg('房间码已复制。');
+    }catch(e){
+      if(room!==NET.room) return;
+      el('netShare').focus(); el('netShare').select();
+      netSetMsg('已选中房间码，请使用系统复制。');
+    }
+  };
+  el('netPlay').onclick=()=>showMenuPanel('mPlay');
+  el('netLeave').onclick=()=>{
+    netLeave();
+    el('netCode').focus();
+  };
+  el('netSkip').onclick=()=>{
+    NET.returnRoom=null; netRenderLobby();
+    NET.matchAttempt?.finish(true);
+  };
+  el('netRetry').onclick=()=>{
+    netResetDeploy();
+    el('deployBtn').click();
+  };
+  netRenderLobby();
   // 主循环挂钩在 30_main.js 里 (每帧 netTick(dt))，这里不再自建 rAF
 });

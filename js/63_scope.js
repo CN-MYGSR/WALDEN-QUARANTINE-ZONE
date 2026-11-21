@@ -125,7 +125,7 @@ void main(){
   function isLensOptic(key){ return modeOf(key)===1; }
   // 15_viewmodel 用: 这个武器此刻是否应该「主相机保持腰射视野」
   function keepWide(key,blend){
-    if(!(blend>0.55)) return false;
+    if(!(blend>0.001)) return false;
     return isLensOptic(key);
   }
   function camKey(){
@@ -168,15 +168,17 @@ void main(){
     if(st.lens) st.lens.removeFromParent();
     st.lens=null;
     st.gun=null;
+    st.show=false;
+    st.mode=modeOf(key||VM.key);
     const L=parts&&parts.gun&&parts.gun.userData&&parts.gun.userData.scopeLens;
-    if(!L||modeOf(key||VM.key)!==1) return false;
+    if(!L||st.mode!==1) return false;
     const mesh=st.quad||(st.quad=new THREE.Mesh(new THREE.PlaneGeometry(1,1),st.mat));
     mesh.position.copy(L.pos);
     mesh.scale.setScalar(L.r*2);
     mesh.renderOrder=30;
     mesh.frustumCulled=false;
     parts.gun.add(mesh);
-    st.lens=mesh; st.gun=parts.gun; st.baseR=L.r; st.lensPos=L.pos.clone(); st.mode=1;
+    st.lens=mesh; st.gun=parts.gun; st.baseR=L.r; st.lensPos=L.pos.clone();
     return true;
   }
 
@@ -189,8 +191,9 @@ void main(){
     const wp=V3(); st.lens.getWorldPosition(wp);
     const nd=wp.clone().project(vmCamera);
     if(nd.z<-1||nd.z>1||Math.abs(nd.x)>1.5||Math.abs(nd.y)>1.5) return false;
-    const base=(typeof SETTINGS!=='undefined'&&SETTINGS&&SETTINGS.fov)||74;
-    st.fov=Math.min(adsFovOf(key),base-1);
+    // 镜片只占屏高的一部分。同样的目标通过 1× 镜片应与镜外等大。
+    const halfAngle=adsFovOf(key)*Math.PI/360;
+    st.fov=Math.atan(Math.tan(halfAngle)*fracOf(key))*360/Math.PI;
     const b=clamp((typeof VM!=='undefined'&&VM.adsBlend)||0,0,1);
     // 腰射时镜片只占几十像素, 384 足够; 开镜放大到接近全屏, 用 768 保清晰度
     ensureRT(b>0.5?768:384);

@@ -100,7 +100,6 @@ body.mobile #interact { display:none !important; }
 body.mobile #clsTip { display:none !important; }
 body.mobile #braceInd { display:none !important; }
 /* ===== 主菜单 ===== */
-.menuMain { background:rgba(12,12,12,.78) !important; backdrop-filter:blur(3px); }
 .gameLogo { text-align:center; font-size:52px; font-weight:800; letter-spacing:14px; color:#e8e8e8; text-shadow:0 2px 0 #4a4a4a, 0 6px 22px rgba(0,0,0,.8); margin-top:10px; }
 .gameLogoSub { text-align:center; font-size:13px; letter-spacing:6px; color:rgba(220,220,220,.55); margin:4px 0 14px; }
 /* 主页广告语: 上下细线夹一句 slogan, 暗金色 + 斜体, 与暗绿/暗金主题一致 */
@@ -324,6 +323,20 @@ h1.title { font-size:52px; letter-spacing:10px; color:#e8e8e8; text-shadow:0 2px
   #deployActions { flex:none; margin-top:12px; }
 }
 #deployMap { width:100%; border:1px solid rgba(210,210,210,.3); border-radius:4px; background:#1a1a1a; }
+#deployAmmoCount { margin-inline-start:.5rem; color:var(--acc,#f2cc83); font-variant-numeric:tabular-nums; }
+.bagAmmoHelp { color:var(--acc,#f2cc83); margin-top:4px; }
+#deployAmmoHelp { margin-block:4px 8px; font-size:14px; line-height:1.5; color:#d0d3d0; }
+#deployAmmoList { display:grid; gap:6px; }
+.deployAmmoLine { display:flex; align-items:center; flex-wrap:wrap; gap:6px 12px; padding:6px 8px; border:1px solid #515652; border-radius:6px; }
+.deployAmmoLine > :first-child { flex:1 1 110px; }
+.deployAmmoLine b,.deployAmmoLine small { display:block; }
+.deployAmmoLine small { color:#c0c5c1; font-size:12px; }
+.deployAmmoQty { display:inline-flex; align-items:center; gap:4px; }
+.deployAmmoQty output { min-width:1.8em; text-align:center; font-variant-numeric:tabular-nums; }
+.deployAmmoLine button { min-width:40px; min-height:40px; padding:4px 7px; color:inherit; background:#303631; border:1px solid #646c63; border-radius:5px; font:inherit; cursor:pointer; }
+.deployAmmoLine button:disabled { opacity:.48; cursor:default; }
+.deployAmmoLine button:focus-visible { outline:2px solid var(--acc,#f2cc83); outline-offset:2px; }
+@media (pointer:coarse) { .deployAmmoLine button { min-height:44px; min-width:44px; } }
 #deathInfo { text-align:center; color:#e88; font-size:16px; margin-bottom:14px; min-height:22px; }
 #respawnTxt { color:#d8d8d8; }
 #endTitle { font-size:46px; text-align:center; letter-spacing:8px; margin-bottom:8px; }
@@ -626,6 +639,7 @@ body.mobile button.secTake { min-height:34px; padding:6px 14px; font-size:13px; 
   background:transparent; border:1px solid #666; color:#b0b0b0;
   border-radius:5px; padding:5px 16px; font-size:12px; letter-spacing:2px; }
 #mwClose:hover { border-color:#b8b8b8; color:#f0f0f0; }
+#mwHint { margin-top:4px; color:#e3dccb; font-size:12px; line-height:1.35; }
 body.mobile .mwItem { width:88px; padding:6px 4px; }
 body.mobile .mwItem .mwIco { font-size:19px; }
 body.mobile .mwItem .mwName { font-size:11px; letter-spacing:0; }
@@ -758,4 +772,208 @@ body.mobile .lootWrap, body.touchui .lootWrap { max-height:54vh; }
 body.mobile .invTile .itName, body.touchui .invTile .itName { display:none; }
 
 
-#mArmory .arList{overflow:auto}
+/* 出击前的界面共用控件和固定操作栏，中间区域独立滚动。 */
+:is(#menu,#deploy,#end) {
+  --desk:#1b211f; --surface:#29312e; --line:#49534c; --ink:#f1f3ed; --sub:#bac4bb; --amber:#f3cb77;
+  --inset:clamp(16px,3vw,32px);
+  color:var(--ink); color-scheme:dark; font-family:"Segoe UI","Microsoft YaHei",sans-serif;
+  background:rgba(13,19,17,.76);
+  padding:max(12px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));
+}
+:is(#menu,#deploy,#end) .panel {
+  max-width:100%; max-height:100%; padding:0; background:var(--desk); border:1px solid var(--line);
+  border-radius:12px; overflow:hidden; box-shadow:0 16px 64px #0005;
+}
+#menu .menuMain,#deploy .panel { width:900px; height:min(720px,100%); }
+#menu .mSub,#deploy .panel { display:flex; flex-direction:column; min-height:0; }
+#menu .mSub { height:100%; }
+.menuHead,.menuActions,#deployActions {
+  flex:none; display:flex; align-items:center; justify-content:space-between; gap:12px;
+  padding:14px var(--inset); border-bottom:1px solid var(--line);
+}
+:is(#menu,#deploy) .mSubTitle {
+  margin:0; font-size:clamp(23px,3vw,32px); line-height:1.24; text-align:left;
+  font-weight:700; letter-spacing:.02em; color:var(--ink);
+}
+:is(#menu,#deploy) .menuBody,#deployFlex {
+  flex:1; min-height:0; min-width:0; overflow:auto; overscroll-behavior:contain;
+  padding:18px var(--inset); scrollbar-color:#59665d transparent;
+}
+.menuActions,#deployActions { justify-content:flex-end; margin:0; border-bottom:0; border-top:1px solid var(--line); }
+:is(#menu,#deploy,#end) :is(.optBtn,.spawnBtn,.bigBtn) {
+  cursor:pointer; min-height:44px; padding:8px 16px; border-radius:6px; border:1px solid var(--line);
+  background:var(--surface); color:var(--ink); box-shadow:none;
+  font-family:inherit; font-size:15px; font-weight:600; line-height:1.35; letter-spacing:0;
+}
+:is(#menu,#deploy,#end) :is(.optBtn,.spawnBtn,.bigBtn):hover { background:#37433b; color:white; border-color:#879489; }
+:is(#menu,#deploy,#end) .bigBtn { background:var(--amber); border-color:var(--amber); color:#211e15; }
+:is(#menu,#deploy,#end) .bigBtn:hover { background:#ffdb90; border-color:#ffdb90; color:#18170f; }
+:is(#menu,#deploy,#end) .bigBtn:disabled { cursor:default; opacity:.45; }
+:is(#menu,#deploy,#end) :is(button,summary,input,select):focus-visible {
+  outline:3px solid #ffe5a5; outline-offset:2px;
+}
+:is(#menu,#deploy,#end) :is(.optBtn,.spawnBtn).sel { border-color:var(--amber); background:#3d392a; color:#ffe0a0; }
+#menu .backBtn { opacity:1; flex:none; font-size:14px; }
+#menu .backBtn::before,#deployBackBtn::before { content:"‹"; margin-right:.4em; }
+:is(#menu,#deploy) .secLabel,.fieldLabel { margin:16px 0 6px; padding:0; border:0; color:var(--sub); font-size:14px; letter-spacing:0; }
+:is(#menu,#deploy) .rowFlex { gap:8px; }
+.fieldNote { margin:6px 0; color:var(--sub); font-size:13px; line-height:1.6; overflow-wrap:anywhere; }
+.menuFold { margin-top:12px; border:1px solid var(--line); border-radius:8px; }
+.menuFold > summary { cursor:pointer; padding:13px 14px; color:var(--ink); font-size:15px; font-weight:600; }
+.menuFold > summary::marker { color:var(--amber); }
+.menuFold[open] { padding:0 14px 12px; }
+.menuFold[open] > summary { margin:0 -14px 12px; border-bottom:1px solid var(--line); }
+.menuFold[open] > .secLabel:first-of-type { margin-top:0; }
+
+/* 主页把实时地图留在标题右侧，只有出击使用琥珀底色。 */
+#menu:has(#mHome:not(.hidden)) {
+  justify-content:flex-start;
+  background:linear-gradient(90deg,rgba(13,19,17,.96) 6%,rgba(13,19,17,.88) 35%,rgba(13,19,17,.13) 85%);
+}
+#menu:has(#mHome:not(.hidden)) .menuMain {
+  width:min(440px,100%); height:auto; margin-inline-start:clamp(20px,7vw,120px); padding:10px 6px;
+  border:0; background:transparent; box-shadow:none; overflow:auto;
+}
+#mHome { color:var(--ink); text-align:left; }
+#mHome .gameLogoSub { margin:0; text-align:left; text-transform:uppercase; letter-spacing:.16em; font-size:13px; font-weight:600; color:var(--amber); }
+#mHome .gameLogo { margin:7px 0 16px; font-size:clamp(40px,6vw,72px); line-height:1.1; font-weight:760; letter-spacing:.02em; text-align:left; color:white; text-shadow:none; }
+#mHome .gameIntroduction { max-width:34em; font-size:16px; line-height:1.65; color:#d3dbd2; }
+#mHome .menuNav { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:24px 0 14px; }
+#mHome .navBtn { width:auto; text-align:left; padding:12px 16px; }
+#mHome .navBtn[data-p=mPlay] { grid-column:1/-1; display:flex; justify-content:space-between; align-items:center; min-height:52px; font-size:18px; }
+#mHome .navBtn[data-p=mPlay] span { font-size:20px; }
+#mHome .navBtn[data-p=mSet] { grid-column:1/-1; }
+#menuSub { color:var(--sub); font-size:13px; }
+body:has(#menu:not(.hidden),#deploy:not(.hidden),#end:not(.hidden)) #ui { z-index:21; }
+body:has(#menu:not(.hidden),#deploy:not(.hidden),#end:not(.hidden)) #ui > :not(#voSub,#scorePop,#lootToast) { visibility:hidden; }
+
+.deployPage { display:flex; flex:1; flex-direction:column; min-height:0; min-width:0; }
+#fieldNav[hidden] { display:none; }
+:is(#menu,#deploy) .panel:has(> #fieldNav:not([hidden])) {
+  display:grid; width:1060px; grid-template: minmax(0,1fr) / 144px minmax(0,1fr);
+}
+#fieldNav {
+  grid-area:1/1; display:flex; flex-direction:column; gap:4px; padding:18px 10px;
+  min-height:0; overflow-y:auto; border-right:1px solid var(--line); background:#161c19;
+}
+#fieldNav .navIdentity { margin:5px 10px 18px; font-size:16px; font-weight:700; letter-spacing:.04em; color:var(--sub); }
+#fieldNav button {
+  display:flex; align-items:center; gap:10px; min-height:46px; padding:8px 10px;
+  border:1px solid transparent; border-radius:6px; background:transparent;
+  color:var(--sub); cursor:pointer; font-family:inherit; font-size:15px; font-weight:600;
+}
+#fieldNav button:hover { color:white; background:var(--surface); }
+#fieldNav button[aria-current] { color:var(--amber); background:#383628; border-color:#63553b; }
+#fieldNav .routeMark {
+  flex:none; width:22px; color:inherit; text-align:center; font-family:"Segoe UI Symbol",sans-serif; font-size:19px; line-height:1; font-weight:400;
+}
+#fieldNav:not([hidden]) ~ :is(.mSub,.deployPage) { min-width:0; grid-area:1/2; }
+.raidPhase { display:block; color:var(--amber); font-size:12px; font-weight:600; line-height:1.4; margin-bottom:3px; }
+.deployContext { flex:none; text-align:right; }
+#deploy #inspectSpawn { display:none; }
+@media (max-width:759px) {
+  :is(#menu,#deploy) .panel:has(> #fieldNav:not([hidden])) { grid-template:minmax(0,1fr) auto / minmax(0,1fr); }
+  #fieldNav { grid-area:2/1; display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); padding:4px 6px; gap:2px; border:0; border-top:1px solid var(--line); }
+  #fieldNav .navIdentity { display:none; }
+  #fieldNav button { flex-direction:column; justify-content:center; gap:2px; min-height:48px; padding:3px 1px; font-size:13px; }
+  #fieldNav .routeMark { font-size:17px; }
+  #fieldNav:not([hidden]) ~ :is(.mSub,.deployPage) { grid-area:1/1; }
+}
+#mapRow { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
+#mapRow .mapCard { display:flex; flex-direction:column; gap:4px; align-items:flex-start; padding:14px 16px; text-align:left; }
+#mapRow .mapCard strong { font-size:19px; }
+#mapRow .mapCard span { color:var(--sub); font-size:13px; font-weight:400; }
+#mapRow .mapCard.sel strong::after { content:"✓"; margin-left:.55em; font-size:14px; }
+#mapBrief { padding:14px 0 4px; font-size:15px; line-height:1.6; color:var(--ink); }
+#mapBrief b { font-size:14px; font-weight:600; color:var(--amber); }
+#mapBrief p { margin-top:6px; }
+#eloToggle { margin-top:12px; }
+#menu .teamBtn { flex:0 1 160px; }
+
+#deployFlex { display:grid; grid-template-columns:minmax(0,1.7fr) minmax(200px,1fr); align-items:start; gap:var(--inset); }
+#deployLeft,#deployRight { min-width:0; }
+#deployRight { position:sticky; top:0; }
+#deploySpawn > .secLabel { margin-top:0; }
+#raidOverview h2 { margin-bottom:8px; font-size:16px; }
+#raidWeapons { font-size:18px; line-height:1.5; }
+/* 靶场只借用主武器，仓库补给不会带入训练。 */
+#deploy.rangeVisit #deployLeft > :is(.menuFold,#deployAmmo,#consumSummary),
+#deploy.rangeVisit #deployLeft > .loadFields label:has(#secondarySelect) { display:none; }
+#deploy.rangeVisit #deployLeft > .loadFields { grid-template-columns:1fr; }
+#deploy.chapterVisit #deployLeft > :not(#chapterKit,#passOptions,#consumSummary),
+#deploy.chapterVisit #passOptions > :is(summary,.checkField) { display:none; }
+#deploy.chapterVisit #passOptions { margin-top:16px; }
+#deployMapName { color:var(--sub); font-size:15px; text-align:right; }
+#deployMap { display:block; width:100%; max-width:330px; }
+#deploy #deathInfo:empty { display:none; }
+#deploy #deathInfo:not(:empty) { padding:6px var(--inset); margin:0; }
+#deploy .loadFields { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }
+#deploy label,#deploy .fieldLabel { color:var(--sub); font-size:14px; line-height:1.4; }
+#deploy label:not(.checkField) { display:block; }
+#deploy select,#arSearch {
+  display:block; width:100%; min-width:0; height:44px; margin-top:5px; padding:0 10px;
+  color:var(--ink); background:var(--surface); border:1px solid var(--line); border-radius:6px; font:inherit;
+}
+#deploy select:disabled { opacity:.6; }
+#deploy .fieldLabel { margin:0; }
+#deploy .checkField { display:flex; align-items:center; gap:8px; min-height:44px; margin-top:6px; cursor:pointer; }
+#deploy .checkField input { flex:none; width:18px; height:18px; }
+#deployBackBtn { margin-right:auto; }
+#deploy #netSearch { flex:1; min-width:0; margin:0; padding:0; border:0; background:transparent; }
+#deploy #netSearch .netSub { font-size:12px; }
+#deployActions:has(#netSearch:not(.hidden)) #deployBtn { display:none !important; }
+#deploy #rangeExitBtn { background:var(--surface); color:var(--ink); border-color:var(--line); margin-left:0 !important; }
+
+#mSet .sliderRow { flex-wrap:wrap; gap:8px; margin:14px 0; color:var(--ink); }
+#mSet .sliderRow label { min-width:6em; }
+#mSet .sliderRow input[type=range] { width:min(195px,46%); min-height:32px; }
+#mSet .sliderRow .val { color:var(--sub); }
+#mSet #ctrlHelp { display:block; column-count:1; color:var(--sub); line-height:1.7; font-size:14px; }
+#mSet #ctrlHelp > div + div { margin-top:7px; }
+#keyGrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(185px,1fr)); gap:6px; }
+#keyResetBtn { margin-top:10px; }
+#mArmory :is(.arWallet,.arTabs,#arSearch,.arList,.arHint) { margin-inline:var(--inset); }
+#mArmory .arWallet { text-align:left; letter-spacing:0; font-size:15px; }
+#mArmory .arTabs { gap:4px; justify-content:flex-start; margin-block:8px; }
+#mArmory .arTab { min-height:40px; padding:7px 12px; }
+#mArmory #arSearch { flex:none; width:calc(100% - var(--inset) * 2); height:42px; margin-block:0 8px; }
+#mArmory .arList { flex:1; min-height:0; max-height:none; overflow:auto; overscroll-behavior:contain; padding:2px; }
+#mArmory .arHint { flex:none; text-align:left; margin-block:6px 10px; color:var(--sub); font-size:13px; line-height:1.45; letter-spacing:0; }
+#mArmory .arRow { gap:8px; padding:8px; border-color:var(--line); }
+#mArmory .arDesc,#mArmory .invDDesc { color:var(--sub); font-size:13px; }
+#mArmory .arBtn { padding:6px 10px; }
+#mArmory .invTile .itName { display:block; font-size:11px; }
+#mArmory .invDetail { margin-bottom:8px; }
+#mStory .storyCard { border-color:var(--line); }
+#mStory .scBrief,#mStory .scObj,#mStory .scRw,#mNet .vhTip { font-size:14px; }
+#end .panel { padding:var(--inset); width:min(680px,100%); overflow:auto; }
+#endTitle { font-size:clamp(28px,4.5vw,46px); letter-spacing:.05em; }
+#end .center { display:flex; flex-wrap:wrap; justify-content:center; gap:8px; }
+#end #armoryBtn { color:var(--ink); background:var(--surface); border-color:var(--line); }
+
+@media (max-width:620px) {
+  :is(#menu,#deploy,#end) { --inset:14px; }
+  #menu .menuMain,#deploy .panel { height:100%; }
+  #menu:has(#mHome:not(.hidden)) { background:rgba(12,18,16,.87); justify-content:center; }
+  #menu:has(#mHome:not(.hidden)) .menuMain { padding-inline:12px; margin-inline:0; }
+  #deployFlex { display:block; }
+  #deployRight { position:static; margin-top:18px; }
+  #deploy #inspectSpawn { display:block; min-height:44px; padding:5px 10px; margin-top:3px; font-size:13px; }
+  #mArmory .arTabs { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); }
+  #mArmory .arTab { padding-inline:4px; }
+  #mArmory .arRow { flex-wrap:wrap; }
+  #mArmory .arBody { flex:1 1 calc(100% - 56px); }
+  #mArmory .arPrice { text-align:left; min-width:0; margin-right:auto; }
+  .menuActions > .bigBtn { width:100%; }
+  #deployActions > :is(#deployBtn,#resumeBtn) { flex:1; }
+  #deployActions:has(#netSearch:not(.hidden)) { flex-wrap:wrap; }
+  #deployActions #netSearch:not(.hidden) { flex-basis:100%; order:-1; }
+}
+@media (max-height:460px) {
+  :is(#menu,#deploy,#end) { padding-block:max(4px,env(safe-area-inset-top)) max(4px,env(safe-area-inset-bottom)); }
+  .menuHead,.menuActions,#deployActions { padding-block:6px; }
+  #mHome .gameLogo { font-size:36px; margin:2px 0 4px; }
+  #mHome .menuNav { margin-block:10px; gap:4px; }
+  #mHome .navBtn { padding-block:6px; }
+  #deployRight { position:static; }
+}

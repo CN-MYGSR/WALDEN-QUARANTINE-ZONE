@@ -61,17 +61,20 @@ const VO=(()=>{
   function duck(on){
     try{ if(typeof AudioSys!=='undefined'&&AudioSys.setDuck) AudioSys.setDuck(on?0.42:1); }catch(e){}
   }
+  function announce(id){ document.dispatchEvent(new CustomEvent('walden:voicechange',{detail:id})); }
   function release(keepSub){
-    const c=state.cur; if(!c) return;
+    const c=state.cur;
     state.cur=null;
-    try{
-      if(c.audio){ c.audio.onended=null; c.audio.onerror=null; c.audio.pause(); }
-    }catch(e){}
-    clearTimeout(c.timer);
-    duck(false);
+    if(c){
+      try{ c.audio.onended=null; c.audio.onerror=null; c.audio.pause(); }catch(e){}
+      clearTimeout(c.timer);
+      duck(false);
+    }
     if(!keepSub) hideSub();
+    announce('');
   }
-  function stop(){ release(false); }
+  let pendingPriority=0;
+  function stop(){ ++state.seq; pendingPriority=0; release(false); }
 
   // ---------------- 播放 ----------------
   function play(id,opt){
@@ -79,24 +82,23 @@ const VO=(()=>{
     if(!id) return;
     const now=(typeof performance!=='undefined')?performance.now():Date.now();
     if(!opt.force&&state.last[id]&&(now-state.last[id])<3500) return;
-    const cur=state.cur;
-    if(cur){
-      const cp=(cur.entry&&cur.entry.priority)||1;
-      const np=(opt.priority!=null)?opt.priority:2;
-      if(cp>np&&!opt.force) return;          // 剧情在播时, 对局播报让路
-      release(false);
-    }
+    const priority=opt.priority??2;
+    if(!opt.force&&Math.max(pendingPriority,state.cur?.priority||0)>priority) return;
+    if(state.cur) release(false);
     state.last[id]=now;
     const req=++state.seq;
+    pendingPriority=priority;
+    announce(id);
     load().then(()=>{
       if(req!==state.seq) return;            // 已被更新的请求取代
+      pendingPriority=0;
       const e=state.byId[id];
-      if(!e){ console.warn('[voice] 未找到台词 '+id); return; }
+      if(!e){ release(false); console.warn('[voice] 未找到台词 '+id); return; }
       const a=new Audio();
       a.preload='auto';
       a.src=e.file;
       a.volume=Math.max(0,Math.min(1,(typeof SETTINGS!=='undefined'&&SETTINGS.vol!=null)?SETTINGS.vol:0.8));
-      const c={audio:a,entry:e};
+      const c={audio:a,entry:e,priority};
       state.cur=c;
       if(opt.subtitle!==false) showSub(e,(e.dur||4)*1000+800);
       duck(true);
@@ -106,9 +108,7 @@ const VO=(()=>{
       const p=a.play();
       if(p&&p.catch) p.catch(()=>{
         // 浏览器拦截自动播放: 保留字幕, 释放 duck, 不当作致命错误
-        try{ a.pause(); }catch(err){}
-        if(state.cur===c) state.cur=null;
-        duck(false);
+        if(state.cur===c) release(true);
       });
     });
   }
@@ -140,12 +140,13 @@ const VO=(()=>{
 })();
 
 // ---------------- 对局播报 ----------------
-function voWrap(name,after){
+function voWrap(name,after,when){
   const orig=window[name];
   if(typeof orig!=='function') return;
   window[name]=function(){
+    const notify=!when||when();
     const r=orig.apply(this,arguments);
-    try{ after.apply(this,arguments); }catch(e){}
+    if(notify){ try{ after.apply(this,arguments); }catch(e){} }
     return r;
   };
   try{ window[name].__voWrapped=true; }catch(e){}
@@ -164,8 +165,9 @@ voWrap('startExtraction',function(){
   }catch(e){}
 });
 voWrap('finishRaid',function(extracted){
-  VO.play(extracted?'m_extract_ok':'m_signal_lost',{priority:1});
-});
+  VO.stop();
+  VO.play(extracted?'m_extract_ok':RUN.timeout?'m_signal_lost':'m_defeat',{priority:1});
+},()=>!matchOver&&!CAMPAIGN.rangeOnly);
 voWrap('startEndCut',function(winner){
   VO.play(winner===-1?'m_draw':(winner===player.team?'m_victory':'m_defeat'),{priority:1});
 });

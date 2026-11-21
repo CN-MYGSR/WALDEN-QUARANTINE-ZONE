@@ -5,7 +5,7 @@
 // 依赖: 01_data(战役+主题) · 07d_lab(布局) · 37~41(经济/任务/掉落/局内商店)
 // ---------------------------------------------------------------------
 // 本文件承担四件事:
-//   1) 撤离部署界面: 地图选择卡片 —— 点击卡片 → 切图重载 → 自动进入部署界面
+//   1) 撤离部署界面: 选择地图与阵营，确认后进入配装
 //   2) 掉落: 实验室物资箱更密、更值钱 (rich 箱走独立高价值表), 尸体多掉稀有杂物
 //   3) NPC: 实验室守备为 PMC 合同精锐 —— 血更厚 / 反应更快 / 更准 (与 NG+ 叠加)
 //   4) 任务: 新增 4 个实验室专属任务 (地图门控), 并接入新的进度事件
@@ -249,55 +249,49 @@ function storyMapBlocked(){
   if(typeof player!=='undefined'&&player.deployed&&!matchOver) return false;  // 局内重新部署 → 放行
   return true;
 }
+let selectedRaidMap=CAMPAIGN_IDX;
 function renderMapCards(){
   const row=el('mapRow');
   if(!row){ console.warn('[map] #mapRow 不存在, 地图卡片无法渲染 (index.html 版本过旧?)'); return; }
   row.innerHTML='';
+  const current=CAMPAIGNS[selectedRaidMap];
+  if(!current||current.storyOnly||current.rangeOnly) selectedRaidMap=CAMPAIGNS.findIndex(c=>!c.storyOnly&&!c.rangeOnly);
   CAMPAIGNS.forEach((c,i)=>{
     if(c.storyOnly||c.rangeOnly) return;   // 剧情 / 靶场专用地图不进沙盒列表
     const b=document.createElement('button');
-    b.className='optBtn mapCard'+(i===CAMPAIGN_IDX?' sel':'');
-    b.style.minWidth='176px';
-    b.style.textAlign='left';
-    b.style.lineHeight='1.5';
-    b.innerHTML=`<b style="font-size:14px">${c.mapName||c.title}</b>`
-      +`<br><span style="font-size:10px;opacity:.85;color:#e0e0e0">${c.mapTag||''}</span>`
-      +`<br><span style="font-size:11px;opacity:.85;color:#e0b0a0">${c.mapThreat||''}</span>`
-      +`<br><span style="font-size:11px;opacity:.72">${c.mapLoot||''}</span>`
-      +(i===CAMPAIGN_IDX?`<br><span style="font-size:11px;color:#9fe6b4">◈ 当前地图</span>`:'');
-    b.onmouseenter=()=>showMapBrief(i);
-    b.onfocus=()=>showMapBrief(i);
-    b.onclick=()=>selectMapAndDeploy(i);
+    b.className='optBtn mapCard';
+    b.dataset.mapIndex=i;
+    b.innerHTML='<strong></strong><span></span>';
+    b.firstElementChild.textContent=c.mapName||c.title;
+    b.lastElementChild.textContent=c.mapTag||'';
+    b.onclick=()=>showMapBrief(i);
     row.appendChild(b);
   });
-  const cur=CAMPAIGNS[CAMPAIGN_IDX];
-  let _rngPend=false; try{ _rngPend=localStorage.getItem('sf_range')==='1'; }catch(e){}
-  if(cur&&(cur.storyOnly||cur.rangeOnly)&&!storyPendingChapter()&&!_rngPend){
-    // 当前地图是剧情图(打完剧情章节后可能停在这里) → 提示选一张沙盒地图
-    const fb=CAMPAIGNS.findIndex(c=>!c.storyOnly);
-    showMapBrief(fb>=0?fb:0);
-    const box=el('mapBrief');
-    if(box) box.innerHTML='<b style="color:#e0b0a0">当前地图是剧情专用</b> —— 请选一张沙盒地图<br>'
-      +'<span style="opacity:.8">剧情地图只能从主菜单「剧情模式」进入</span>';
-  } else {
-    showMapBrief(CAMPAIGN_IDX);
-  }
+  showMapBrief(selectedRaidMap);
 }
 function showMapBrief(i){
   const box=el('mapBrief');
   const c=CAMPAIGNS[i];
   if(!box||!c) return;
-  box.innerHTML=`<b style="color:#e8e8e8">${c.mapName||c.title}</b> · <span style="opacity:.8">${c.sub}</span><br>`
-    +`${c.mapDesc||''}<br>`
-    +`<span style="color:#e0b0a0">${c.mapThreat||''}</span> · <span style="opacity:.8">${c.mapLoot||''}</span>`;
+  selectedRaidMap=i;
+  for(const b of el('mapRow').children){
+    const chosen=Number(b.dataset.mapIndex)===i;
+    b.classList.toggle('sel',chosen);
+    b.setAttribute('aria-pressed',String(chosen));
+  }
+  box.innerHTML='<b></b><p></p>';
+  box.firstElementChild.textContent=[c.mapThreat,c.mapLoot].filter(Boolean).join('　·　');
+  box.lastElementChild.textContent=c.mapDesc||c.sub||'';
+  el('startBtn').textContent='准备配装 · '+(c.mapName||c.title);
 }
-// 点击地图卡片: 同图 → 直接开打; 换图 → 存档 + 重载 + 自动部署
 function selectMapAndDeploy(idx){
-  if(idx!==CAMPAIGN_IDX){
+  if(idx!==CAMPAIGN_IDX||menuFaction!==FACTION_PICK){
     try{
       localStorage.setItem('sf_campaign',String(idx));
+      localStorage.setItem('sf_faction',menuFaction);
       localStorage.setItem('sf_autodeploy','1');
     }catch(e){}
+    if(typeof netRememberRoomForMap==='function') netRememberRoomForMap(idx);
     location.reload();
     return;
   }
@@ -310,7 +304,6 @@ function beginRaid(){
   player.team=SETTINGS.team;
   matchOver=false;
   player.deployed=false; player.alive=false; player.kills=0; player.deaths=0; player.score=0;
-  // ⚠️ 必须和 29_menus 的 startBtn 重置点**保持一致** —— 少字段会让上一局的状态漏进下一局
   RUN.kills=0; RUN.searches=0; RUN.loot={}; RUN.extracting=false; RUN.scav=false; RUN.scavLoadout=null; RUN.passBrought=false; RUN.nvgBrought=false; RUN.nvgKey=''; RUN.timeout=false;
   RUN.failComp=0; RUN.autoKit=null; RUN.lostGear=null; RUN.returnedGear=null;
   // ELO: 兵力规模随评分浮动
@@ -327,33 +320,10 @@ function beginRaid(){
 // 初始化 (由被包裹的 initMenuUI 调用)
 function mapSelectInit(){
   renderMapCards();
-  // 每次点开「撤离部署」面板都重绘一次地图卡片: 避免任何时序/缓存问题导致卡片区空白
-  try{
-    document.querySelectorAll('.navBtn').forEach(b=>{
-      if(b&&b.dataset&&b.dataset.p==='mPlay')
-        b.addEventListener('click',()=>setTimeout(()=>{ try{ renderMapCards(); }catch(e){} },0));
-    });
-  }catch(e){}
-  // 自愈兜底: 面板可见但卡片区是空的 → 重绘 (正常情况下永远不会触发)
-  if(!mapSelectInit._watch){
-    mapSelectInit._watch=setInterval(()=>{
-      try{
-        const row=el('mapRow'), panel=el('mPlay');
-        if(row&&panel&&!panel.classList.contains('hidden')&&row.children.length===0) renderMapCards();
-      }catch(e){}
-    },1000);
-  }
   const sb=el('startBtn');
-  if(sb){
-    sb.textContent='进 入 '+((CAMPAIGN.mapName||CAMPAIGN.title));
-    sb.onclick=beginRaid;
-  }
-  // 注意: #deployMapName 这个槽位已从 index.html 移除(与地图简介重复), 这里靠 if(dn) 空转。
-  // 保留而不删是因为它没有用户可见效果, 不值得为它单独发一次版。
+  if(sb) sb.onclick=()=>selectMapAndDeploy(selectedRaidMap);
   const dn=el('deployMapName');
-  if(dn) dn.innerHTML=`当前地图 · <b style="color:#e8e8e8">${CAMPAIGN.mapName||CAMPAIGN.title}</b>`
-    +` · <span style="opacity:.8">${CAMPAIGN.mapTag||''}</span>`
-    +` · <span style="color:#e0b0a0">${CAMPAIGN.mapThreat||''}</span>`;
+  if(dn) dn.textContent=(CAMPAIGN.mapName||CAMPAIGN.title)+' · '+FACTIONS[FACTION_PICK].short;
   // 从地图卡片切图重载回来后: 自动进入部署界面
   let auto=false;
   try{

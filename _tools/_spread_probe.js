@@ -18,7 +18,7 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   if (!page) { log('NO_PAGE'); return finish(1); }
   ws = new WS(page.webSocketDebuggerUrl, { perMessageDeflate: false, maxPayload: 256 * 1024 * 1024 });
   let id = 0; const pend = {}; const errs = [];
-  ws.on('message', m => { const j = JSON.parse(m); if (j.id && pend[j.id]) pend[j.id](j); if (j.method === 'Runtime.exceptionThrown') { const s = ((j.params.exceptionDetails.exception || {}).description || '').split('\n')[0]; if (errs.indexOf(s) < 0) errs.push(s); } });
+  ws.on('message', m => { const j = JSON.parse(m); if (j.id && pend[j.id]) pend[j.id](j); if (j.method === 'Runtime.exceptionThrown') { const detail = j.params.exceptionDetails; const s = (detail.exception?.description || detail.text).split('\n').slice(0, 3).join(' '); if (!errs.includes(s)) errs.push(s); } });
   await new Promise(r => ws.on('open', r));
   const rpc = (me, pa) => new Promise(r => { const i = ++id; pend[i] = r; ws.send(JSON.stringify({ id: i, method: me, params: pa || {} })); });
   await rpc('Page.enable'); await rpc('Runtime.enable');
@@ -87,5 +87,5 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
     }catch(e){return 'EXC';}})()`));
     log('  异常 = ' + (errs.length ? errs.join(' | ') : '无'));
   }
-  finish(0);
+  finish(out.some(line => /异常 = (?!无)|NO_ENEMY|\bEXC\b/.test(line)) ? 1 : 0);
 })();

@@ -212,8 +212,8 @@ function weaponAimStaminaMul(slot){
 // 放大瞄具不再固定倍率: 开镜后滚轮 / [ ] 在当前武器 min..max 之间连续调整。
 // 相机 FOV(15_viewmodel)、灵敏度(24_input/31_touch)、镜内渲染(63_scope) 都走 adsFovOf,
 // 所以这里返回连续值, 三处会同步跟随。
-const ZOOM_CUR=Object.create(null);
-const ZOOM_RANGE=Object.create(null);
+const ZOOM_CUR=new WeakMap();
+const ZOOM_RANGE=new WeakMap();
 
 function zoomOpticKind(key){
   const d=(typeof WPN_DEFS!=='undefined')&&WPN_DEFS[key];
@@ -235,34 +235,33 @@ function fovDegToZoom(f){
   const h=(BASE_FOV_74*Math.PI/180)/2;
   return Math.tan(h)/Math.tan((Math.max(f,1)*Math.PI/180)/2);
 }
-function zoomToFovDeg(z){
-  const h=(BASE_FOV_74*Math.PI/180)/2;
+function zoomToFovDeg(z,baseFov=BASE_FOV_74){
+  const h=baseFov*Math.PI/360;
   return 2*Math.atan(Math.tan(h)/Math.max(z,1e-3))*180/Math.PI;
 }
 // 返回 [最小倍, 最大倍]; 不是放大瞄具则 null
 function zoomRangeOf(key){
   const kind=zoomOpticKind(key); if(!kind) return null;
-  const ck=key+'|'+kind+'|'+((WPN_DEFS[key]||{}).adsFov||0);
-  if(ZOOM_RANGE[ck]) return ZOOM_RANGE[ck];
+  const def=WPN_DEFS[key];
+  let ranges=ZOOM_RANGE.get(def);
+  if(!ranges){ ranges=Object.create(null); ZOOM_RANGE.set(def,ranges); }
+  if(ranges[kind]) return ranges[kind];
   const max=Math.max(1.15, fovDegToZoom(baseAdsFovDeg(key)));
   let min=1.0;
   if(kind==='optic_4x') min=1.5;
   else if(kind==='scoped') min=Math.max(1.5, max*0.55);
   min=Math.min(min,max-0.2);
-  return (ZOOM_RANGE[ck]=[min,max]);
+  return (ranges[kind]=[min,max]);
 }
 function zoomOf(key){
   const r=zoomRangeOf(key); if(!r) return null;
-  let z=ZOOM_CUR[key];
-  if(!(z>=r[0]&&z<=r[1])){ z=r[1]; ZOOM_CUR[key]=z; }   // 默认停在最高倍
-  return z;
+  return ZOOM_CUR.get(r)??r[0];
 }
-// 滚轮/按键用: 返回 false 表示这把枪当前不可变倍
+// 一格滚轮或一次按键走八分之一量程，触控板和拖动可传入小数。
 function zoomAdjust(key,dir,step){
-  const r=zoomRangeOf(key); if(!r) return false;
-  const cur=zoomOf(key);
-  const st=step||Math.max(0.04,(r[1]-r[0])/26);
-  ZOOM_CUR[key]=clamp(cur+dir*st,r[0],r[1]);
+  const r=zoomRangeOf(key); if(!r||!Number.isFinite(dir)) return false;
+  const cur=ZOOM_CUR.get(r)??r[0];
+  ZOOM_CUR.set(r,clamp(cur+dir*(step??(r[1]-r[0])/8),r[0],r[1]));
   return true;
 }
 
@@ -271,22 +270,9 @@ function zoomAdjust(key,dir,step){
 // 只加了个模型、根本没放大。现在相机(15_viewmodel)、灵敏度(24_input/31_touch)、
 // 镜内渲染(63_scope) 统一走这个函数, 别再各自读 WPN_DEFS[key].adsFov。
 function adsFovOf(key){
-  const base=WPN_DEFS[key]||{};
-  let f=base.adsFov||60;
-  // ⚠️ 自带镜(scoped)的武器: 它的瞄准镜就是本体, 改件槽里的 optic_2x/4x 只是"换个镜"
-  // 的数值条目(addModVisuals 里 alreadyScoped 直接跳过建模)。再乘一次 0.34 会把
-  // 4x 狙击枪压成 fov 6.8° —— 放大到只剩靶纸。
-  if(!base.scoped){
-    try{
-      const md=(typeof moddedDef==='function')?moddedDef(key):null;
-      if(md&&md.adsFov) f=md.adsFov;
-    }catch(e){}
-  }
   const bf=(typeof SETTINGS!=='undefined'&&SETTINGS&&SETTINGS.fov)||BASE_FOV_74;
-  // 无极变倍: 放大瞄具用当前倍率换算 FOV; 非放大瞄具保持原来的固定 adsFov
   const z=zoomOf(key);
-  if(z) f=zoomToFovDeg(z);
-  return f*(bf/BASE_FOV_74);
+  return z===null?baseAdsFovDeg(key)*(bf/BASE_FOV_74):zoomToFovDeg(z,bf);
 }
 
 // ---- 改装件的视觉部件构建 ----
@@ -331,12 +317,8 @@ function addModVisuals(parts, key) {
       tube.position.set(0, my, p0z-0.05); tube.rotation.x = HPI; G.add(tube);
       const obj = new THREE.Mesh(new THREE.CylinderGeometry(0.017,0.011,0.025,8), gm);
       obj.position.set(0, my, p0z-0.1); obj.rotation.x = HPI; G.add(obj);
-      const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.015,0.002,6,8), gl);
-      r1.position.set(0, my, p0z-0.02); G.add(r1);
-      const r2 = r1.clone(); r2.position.z = p0z-0.08; G.add(r2);
       parts.opticSightY = my;
-      // 目镜挂点 (63_scope): 镜筒后端, 朝相机
-      G.userData.scopeLens={pos:V3(0,my,p0z+0.009), r:0.0145};
+      gunEyepiece(G,0,my,p0z+.009,.0145);
       if(!IS) adsA.pos.y += 0.025;
       if(!IS) adsA.pos.z += 0.055;
     } else if(optic === 'optic_4x') {
@@ -347,11 +329,8 @@ function addModVisuals(parts, key) {
       tube.position.set(0, my, p0z-0.05); tube.rotation.x = HPI; G.add(tube);
       const obj = new THREE.Mesh(new THREE.CylinderGeometry(0.021,0.025,0.035,8), gm);
       obj.position.set(0, my, p0z-0.12); obj.rotation.x = HPI; G.add(obj);
-      const r1 = new THREE.Mesh(new THREE.TorusGeometry(0.019,0.0025,8,10), gl);
-      r1.position.set(0, my, p0z-0.01); G.add(r1);
-      const r2 = r1.clone(); r2.position.z = p0z-0.09; G.add(r2);
       parts.opticSightY = my;
-      G.userData.scopeLens={pos:V3(0,my,p0z+0.024), r:0.0175};
+      gunEyepiece(G,0,my,p0z+.024,.0175);
       if(!IS) adsA.pos.y += 0.035;
       if(!IS) adsA.pos.z += 0.05;
     } else if(optic === 'optic_nvg') {

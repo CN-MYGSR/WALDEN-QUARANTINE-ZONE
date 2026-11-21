@@ -62,7 +62,9 @@ function finish(c) { try { if (ws) ws.close(); } catch (e) { } try { if (proc) p
   await sleep(3000);
   log('  部署后 headsetKey = ' + await ev(`(function(){try{return player.headsetKey+' / '+(player.headsetDef?player.headsetDef.name+' '+player.headsetDef.color:'无');}catch(e){return 'EXC';}})()`));
   log('  听力范围 = ' + await ev(`(function(){try{return player.headsetDef?player.headsetDef.range+'m':'（未佩戴 · 默认 40m）';}catch(e){return 'EXC';}})()`));
-  log('  HUD = ' + await ev(`(document.getElementById('headsetHud')||{}).textContent||'NO_EL'`));
+  if (await ev(`el('loadoutSummary').textContent.includes('耳机: '+player.headsetDef.name)`) !== true) {
+    log('配装摘要与部署耳机不符'); return finish(1);
+  }
 
   log('\n=== 5. Altyn 头盔冲突规则 ===');
   log('  ' + await ev(`(function(){

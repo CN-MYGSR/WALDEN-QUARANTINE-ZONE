@@ -1,47 +1,46 @@
 'use strict';
-// ===================== 军械库 / 市集 物品搜索 =====================
-// 商店物品太多 → 加一个搜索框, 按"名称 + 描述"即时过滤列表。
-// 覆盖所有走 #arList + .arRow 的页签: 商店 / 市集 / 仓库 / 战利品(以及工坊/任务)。
-// 用包裹式扩展 renderArmory: 原逻辑渲染完 DOM 后, 依据当前查询串过滤 .arRow 的显示。
-let SHOP_QUERY='';
 function shopApplyFilter(){
- const list=document.getElementById('arList');
- if(!list) return;
- const q=SHOP_QUERY;
- const rows=list.querySelectorAll('.arRow');
- let shown=0;
- for(const r of rows){
-  const name=r.querySelector('.arName'), desc=r.querySelector('.arDesc');
-  const text=((name?name.textContent:'')+' '+(desc?desc.textContent:'')).toLowerCase();
-  const hit=!q||text.indexOf(q)>=0;
-  r.style.display=hit?'':'none';
-  if(hit) shown++;
+ const list=el('arList');
+ if(!list||list.dataset.section==='workbench') return;
+ const q=el('arSearch').value.trim().toLowerCase(), kind=el('arCategory').hidden?'':el('arCategory').value;
+ const tiles=list.querySelectorAll('.invTile'), rows=list.querySelectorAll('.arRow');
+ let shown=0,firstMatch=null,selectionVisible=false;
+ for(const node of [...tiles,...rows]){
+  const key=node.dataset.key;
+  const name=node.querySelector('.arName')?.textContent||'';
+  const desc=node.querySelector('.arDesc')?.textContent||'';
+  const words=node.dataset.name||(name+' '+desc).toLowerCase();
+  const category=key?armoryCategory(key):node.dataset.category;
+  const hit=(!kind||category===kind)&&(!q||words.includes(q));
+  node.hidden=!hit;
+  if(!hit) continue;
+  shown++;
+  if(key){
+   if(!firstMatch) firstMatch=node;
+   if(node.classList.contains('sel')) selectionVisible=true;
+  }
  }
- // 网格库存 (65_invgrid): 用 tile 的 data-name 过滤
- const tiles=list.querySelectorAll('.invTile');
- for(const t of tiles){
-  const text=(t.dataset.name||'').toLowerCase();
-  const hit=!q||text.indexOf(q)>=0;
-  t.style.display=hit?'':'none';
-  if(hit) shown++;
+ if(tiles.length){
+  if(firstMatch&&!selectionVisible) firstMatch.click();
+  el('arGridHost').hidden=!firstMatch;
+  el('arDetail').hidden=!firstMatch;
  }
- let empty=list.querySelector('.arEmpty');
- if(!q){ if(empty) empty.remove(); return; }
- if(shown===0){
-  if(!empty){ empty=document.createElement('div'); empty.className='arEmpty'; list.appendChild(empty); }
-  empty.textContent='没有匹配「'+q+'」的物品';
- } else if(empty){ empty.remove(); }
+ const all=el('sellAllLoot');
+ if(all){
+  all.hidden=!!(q||kind);
+  if(all.dataset.confirm) all.nextElementSibling.hidden=all.hidden;
+ }
+ let empty=list.querySelector('.arSearchEmpty');
+ if(!shown&&(q||kind)&&(tiles.length||rows.length)){
+  if(!empty){
+   empty=document.createElement('div');
+   empty.className='arEmpty arSearchEmpty';
+   empty.innerHTML='<span></span><button class="optBtn" type="button">清除筛选</button>';
+   empty.lastElementChild.onclick=()=>{el('arSearch').value='';el('arCategory').value='';shopApplyFilter();el('arSearch').focus();};
+   list.prepend(empty);
+  }
+  empty.firstElementChild.textContent=q?'没有匹配「'+q+'」的结果':'这个分类暂无物品';
+ }else empty?.remove();
 }
-function shopBindSearch(){
- const inp=document.getElementById('arSearch');
- if(!inp) return;
- inp.addEventListener('input',()=>{ SHOP_QUERY=(inp.value||'').trim().toLowerCase(); shopApplyFilter(); });
-}
-// 包裹 renderArmory: 每次重绘(切页签/买卖后)都重新套用当前搜索串
-const _sRenderArmory=renderArmory;
-renderArmory=function(tab){
- const r=_sRenderArmory.apply(this,arguments);
- try{ shopApplyFilter(); }catch(e){}
- return r;
-};
-shopBindSearch();
+el('arSearch').addEventListener('input',shopApplyFilter);
+el('arCategory').addEventListener('change',shopApplyFilter);

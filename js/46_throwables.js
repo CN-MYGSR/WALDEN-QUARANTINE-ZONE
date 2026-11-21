@@ -138,23 +138,10 @@ function buildThrowRow(){
  if(!THROW_KEYS.some(k=>throwOwned(k)>0)){
   const tip=document.createElement('div');
   tip.style.cssText='flex:1 1 100%;font-size:11px;color:#aaa;line-height:1.5';
-  tip.textContent='仓库里没有投掷物 · 到「军械库 → 市集」购买手雷 / 闪光弹 / 烟雾弹';
+  tip.textContent='仓库里没有投掷物 · 到军械库的「补给采购」购买投掷物';
   row.appendChild(tip);
  }
 }
-// 包裹: 市集页脚提示补上投掷物
-const _tRenderArmory=renderArmory;
-renderArmory=function(tab){
- const r=_tRenderArmory.apply(this,arguments);
- try{
-  if((tab||ARMORY_TAB||'store')==='market'){
-   const h=document.getElementById('arHint');
-   if(h) h.textContent='市集交易食物 / 药品 / 投掷物(手雷 · 闪光弹 · 烟雾弹) / 杂物 / 背包 / 夜视仪 — 局内也能在物资箱与尸体上搜到同款。投掷物买入后到部署界面选携带数量，出击即从仓库扣除。';
-  }
- }catch(e){}
- return r;
-};
-
 // 包裹: 部署消耗品面板重建时一并重建投掷物行
 const _tBuildDeployConsumables=buildDeployConsumables;
 buildDeployConsumables=function(){

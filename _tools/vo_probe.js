@@ -1,12 +1,13 @@
 // 配音冒烟探针: 加载游戏, 调用 VO.load/play, 验证清单、播放、字幕
-// 用法: node _tools/vo_probe.js [url]
+// 用法: node _tools/vo_probe.js [url] [Chrome 调试端口]
 const http = require('http');
+const assert = require('node:assert/strict');
 const { spawn } = require('child_process');
 const os = require('os');
 
 const URL_ = process.argv[2] || 'http://127.0.0.1:8123/index.html';
 const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const PORT = 9331;
+const PORT = Number(process.argv[3]||9331);
 const profile = os.tmpdir() + '/vo-probe-' + Date.now();
 const chrome = spawn(CHROME, [
   '--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
@@ -60,28 +61,44 @@ function rpc(ws, method, params) {
     }
   });
   await rpc(ws, 'Runtime.enable'); await rpc(ws, 'Page.enable');
+  await rpc(ws,'Network.enable');
+  await rpc(ws,'Network.setBlockedURLs',{urls:['*://gamesvibe.app/*','*://vibe.lumigrav.space/*']});
   await rpc(ws, 'Page.addScriptToEvaluateOnNewDocument', {
-    source: 'window.__errs=[];addEventListener("error",e=>window.__errs.push(String(e.message)));addEventListener("unhandledrejection",e=>window.__errs.push("REJ:"+String(e.reason)));'
+    source: `window.__errs=[];addEventListener("error",e=>window.__errs.push(String(e.message)));
+      addEventListener("unhandledrejection",e=>window.__errs.push("REJ:"+String(e.reason)));
+      window.VibeHubWorkshop={beforeStart:Promise.resolve(),markGameReady(){}};
+      const nextFrame=requestAnimationFrame.bind(window);
+      window.requestAnimationFrame=fn=>fn.name==="loop"?0:nextFrame(fn);`
   });
   await rpc(ws, 'Page.navigate', { url: URL_ });
-  await sleep(15000);
+  const deadline=Date.now()+60000;
+  while(Date.now()<deadline){
+    const ready=await rpc(ws,'Runtime.evaluate',{expression:'document.readyState==="complete"&&typeof VO!=="undefined"&&typeof el("deployBtn").onclick==="function"',returnByValue:true});
+    if(ready.result?.value) break;
+    await sleep(150);
+  }
 
   const expr = `(async()=>{
     const out={};
+    const waitFor=async(fn,msg)=>{
+      const deadline=performance.now()+15000;
+      while(!fn()){ if(performance.now()>=deadline) throw Error(msg); await new Promise(r=>setTimeout(r,30)); }
+    };
+    const playing=id=>VO.state.cur?.entry.id===id&&VO.state.cur.audio.currentTime>.02;
     try{
       try{ AudioSys.init(); }catch(e){}
       await VO.load();
       out.ready=VO.state.ready; out.n=VO.state.lines.length; out.err=VO.state.err;
-      out.files=VO.state.lines.slice(0,0).length;
-      VO.play('m_deploy',{force:true,priority:1});
-      await new Promise(r=>setTimeout(r,1100));
+      out.files=new Set(VO.state.lines.map(line=>line.file)).size;
+      VO.play('m_objective',{force:true,priority:1});
+      await waitFor(()=>playing('m_objective'),'首段播报未播放');
       const a=VO.state.cur&&VO.state.cur.audio;
       out.play={has:!!a, paused:a?a.paused:null, t:a?+a.currentTime.toFixed(2):null, vol:a?a.volume:null};
       out.sub={cls:document.getElementById('voSub').className, who:document.getElementById('voWho').textContent,
                line:(document.getElementById('voLine').textContent||'').slice(0,40)};
       out.duckDuring=(typeof AudioSys!=='undefined'&&AudioSys.duckLevel)?AudioSys.duckLevel():null;
       VO.playBrief(1,{force:true});
-      await new Promise(r=>setTimeout(r,700));
+      await waitFor(()=>playing('s1_brief'),'第一章简报未播放');
       const b=VO.state.cur&&VO.state.cur.audio;
       out.brief={has:!!b, paused:b?b.paused:null, t:b?+b.currentTime.toFixed(2):null,
                  subCls:document.getElementById('voSub').className};
@@ -93,15 +110,22 @@ function rpc(ws, method, params) {
       out.hasNav=!!nav;
       if(nav) nav.click();
       await new Promise(r=>setTimeout(r,400));
-      const btn=document.querySelector('[data-brief="1"]');
-      out.hasBtn=!!btn;
-      if(btn){ btn.click(); await new Promise(r=>setTimeout(r,900)); }
-      out.panelBrief={id:VO.state.cur&&VO.state.cur.entry.id, has:!!(VO.state.cur&&VO.state.cur.audio),
-                      subCls:document.getElementById('voSub').className};
-      const back=document.querySelector('.backBtn');
+      out.chapters=[];
+      for(let i=0;i<STORY_CHAPTERS.length;i++){
+        document.querySelector('[data-chapter="'+i+'"]').click();
+        const btn=document.querySelector('[data-brief="'+(i+1)+'"]');
+        btn.click();
+        const id='s'+(i+1)+'_brief';
+        await waitFor(()=>playing(id)&&btn.getAttribute('aria-pressed')==='true','简报未播放 '+id);
+        out.chapters.push({id,locked:document.querySelector('[data-story]').disabled});
+        btn.click();
+        if(VO.state.cur||btn.getAttribute('aria-pressed')!=='false') throw Error('简报未停止 '+id);
+      }
+      const back=document.querySelector('#mStory .backBtn');
+      document.querySelector('[data-brief]').click();
       if(back) back.click();
       await new Promise(r=>setTimeout(r,350));
-      out.leftPanelStops=!VO.state.cur;
+      out.leftPanelStops=!VO.state.cur&&el('mHome').checkVisibility()&&AudioSys.duckLevel()===1;
       VO.stop();
       SRAID.ch=STORY_CHAPTERS[0]; SRAID.live=true; SRAID.obj=[];
       storyFireEvent(STORY_CHAPTERS[0].events[0]);
@@ -118,14 +142,22 @@ function rpc(ws, method, params) {
         showDeploy(false);
         selectedSpawn=-1;
         deployPlayer();
-        await new Promise(r=>setTimeout(r,600));
+        await waitFor(()=>playing('m_deploy'),'部署播报未播放');
         out.deployHook={deployed:!!player.deployed, vo:VO.state.cur&&VO.state.cur.entry.id,
                         cls:document.getElementById('voSub').className};
         VO.play('s1_e0',{force:true});
         await new Promise(r=>setTimeout(r,900));
         out.shotSub={cls:document.getElementById('voSub').className,
                      line:(document.getElementById('voLine').textContent||'').slice(0,24)};
-      }catch(e){ out.deployErr=String(e); }
+        player.die(null,true);
+        await waitFor(()=>matchOver&&playing('m_defeat'),'阵亡播报未播放');
+        out.defeat=el('endTitle').textContent;
+        beginRaid(); el('deployBtn').click();
+        await waitFor(()=>player.deployed&&player.alive,'二次部署失败');
+        matchTime=0; updateExtraction(.05);
+        await waitFor(()=>matchOver&&playing('m_signal_lost'),'超时播报未播放');
+        out.timeout=el('endTitle').textContent;
+      }catch(e){ out.deployErr=String(e); out.state=[GAMEMODE,matchOver,player.alive,player.downed,RUN.deathTimer,el('endTitle').textContent,VO.state.cur?.entry.id,VO.state.last]; }
     }catch(e){ out.fatal=String(e&&e.stack||e); }
     out.errs=window.__errs||[];
     return out;
@@ -135,10 +167,23 @@ function rpc(ws, method, params) {
   let shot = false;
   try {
     const s = await rpc(ws, 'Page.captureScreenshot', { format: 'png' });
-    require('fs').writeFileSync('_vo_shot.png', Buffer.from(s.data, 'base64'));
+    const fs=require('node:fs'), path=require('node:path');
+    const output=path.join(__dirname,'..','outputs','操作验证');
+    fs.mkdirSync(output,{recursive:true});
+    fs.writeFileSync(path.join(output,'剧情-配音验收.png'),Buffer.from(s.data,'base64'));
     shot = true;
   } catch (e) { }
   console.log(JSON.stringify({ result: r.result && r.result.value, shot: shot, exceptions: errors.slice(0, 8) }, null, 1));
-  try { chrome.kill(); } catch (e) { }
-  process.exit(0);
-})();
+  const actual=r.result.value;
+  assert.deepEqual(errors,[]); assert.deepEqual(actual.errs,[]);
+  assert.equal(actual.fatal,undefined); assert.equal(actual.deployErr,undefined);
+  assert.equal(actual.files,30); assert.equal(actual.ready,true);
+  assert(actual.play.t>0 && actual.play.paused===false && actual.sub.cls.includes('on') && actual.duckDuring<1);
+  assert(actual.brief.t>0 && actual.brief.paused===false && !actual.brief.subCls.includes('on'));
+  assert.equal(actual.stopped.duck,1); assert.equal(actual.stopped.cur,false);
+  assert.equal(actual.chapters.length,6); assert.deepEqual(actual.chapters.map(c=>c.locked),[false,true,true,true,true,true]);
+  assert.equal(actual.leftPanelStops,true); assert.equal(actual.ev.id,'s1_e0'); assert(actual.ev.cls.includes('on') && actual.ev.line);
+  assert.equal(actual.deployHook.vo,'m_deploy'); assert.equal(actual.deployHook.deployed,true);
+  assert(actual.shotSub.cls.includes('on') && actual.shotSub.line);
+  assert.equal(actual.defeat,'撤离失败'); assert.equal(actual.timeout,'无线电信号丢失');
+})().then(()=>{chrome.kill();process.exit(0);},e=>{console.error(e);chrome.kill();process.exit(1);});

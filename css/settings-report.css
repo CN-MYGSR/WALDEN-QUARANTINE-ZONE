@@ -1,0 +1,81 @@
+/* 游戏设置 */
+body.layoutEdit #layoutBar { top:auto; bottom:max(8px,env(safe-area-inset-bottom)); width:max-content; max-width:calc(100% - 16px); gap:8px; padding:6px 8px; background:#1b211f; color:#f1f3ed; }
+#layoutBar span { font-size:13px; line-height:1.4; }
+#layoutBar .optBtn { flex:none; min-height:44px; padding:5px 10px; white-space:nowrap; font:inherit; cursor:pointer; }
+#layoutBar .optBtn:last-child { background:#f3cb77; border-color:#f3cb77; color:#211e15; }
+#mSet .settingsTabs { display:flex; gap:4px; padding:7px var(--inset) 0; border-bottom:1px solid var(--line); flex:none; }
+.settingsTabs button { flex:0 1 82px; min-width:0; min-height:44px; padding:5px 8px; border:0; border-bottom:3px solid transparent; background:transparent; color:var(--sub); font:inherit; font-size:15px; font-weight:600; line-height:1.3; cursor:pointer; }
+.settingsTabs button[aria-selected=true] { color:var(--amber); border-bottom-color:var(--amber); }
+.settingsTabs button:hover { color:var(--ink); }
+.settingsBody [role=tabpanel] { width:min(660px,100%); margin:0 auto; color:var(--ink); }
+.settingsBody [role=tabpanel][hidden] { display:none; }
+.settingsBody h3 { margin:8px 0; font-size:18px; text-align:left; }
+.settingsBody h3:not(:first-child) { margin-top:24px; }
+.settingsBody .choiceField { min-width:0; margin:0; padding:14px 0; border:0; }
+.settingsBody .choiceField legend { float:left; width:35%; margin:5px 0; padding:0 10px 0 0; font-weight:600; font-size:15px; text-align:left; }
+.settingsBody .choiceField .settingChoices { display:flex; gap:5px; flex-wrap:wrap; justify-content:flex-start; }
+.settingsBody .choiceField p { clear:both; margin:8px 0 0 35%; color:var(--sub); font-size:13px; line-height:1.5; }
+.settingsBody .settingLine,.settingsBody .settingRange { display:grid; grid-template-columns:minmax(80px,35%) 1fr; gap:0; align-items:center; border-block:1px solid var(--line); padding:12px 0; font-size:15px; text-align:left; }
+.settingsBody .settingRange { grid-template-columns:minmax(80px,35%) minmax(72px,1fr) minmax(4.5em,auto); }
+.settingsBody .settingLine+.settingRange,.settingsBody .settingRange+.settingLine { border-top:0; }
+.settingsBody .settingRange input { width:100%; min-width:0; min-height:42px; margin:0; cursor:pointer; }
+.settingsBody .settingRange output { margin-left:10px; color:var(--amber); font:600 15px/1.4 Consolas,monospace; text-align:right; }
+.settingsBody #fovVal::after { content:'°'; } .settingsBody #volVal::after { content:'%'; }
+.settingsBody .settingLine .optBtn { justify-self:start; }
+.settingsBody .settingHint { margin:8px 0 16px; color:var(--sub); font-size:13px; line-height:1.6; text-align:left; }
+.settingsBody .keySearchLabel { display:block; color:var(--ink); font-size:15px; font-weight:600; margin-bottom:5px; text-align:left; }
+.settingsBody #keySearch { box-sizing:border-box; width:100%; min-height:44px; padding:9px 12px; border:1px solid var(--line); border-radius:5px; background:var(--surface); color:var(--ink); font:inherit; }
+.settingsBody #keyGrid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 16px; }
+.settingsBody #keyGrid > div { display:flex; align-items:center; justify-content:space-between; gap:6px; padding:6px 0; border-bottom:1px solid var(--line); color:var(--ink); font-size:14px; text-align:left; }
+.settingsBody #keyGrid button { min-width:65px; }
+.settingsBody #keyResetBtn { margin:14px 0; }
+#menu #mSet #ctrlHelp,body.touchui #menu #mSet #ctrlHelp { display:block !important; margin:0; padding:0; line-height:1.65; text-align:left; }
+.settingsBody #ctrlHelp details { padding:0; border-bottom:1px solid var(--line); }
+.settingsBody #ctrlHelp summary { padding:14px 2px; font-size:16px; font-weight:600; cursor:pointer; color:var(--ink); }
+.settingsBody #ctrlHelp p { margin:0 0 12px; color:var(--sub); font-size:14px; }
+.settingsBody #ctrlHelp b { color:var(--ink); }
+/* 行动结算 */
+#end .reportPanel { display:flex; flex-direction:column; width:min(760px,100%); max-height:100%; overflow:hidden; padding:0; text-align:left; }
+.reportHead { flex:none; padding:19px var(--inset) 15px; border-bottom:1px solid var(--line); }
+#reportMap { margin-bottom:4px; font-size:14px; color:var(--sub); }
+#end .reportHead h1 { margin:0; text-align:left; font-size:clamp(28px,4vw,44px); line-height:1.18; letter-spacing:.015em; text-shadow:none; }
+#end .reportHead .win { color:var(--amber); } #end .reportHead .lose { color:#f09d87; }
+#end #endStats { overflow:auto; min-height:0; padding:4px var(--inset) 16px; margin:0; color:var(--ink); line-height:1.5; text-align:left; scrollbar-color:var(--line) transparent; }
+#endStats .reportMetrics { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); margin:0; padding:13px 0; border-bottom:1px solid var(--line); gap:6px 12px; }
+#endStats .reportMetrics dt { font-size:13px; color:var(--sub); }
+#endStats .reportMetrics dd { font-size:clamp(21px,3vw,31px); line-height:1.2; font-weight:600; margin:3px 0 0; font-variant-numeric:tabular-nums; }
+#endStats .reportGroup,#endStats .deathBox { border:0; border-bottom:1px solid var(--line); border-radius:0; background:transparent; margin:0; padding:13px 0; }
+#endStats .reportGroup:last-child,#endStats .deathBox:last-child { border-bottom:0; }
+#endStats .reportGroup h2,#endStats .deathBox .dbTitle { margin:0 0 5px; color:var(--ink); font-size:16px; font-weight:650; letter-spacing:0; }
+#endStats .reportGroup p,#endStats .deathBox { color:var(--sub); font-size:14px; overflow-wrap:anywhere; }
+#endStats .reportGroup p { margin:4px 0; }
+#endStats .reportItems { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(200px,100%),1fr)); gap:0 20px; list-style:none; margin:3px 0; padding:0; }
+#endStats .reportItems li { display:flex; justify-content:space-between; gap:8px; padding:4px 0; word-break:break-word; font-size:14px; }
+#endStats b { color:var(--ink); font-size:inherit; }
+#endStats .reportItems b { white-space:nowrap; color:var(--amber); font-variant-numeric:tabular-nums; }
+#end #voSub {
+ position:static; display:none; flex:none; align-items:baseline; gap:10px;
+ width:auto; max-width:none; margin:0; padding:8px var(--inset);
+ border:0; border-top:1px solid var(--line); border-radius:0; background:var(--surface); color:var(--ink);
+ transform:none; transition:none; text-shadow:none; text-align:left; font:inherit; font-size:14px; line-height:1.45;
+}
+#end #voSub.on { display:flex; visibility:visible; opacity:1; }
+#end #voSub .voWho { flex:none; margin:0; color:var(--amber); font-size:11px; letter-spacing:.04em; }
+#end #voSub .voLine { min-width:0; }
+#end .reportActions { display:flex; justify-content:flex-start; gap:8px; flex:none; padding:12px var(--inset); margin:0; border-top:1px solid var(--line); background:var(--desk); }
+#end .reportActions button { margin:0; touch-action:manipulation; }
+@media(max-width:580px){
+ #mSet .settingsTabs { gap:0; padding:0 8px; }
+ .settingsTabs button { flex:1; padding-inline:3px; }
+ .settingsBody .choiceField legend { float:none; width:auto; margin:0 0 7px; }
+ .settingsBody .choiceField { margin:11px 0; padding:0; }
+ .settingsBody .choiceField p { margin:6px 0 0; }
+ .settingsBody #keyGrid { grid-template-columns:1fr; }
+ .settingsBody .settingRange { grid-template-columns:minmax(63px,30%) minmax(64px,1fr) auto; }
+ .settingsBody .settingChoices .optBtn { padding-inline:10px; }
+ #end .reportActions button { flex:1; }
+}
+@media(max-height:450px){
+ .reportHead { padding-block:7px; } #end .reportHead h1 { font-size:24px; }
+ #end .reportActions { padding-block:5px; } #endStats .reportMetrics { padding-block:8px; }
+}

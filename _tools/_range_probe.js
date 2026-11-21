@@ -82,7 +82,7 @@ function mk(opts){
   const fn = new Function(
     'THREE', 'document', 'scene', 'MAT', 'WPN_DEFS', 'META', 'RUN', 'player', 'CAMPAIGN', 'nowT', 'matchTime',
     'localStorage', 'ownedCount', 'deployPlayer', 'raySoldiers', 'bloodFX', 'fireBullet',
-    'updateMedCrates', 'showDeploy', 'showScorePop', 'CAMPAIGNS', 'window',
+    'updateMedCrates', 'showDeploy', 'showScorePop', 'CAMPAIGNS', 'window', 'ammoCaliberOf', 'ammoKeyOfCaliber',
     SRC + '\nreturn {RANGE, rangeActive, rangePending, rangeWeapon, rangeSpawnTargets, rangeRayBox, ' +
     'rangeRayTargets, rangeAmmo, rangeDeployUI, getRay:()=>raySoldiers, getFire:()=>fireBullet, ' +
     'getDeploy:()=>deployPlayer, getBlood:()=>bloodFX, getMed:()=>updateMedCrates, ' +
@@ -92,7 +92,8 @@ function mk(opts){
   const api = fn(
     makeTHREE(), doc, scene, { metalDark: {} }, WPN_DEFS, META, RUN, player, CAMPAIGN, nowT, matchTime,
     localStorage, ownedCount, deployPlayer, raySoldiers, bloodFX, fireBullet,
-    updateMedCrates, showDeploy, showScorePop, [{ id: 'bfruins' }, { id: 'range', rangeOnly: true }], {}
+    updateMedCrates, showDeploy, showScorePop, [{ id: 'bfruins' }, { id: 'range', rangeOnly: true }], {},
+    key => key === 'm1911' ? 'pistol' : 'rifle', cal => ({pistol:'ammo_pistol_std', rifle:'ammo_std'})[cal]
   );
   api.doc = doc; api.META = META; api.RUN = RUN; api.player = player; api.CAMPAIGN = CAMPAIGN;
   api.WPN = WPN_DEFS; api.store = store; api.deployCalls = () => deployCalls;
@@ -136,6 +137,7 @@ function mk(opts){
   a.rangeAmmo();
   t('无限弹药: 每个槽位 reserve 补满', a.player.slots.every(s => s.reserve === 9999),
     JSON.stringify(a.player.slots));
+  t('靶场借用武器按槽位领取对应弹种', a.player.slots[0].ammo === 'ammo_std' && a.player.slots[1].ammo === 'ammo_pistol_std');
 }
 
 // ---------- ④ 靶子生成 ----------

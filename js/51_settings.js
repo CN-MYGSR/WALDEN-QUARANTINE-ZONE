@@ -15,7 +15,7 @@
 // 手机端按钮布局:
 //   · 进入编辑模式后强制显示触控层, 直接拖动按钮(鼠标或手指)。
 //   · 位置按**屏幕百分比**保存到 localStorage bf_tbtn_v1, 换分辨率/换设备也能对上。
-//   · 拖拽在 #touchUI 的捕获阶段拦截, 不会被 31_touch 的按按钮/摇杆/转视角逻辑抢走。
+//   · 编辑时由 #touchUI 的指针捕获拖动，31_touch 暂停战斗操作。
 // =====================================================================
 
 // ---------------- 键位设置 ----------------
@@ -36,37 +36,47 @@ Numpad5:'小键盘5',Numpad6:'小键盘6',Numpad7:'小键盘7',Numpad8:'小键�
 function keyCodeName(c){ return KEY_CODE_CN[c]||String(c||'?').replace(/^Key/,'').replace(/^Digit/,''); }
 
 let _keyCapturing=null;   // 正在等待新键的 action
-function renderKeyGrid(){
+function renderKeyGrid(focusAction){
 const g=el('keyGrid'); if(!g) return;
-g.innerHTML='';
+const search=el('keySearch'), q=search.value.trim().toLowerCase();
+g.replaceChildren();
+let nextFocus=null;
 for(const it of KEY_ACTIONS){
+const code=keyOf(it.a), label=keyCodeName(code);
+if(q&&!it.n.toLowerCase().includes(q)&&!label.toLowerCase().includes(q)&&code.toLowerCase()!==q) continue;
 const row=document.createElement('div');
-row.style.cssText='display:flex;align-items:center;gap:6px;padding:3px 6px;border:1px solid #565656;border-radius:6px;background:rgba(0,0,0,.28)';
 const nm=document.createElement('span');
 nm.textContent=it.n;
-nm.style.cssText='flex:1;font-size:12px;color:#d2d2d2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
 const btn=document.createElement('button');
 btn.className='optBtn';
-btn.style.cssText='min-width:78px;padding:3px 8px;font-size:12px';
-btn.textContent=(_keyCapturing===it.a)?'按新键…':keyCodeName(keyOf(it.a));
+btn.textContent=(_keyCapturing===it.a)?'按新键…':label;
+btn.setAttribute('aria-label',it.n+' · '+btn.textContent);
+btn.setAttribute('aria-pressed',String(_keyCapturing===it.a));
 if(_keyCapturing===it.a) btn.classList.add('sel');
-btn.onclick=()=>{ _keyCapturing=(_keyCapturing===it.a)?null:it.a; renderKeyGrid(); };
+btn.onclick=()=>{ _keyCapturing=(_keyCapturing===it.a)?null:it.a; renderKeyGrid(it.a); };
+if(it.a===focusAction) nextFocus=btn;
 row.appendChild(nm); row.appendChild(btn);
 g.appendChild(row);
 }
+if(!g.children.length){
+  const p=document.createElement('p'); p.className='settingHint'; p.textContent='没有匹配的键位。';
+  g.appendChild(p);
+}
+if(focusAction) (nextFocus||search).focus({preventScroll:true});
 }
 // 捕获阶段拦按键: 不被 24_input 的 keydown 吃掉
 addEventListener('keydown',e=>{
 if(!_keyCapturing) return;
+if(el('mSet').classList.contains('hidden')||el('setKeys').hidden){ _keyCapturing=null; return; }
 e.preventDefault();
 e.stopImmediatePropagation();
 const a=_keyCapturing;
-if(e.code==='Escape'){ _keyCapturing=null; renderKeyGrid(); return; }
+if(e.code==='Escape'){ _keyCapturing=null; renderKeyGrid(a); return; }
 // 单独按修饰键不算一个绑定, 继续等
 if(e.code==='ShiftLeft'||e.code==='ShiftRight'||e.code==='ControlLeft'||e.code==='ControlRight'||e.code==='AltLeft'||e.code==='AltRight'||e.code==='MetaLeft'||e.code==='MetaRight') return;
 setKey(a,e.code);
 _keyCapturing=null;
-renderKeyGrid();
+renderKeyGrid(a);
 },true);
 
 // ---------------- 显示比例 (强制拉伸) ----------------
@@ -136,7 +146,9 @@ function applyTouchLayout(){
 const ui=el('touchUI'); if(!ui) return;
 for(const b of ui.querySelectorAll('.tbtn')){
 const p=TBTN_LAYOUT[b.id];
-if(p&&typeof p.x==='number'&&typeof p.y==='number'){
+const placed=!!p&&Number.isFinite(p.x)&&Number.isFinite(p.y);
+b.classList.toggle('placed',placed);
+if(placed){
 b.style.left=p.x+'%'; b.style.top=p.y+'%';
 b.style.right='auto'; b.style.bottom='auto';
 }else{
@@ -145,112 +157,121 @@ b.style.left=''; b.style.top=''; b.style.right=''; b.style.bottom='';
 }
 }
 
-let _layoutEditOn=false, _layoutBar=null;
 function enterLayoutEdit(){
-if(_layoutEditOn) return;
-_layoutEditOn=true;
+if(window.LAYOUT_EDIT) return;
 window.LAYOUT_EDIT=true;
 document.body.classList.add('layoutEdit');
-const ui=el('touchUI');
-if(ui) for(const b of ui.querySelectorAll('.tbtn')) b.classList.remove('hiddenT');
 const bar=document.createElement('div');
 bar.id='layoutBar';
+bar.setAttribute('role','group');
+bar.setAttribute('aria-label','触屏布局编辑');
 const tip=document.createElement('span');
-tip.innerHTML='<b>按钮布局编辑</b> · 拖动按钮调整位置（鼠标或手指）';
+tip.textContent='拖动按键调整位置，工具盘里的按键可以拖到屏幕上。';
 bar.appendChild(tip);
-const mk=(t,fn,extra)=>{ const b=document.createElement('button'); b.className='optBtn'; b.textContent=t; b.style.cssText='padding:3px 12px;font-size:12px;'+(extra||''); b.onclick=fn; return b; };
-bar.appendChild(mk('恢复默认',()=>{ TBTN_LAYOUT={}; saveTouchLayout(); applyTouchLayout(); }));
-bar.appendChild(mk('完成',()=>exitLayoutEdit(),'background:#3a5f3a;border-color:#6fbf6f'));
+const reset=document.createElement('button'),done=document.createElement('button');
+reset.className=done.className='optBtn';
+reset.textContent='恢复默认'; reset.onclick=resetTouchLayout;
+done.textContent='完成'; done.onclick=exitLayoutEdit;
+bar.append(reset,done);
 document.body.appendChild(bar);
-_layoutBar=bar;
+done.focus({preventScroll:true});
 }
 function exitLayoutEdit(){
-if(!_layoutEditOn) return;
-_layoutEditOn=false;
+if(!window.LAYOUT_EDIT) return;
 window.LAYOUT_EDIT=false;
 document.body.classList.remove('layoutEdit');
-if(_layoutBar){ _layoutBar.remove(); _layoutBar=null; }
+el('layoutBar').remove();
+el('tLayoutBtn').focus({preventScroll:true});
 if(typeof window.updateTouchVis==='function') window.updateTouchVis();
 }
+function resetTouchLayout(){ TBTN_LAYOUT={}; saveTouchLayout(); applyTouchLayout(); }
+addEventListener('keydown',e=>{
+if(window.LAYOUT_EDIT&&e.key==='Escape'){ e.preventDefault(); e.stopImmediatePropagation(); exitLayoutEdit(); }
+},true);
 
-// 拖拽: 在 #touchUI 捕获阶段拦下, 不让 31_touch 把它当成按按钮/摇杆/转视角
+// 编辑器和对局共享按钮；从工具盘拖出时保留手指在按钮上的相对位置。
 (function(){
 const ui=el('touchUI'); if(!ui) return;
 let drag=null;
-function pct(b,cx,cy){
-const ur=ui.getBoundingClientRect();
-const k=ui.style.zoom?parseFloat(ui.style.zoom):1;
-const w=ur.width/k, h=ur.height/k;
-const bw=b.offsetWidth, bh=b.offsetHeight;
-let x=((cx-ur.left)/k-bw/2)/w*100;
-let y=((cy-ur.top)/k-bh/2)/h*100;
-x=Math.max(0,Math.min(100-bw/w*100,x));
-y=Math.max(0,Math.min(100-bh/h*100,y));
-return [x,y];
-}
-function hit(cx,cy){
-const t=document.elementFromPoint(cx,cy);
-return t&&t.closest?t.closest('.tbtn'):null;
-}
-function begin(cx,cy){
-if(!_layoutEditOn) return false;
-const b=hit(cx,cy);
-if(!b) return false;
-drag={b};
+ui.addEventListener('pointerdown',e=>{
+const b=e.target.closest('.tbtn');
+if(!window.LAYOUT_EDIT||!b||drag||e.button!==0) return;
+const r=b.getBoundingClientRect();
+drag={b,id:e.pointerId,startX:e.clientX,startY:e.clientY,fx:(e.clientX-r.left)/r.width,fy:(e.clientY-r.top)/r.height,moved:false};
+b.setPointerCapture(e.pointerId);
 b.classList.add('press');
-return true;
+e.preventDefault();
+});
+ui.addEventListener('pointermove',e=>{
+if(!window.LAYOUT_EDIT||drag?.id!==e.pointerId) return;
+if(!drag.moved&&Math.hypot(e.clientX-drag.startX,e.clientY-drag.startY)<3) return;
+drag.moved=true;
+const b=drag.b, area=ui.getBoundingClientRect();
+b.classList.add('placed');
+const r=b.getBoundingClientRect();
+const x=clamp(e.clientX-area.left-drag.fx*r.width,0,area.width-r.width);
+const y=clamp(e.clientY-area.top-drag.fy*r.height,0,area.height-r.height);
+b.style.left=(x/area.width*100)+'%'; b.style.top=(y/area.height*100)+'%';
+b.style.right='auto'; b.style.bottom='auto';
+});
+ui.addEventListener('pointerup',e=>{
+if(drag?.id!==e.pointerId) return;
+if(window.LAYOUT_EDIT&&drag.moved){
+  const b=drag.b;
+  TBTN_LAYOUT[b.id]={x:+parseFloat(b.style.left).toFixed(3),y:+parseFloat(b.style.top).toFixed(3)};
+  saveTouchLayout();
 }
-function move(cx,cy){
-if(!drag) return;
-const [x,y]=pct(drag.b,cx,cy);
-drag.b.style.left=x+'%'; drag.b.style.top=y+'%';
-drag.b.style.right='auto'; drag.b.style.bottom='auto';
-}
-function end(){
-if(!drag) return;
-const b=drag.b;
-const x=parseFloat(b.style.left), y=parseFloat(b.style.top);
-if(isFinite(x)&&isFinite(y)) TBTN_LAYOUT[b.id]={x:+x.toFixed(3),y:+y.toFixed(3)};
-b.classList.remove('press');
-drag=null;
-saveTouchLayout();
-}
-// 触摸
-ui.addEventListener('touchstart',e=>{
-if(!_layoutEditOn) return;
-const t=e.changedTouches[0]; if(!t) return;
-if(begin(t.clientX,t.clientY)){ e.preventDefault(); e.stopImmediatePropagation(); }
-},{capture:true,passive:false});
-ui.addEventListener('touchmove',e=>{
-if(!_layoutEditOn||!drag) return;
-const t=e.changedTouches[0]; if(!t) return;
-move(t.clientX,t.clientY);
-e.preventDefault(); e.stopImmediatePropagation();
-},{capture:true,passive:false});
-ui.addEventListener('touchend',e=>{
-if(!_layoutEditOn||!drag) return;
-end();
-e.preventDefault(); e.stopImmediatePropagation();
-},{capture:true,passive:false});
-// 鼠标 (桌面预览/调试)
-ui.addEventListener('mousedown',e=>{
-if(!_layoutEditOn) return;
-if(begin(e.clientX,e.clientY)){ e.preventDefault(); e.stopImmediatePropagation(); }
-},true);
-addEventListener('mousemove',e=>{
-if(!_layoutEditOn||!drag) return;
-move(e.clientX,e.clientY);
-e.stopImmediatePropagation();
-},true);
-addEventListener('mouseup',e=>{
-if(!_layoutEditOn||!drag) return;
-end();
-e.stopImmediatePropagation();
-},true);
+});
+ui.addEventListener('lostpointercapture',e=>{
+if(drag?.id!==e.pointerId) return;
+drag.b.classList.remove('press'); drag=null;
+applyTouchLayout();
+});
 })();
 
 // ---------------- 初始化 ----------------
 (function initSettingsExtra(){
+const settings=el('mSet');
+const tabs=[...settings.querySelectorAll('[role=tab]')];
+function selectTab(active){
+  _keyCapturing=null;
+  for(const t of tabs){
+    const chosen=t===active;
+    t.tabIndex=chosen?0:-1; t.setAttribute('aria-selected',String(chosen));
+    el(t.getAttribute('aria-controls')).hidden=!chosen;
+  }
+  settings.querySelector('.menuBody').scrollTop=0;
+  if(active.id==='tabKeys') renderKeyGrid();
+}
+for(const [i,tab] of tabs.entries()){
+  tab.onclick=()=>selectTab(tab);
+  tab.onkeydown=e=>{
+    const target={ArrowLeft:(i+tabs.length-1)%tabs.length,ArrowRight:(i+1)%tabs.length,Home:0,End:tabs.length-1}[e.key];
+    if(target===undefined) return;
+    e.preventDefault(); selectTab(tabs[target]); tabs[target].focus();
+  };
+}
+const search=el('keySearch');
+search.oninput=()=>renderKeyGrid();
+document.addEventListener('pointerdown',e=>{
+  if(_keyCapturing&&!e.target.closest('#keyGrid')){ _keyCapturing=null; renderKeyGrid(); }
+});
+// 这些选项的原输入处理负责立即生效，重新载入地图时还要恢复玩家的选择。
+const prefKey='sf_presentation_settings';
+let prefs={};
+try{ prefs=JSON.parse(localStorage.getItem(prefKey))||{}; }catch(e){}
+if([0,1,2].includes(prefs.quality)) SETTINGS.quality=prefs.quality;
+if(Number.isFinite(prefs.sens)) SETTINGS.sens=clamp(prefs.sens,.2,2);
+if(Number.isFinite(prefs.vol)) SETTINGS.vol=clamp(prefs.vol,0,1);
+const savePrefs=()=>{ try{ localStorage.setItem(prefKey,JSON.stringify({quality:SETTINGS.quality,sens:SETTINGS.sens,vol:SETTINGS.vol})); }catch(e){} };
+el('sensRange').value=Math.round(SETTINGS.sens*100); el('sensVal').textContent=SETTINGS.sens.toFixed(1);
+el('volRange').value=Math.round(SETTINGS.vol*100); el('volVal').textContent=el('volRange').value;
+for(const btn of settings.querySelectorAll('.qualBtn')) btn.classList.toggle('sel',Number(btn.dataset.q)===SETTINGS.quality);
+const syncChoices=()=>settings.querySelectorAll('.settingChoices button:not(#tLayoutBtn,#tLayoutReset)').forEach(
+  b=>b.setAttribute('aria-pressed',String(b.classList.contains('sel'))));
+settings.addEventListener('click',e=>{ syncChoices(); if(e.target.closest('.qualBtn')) savePrefs(); });
+settings.addEventListener('input',e=>{ if(e.target.id==='volRange'||e.target.id==='sensRange') savePrefs(); });
+syncChoices();
 const grid=el('keyGrid');
 if(grid) renderKeyGrid();
 const rb=el('keyResetBtn');
@@ -258,6 +279,6 @@ if(rb) rb.onclick=()=>{ resetKeys(); _keyCapturing=null; renderKeyGrid(); };
 const lb=el('tLayoutBtn');
 if(lb) lb.onclick=()=>enterLayoutEdit();
 const lr=el('tLayoutReset');
-if(lr) lr.onclick=()=>{ TBTN_LAYOUT={}; saveTouchLayout(); applyTouchLayout(); };
+if(lr) lr.onclick=resetTouchLayout;
 applyTouchLayout();
 })();

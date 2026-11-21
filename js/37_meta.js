@@ -72,19 +72,20 @@ function itemDesc(key){
   return `护甲 Lv${a.level} · 胸腹耐久 ${a.hp} · 减伤 ${Math.round(a.resist*100)}% · 重量 ${a.weight}`;
  }
  const d=WPN_DEFS[key];
- return d?`${d.mode} · 伤害 ${d.dmg} · 弹匣 ${d.mag} / 备弹 ${d.reserve}`:'';
+ return d?`${d.mode} · 伤害 ${d.dmg} · 弹匣容量 ${d.mag} 发`:'';
 }
 function itemSellPrice(key){ return Math.max(1,Math.floor((ITEM_PRICES[key]||0)*0.45)); }
 function itemPrice(key){ return ITEM_PRICES[key]||0; }
-function metaLoadoutDefault(){ return { primary:'m1911', secondary:'', armor:'armor1', helmet:'helm1', headset:'hs_tep300', pack:'packSmall', chest:'', meds:['','',''], foods:['',''], nvg:'', pass:false }; }
+function metaLoadoutDefault(){ return { primary:'m1911', secondary:'', armor:'armor1', helmet:'helm1', headset:'hs_tep300', pack:'packSmall', chest:'', meds:['','',''], foods:['',''], ammo:null, nvg:'', pass:false }; }
 const SAFETY_WEAPON='m1911';
 const XP_PER_LEVEL=1000;
 function metaDefault(){
  return {
   seeded:true,
   seed2:true,
+  ammoFamilies:true,
   wallet:2600,
-  owned:{m1911:1,armor1:1,helm1:1,hs_tep300:1,packSmall:1,medkit:1,tourniquet:1,water:2,noodles:1,painkiller:1},
+  owned:{m1911:1,armor1:1,helm1:1,hs_tep300:1,packSmall:1,medkit:1,tourniquet:1,water:2,noodles:1,painkiller:1,ammo_std:1,ammo_pistol_std:1},
   loot:{},
   insurance:[],
   xp:0,
@@ -117,6 +118,23 @@ function normalizeMeta(m){
  if(!m.elo||typeof m.elo!=='object') m.elo={rating:ELO_START,peak:ELO_START,raids:0,auto:true};
  if(!m.loadout||typeof m.loadout!=='object') m.loadout=metaLoadoutDefault();
  if(!m.loadout.pack) m.loadout.pack='packSmall';
+ if(!m.ammoFamilies){
+  const weapons=[m.loadout.primary,m.loadout.secondary].filter(k=>WPN_DEFS[k]);
+  if(weapons.length&&weapons.every(k=>ammoCaliberOf(k)==='pistol')){
+   const legacy=['ammo_rip','ammo_std','ammo_m855','ammo_m995','ammo_ap'];
+   for(const k of legacy){
+    const next=k.replace('ammo_','ammo_pistol_');
+    for(const stock of [m.owned,m.loot]) if(stock[k]>0){
+     stock[next]=(stock[next]||0)+stock[k]; delete stock[k];
+    }
+    if(Array.isArray(m.loadout.ammo)) m.loadout.ammo=m.loadout.ammo.map(v=>v===k?next:v);
+   }
+  }
+  for(const k of ['ammo_std','ammo_pistol_std']) if(!(m.owned[k]>0||m.loot[k]>0)) m.owned[k]=1;
+  if(m.loadout.ammo?.length&&Array.isArray(m.loadout.ammo)&&m.loadout.ammo.every(k=>!k)) m.loadout.ammo=null;
+  m.ammoFamilies=true;
+ }
+ if(!Array.isArray(m.loadout.ammo)) m.loadout.ammo=null;
  // 已删除武器的存档回退 (2026-09-13 移除火箭筒/反坦克枪): 装备了不存在武器时退回保底手枪
  // 注意: 此处只能用 13_weapons_data 的 WPN_DEFS; PACK_DEFS 定义在 38_tarkov, 本文件加载时还在 TDZ, 不可访问
  if(m.loadout.primary&&!WPN_DEFS[m.loadout.primary]) m.loadout.primary=SAFETY_WEAPON;
@@ -173,7 +191,6 @@ const RUN={kills:0,searches:0,loot:{},extracting:false,failComp:0,autoKit:null,l
 // 设计: 失败补偿 500 是净收入, 不依赖战利品带回; 同时兜底发放一把最廉价手枪,
 //       避免玩家卖光装备后陷入"无武器 → 打不过 → 更没钱"的死亡螺旋。
 const FAIL_COMPENSATION=500;        // 单局失败固定补贴
-const SAFETY_WEAPON_MAG=2;          // 保底发放时附带弹匣数
 const SAFETY_ARMOR='armor1';
 const SAFETY_HELMET='helm1';
 const SAFETY_HEADSET='hs_tep300';
@@ -184,9 +201,12 @@ function hasAnyWeapon(){ return ownedWeaponList().length>0; }
 function ensureSafetyKit(reason){
  const granted=[];
  if(!hasAnyWeapon()){
-   addOwned(SAFETY_WEAPON,SAFETY_WEAPON_MAG>0?1:1);
+   addOwned(SAFETY_WEAPON,1);
    granted.push(SAFETY_WEAPON);
    if(!META.loadout.primary||!ownedCount(META.loadout.primary)) META.loadout.primary=SAFETY_WEAPON;
+   const box='ammo_pistol_std';
+   if(!(ownedCount(box)>0||META.loot[box]>0)) addOwned(box,1);
+   if(Array.isArray(META.loadout.ammo)&&!META.loadout.ammo.includes(box)) META.loadout.ammo.unshift(box);
  }
  if(!ownedArmorList().length){
    addOwned(SAFETY_ARMOR,1);
@@ -325,6 +345,9 @@ function setLoadout(slot,key){
  META.loadout[slot]=key;
  saveMeta();
  refreshLoadoutSelects();
+ if(['primary','secondary','chest'].includes(slot)&&typeof renderDeployAmmo==='function'){
+  renderDeployAmmo(); updateConsumSummary();
+ }
 }
 function refreshLoadoutSelects(){
  const pSel=el('arsenalSelect'), sSel=el('secondarySelect'), aSel=el('armorSelect');
@@ -346,14 +369,16 @@ function refreshLoadoutSelects(){
  if(pStats){
   const scavP=!!(typeof TEAM_FACTION!=='undefined'&&TEAM_FACTION[player.team]&&TEAM_FACTION[player.team].scav);
   const pd=WPN_DEFS[META.loadout.primary];
+  const scavKey=scavP&&RUN.scavLoadout&&RUN.scavLoadout.primary;
   pStats.textContent=scavP
-   ?'拾荒者出击 · 主武器每局从二战兵器随机抽取，这里的仓库主武器不会带出'
-   :(pd?`当前主武器：${pd.name} · 伤害 ${pd.dmg} · 弹匣 ${pd.mag} / 备弹 ${pd.reserve}`:'');
+   ?(scavKey?'本局配发 '+itemName(scavKey)+' · '+AMMO_CAL_NAME[ammoCaliberOf(scavKey)]:'拾荒者入场时配发二战武器')
+   :(pd?`伤害 ${pd.dmg} · 弹匣容量 ${pd.mag} 发`:'');
  }
  if(sSel){
   sSel.innerHTML='<option value="">— 不携带副武器 —</option>';
+  const primary=RUN.scavLoadout?RUN.scavLoadout.primary:META.loadout.primary;
   for(const k of ownedWeaponList()){
-   if(k===META.loadout.primary) continue;
+   if(k===primary) continue;
    const o=document.createElement('option');
    o.value=k; o.textContent=itemName(k);
    o.selected=k===META.loadout.secondary;
@@ -497,103 +522,122 @@ function refreshLoadoutSelects(){
   const _conf=(_hs&&_hs.earMuff&&META.loadout.helmet==='helm6');
   sum.innerHTML=`<b>主武器:</b> ${p} · <b>副武器:</b> ${s} · <b>防弹衣:</b> ${a} · <b>插板:</b> ${pl} · <b>头盔:</b> ${h} · <b>面罩:</b> ${fs} · <b>耳机:</b> ${hs}`
    +` · <b>胸挂:</b> ${ch} · <b>夜视:</b> ${nv}`
-   +(_conf?'<div style="color:#e0b080;font-size:12px;margin-top:4px">⚠ 该耳机是耳罩式，和 Altyn 头盔冲突 —— 出击时不会生效，请改用 Peltor TEP-300 战术耳塞</div>':'');
+   +(_conf?'<div style="color:#e0b080;font-size:12px;margin-top:4px">⚠ 该耳机是耳罩式，和 Altyn 头盔冲突 —— 出击时不会生效，请改用 Peltor TEP-300 战术耳塞</div>':'')
    +(scav?'<div style="color:#d8b878;font-size:12px;margin-top:4px">拾荒者出击 · 主武器每局随机, 不带仓库主武器 / 无保险 / 阵亡不掉落仓库装备</div>':'');
  }
  // 装备变了 → 刷新 ELO 装备估值维度读数 (00b_elo)
  if(typeof eloRenderUI==='function') eloRenderUI();
 }
-function renderArmory(tab){
- ARMORY_TAB=tab||'store';
- const walletEl=el('arWallet'), listEl=el('arList'), hintEl=el('arHint');
- if(!walletEl||!listEl) return;
- walletEl.textContent=`作战货币：${formatMoney(META.wallet)} · Lv.${META.level||1} · 经验 ${Math.floor(META.xp||0)}/${(typeof XP_PER_LEVEL!=='undefined'?XP_PER_LEVEL:1000)}`;
- document.querySelectorAll('[data-ar]').forEach(b=>b.classList.toggle('sel',b.dataset.ar===tab));
- let rows='';
- const addRow=(key,extra)=>{
-  const kind=itemKind(key);
-  const owned=ownedCount(key);
-  const price=itemPrice(key), sell=itemSellPrice(key);
-  const icon=typeof itemIconOf==='function'?itemIconOf(key):(kind==='armor'?'🛡':'🔫');
-  const priceTxt=tab==='store'?`<span class="arPrice">${formatMoney(price)}</span>`:`<span class="arPrice">可售 ${formatMoney(sell)}</span>`;
-  const action=tab==='store'
-   ? `<button class="optBtn arBtn" data-key="${key}" data-action="buy">购买</button>`
-   : tab==='warehouse'
-   ? `<button class="optBtn arBtn" data-key="${key}" data-action="equip">装备</button><button class="optBtn arBtn" data-key="${key}" data-action="sell">出售</button>`
-   : `<button class="optBtn arBtn" data-key="${key}" data-action="loot-keep">入库</button><button class="optBtn arBtn" data-key="${key}" data-action="loot-sell">出售</button>`;
-  rows+=`<div class="arRow"><div class="arIcon">${icon}</div><div class="arBody"><div class="arName">${itemName(key)}</div><div class="arDesc">${itemDesc(key)}</div>${extra}</div>${priceTxt}${action}</div>`;
- };
- if(tab==='store'){
-  for(const c of ITEM_CATALOG) addRow(c.key,ownedCount(c.key)?`<div class="arOwned">库存 ${ownedCount(c.key)}</div>`:'');
- } else if(tab==='market'){
-  rows+=typeof renderMarketRows==='function'?renderMarketRows(tab):'';
- } else if(tab==='workbench'){
-  rows+=typeof renderWorkbenchRows==='function'?renderWorkbenchRows():'';
- } else if(tab==='quests'){
-  rows+=typeof renderQuestRows==='function'?renderQuestRows():'';
- } else if(tab==='warehouse'){
-  // 2026-09-19: 原来只列 武器 + 护甲, 头盔/耳机/背包买了也看不见
-  // 2026-09-19: 补上夜视仪 —— 之前漏了, 三型夜视仪买了在仓库里根本看不见, 也就无法装备
-  for(const k of ownedWeaponList().concat(ownedArmorList()).concat(ownedHelmetList()).concat(ownedHeadsetList()).concat(ownedPackList()).concat(ownedChestList()).concat(ownedNvgList()))
-   addRow(k,`<div class="arOwned">库存 ${ownedCount(k)}</div>`);
- } else {
-  const lootKeys=Object.keys(META.loot);
-  if(lootKeys.length){
-   for(const k of lootKeys) addRow(k,`<div class="arOwned">带出 ${META.loot[k]}</div>`);
-   rows+=`<div class="arRow arLootActions"><button class="bigBtn" id="sellAllLoot">全部卖出 (${formatMoney(lootKeys.reduce((a,k)=>a+META.loot[k]*itemSellPrice(k),0))})</button></div>`;
-  } else rows='<div class="arEmpty">尚未带出战利品。进入街区或秘密实验室搜索物资箱、搜刮敌人尸体，然后在地图上的撤离点完成撤离。</div>';
- }
- listEl.innerHTML=rows;
- if(hintEl){
-  const hints={
-   store:'商店出售武器与防弹衣；已拥有的可在仓库出售。',
-   market:'市集交易食物 / 药品 / 杂物 / 背包 / 夜视仪 — 局内也能在物资箱与尸体上搜到同款。',
-   workbench:'改枪工坊：换装配件按件收取货币改装费，改装在局外完成、整局生效。',
-   quests:'完成任务获得经验与货币 · 每 1000 经验升 1 级 · 等级解锁市集商品 · 全部 '+(typeof QUEST_DEFS!=='undefined'?QUEST_DEFS.length:24)+' 个任务完成后市集解锁「撤离通行证」（瓦尔登禁区出境许可 · 持证撤离解锁结局）。标有地图名的任务只能在对应地图完成。',
-   warehouse:'仓库中的物品可在部署界面自由装配。',
-   loot:'战利品可在「市集」与商店目录中出售换取货币。'
-  };
-  hintEl.textContent=hints[tab]||'';
- }
- if(el('sellAllLoot')) el('sellAllLoot').onclick=sellAllLoot;
- if(tab==='workbench'&&typeof bindWorkbench==='function') bindWorkbench();
- // 购买/出售后同步部署界面的消耗品选择器
- if((tab==='market'||tab==='store'||tab==='loot')&&typeof buildDeployConsumables==='function') buildDeployConsumables();
+function armorySection(tab){
+ return tab==='loot'?'warehouse':tab==='market'?'store':tab;
 }
-let ARMORY_TAB='store';
+function armoryCategory(key){
+ const kind=itemKind(key);
+ if(['armor','helmet','headset','plate','gear'].includes(kind)) return 'protection';
+ if(kind==='pack'||kind==='chest') return 'carry';
+ return kind;
+}
+function renderStoreCatalog(tab){
+ const supplies=tab==='market'?TRADE_KEYS:[...TRADE_KEYS,...ITEM_CATALOG.map(c=>c.key)];
+ const calibers=[META.loadout.primary,META.loadout.secondary].filter(k=>WPN_DEFS[k]).map(ammoCaliberOf);
+ const quick=calibers.map(ammoKeyOfCaliber);
+ const catalog=[...new Set([...quick,...supplies])];
+ return catalog.filter(k=>k!=='pass'||questsAllDone()).map(k=>{
+  const locked=buyGateMsg(k), price=itemPrice(k), owned=ownedCount(k);
+  const why=locked?'Lv.'+tradeLockLevel(k)+' 解锁':META.wallet<price?'余额不足':'购买';
+  const cls=armoryCategory(k), fits=AMMO_DEFS[k]&&calibers.includes(AMMO_DEFS[k].cal);
+  return '<div class="arRow arProduct" data-category="'+cls+'" data-product="'+k+'"><div class="arBody">'
+   +'<div class="arName">'+itemLabel(k)+'</div><div class="arDesc">'+itemDesc(k)+'</div>'
+   +'<div class="arOwned">库存 '+owned+(fits?' · 当前配装适用':'')+'</div></div>'
+   +'<span class="arPrice">¥'+formatMoney(price)+'</span><div class="arTradeButtons"><button type="button" class="optBtn arBtn" data-key="'+k+'" data-action="buy" aria-label="'+why+' '+itemLabel(k)+'" '+(locked||META.wallet<price?'disabled':'')+'>'+why+'</button>'
+   +(tab==='market'&&owned?'<button class="optBtn arBtn" type="button" data-key="'+k+'" data-action="sell">卖出 ¥'+formatMoney(itemSellPrice(k))+'</button>':'')+'</div></div>';
+ }).join('');
+}
+let ARMORY_TAB='warehouse', armoryGridMode=false;
+function renderArmory(tab='warehouse'){
+ const section=armorySection(tab), current=armorySection(ARMORY_TAB);
+ const list=el('arList');
+ if(!list) return;
+ const scroll=tab===ARMORY_TAB?list.scrollTop:0;
+ if(section!==current){ el('arSearch').value=''; el('arCategory').value=''; }
+ ARMORY_TAB=tab;
+ el('arWallet').textContent='余额 ¥'+formatMoney(META.wallet)+' · Lv.'+(META.level||1);
+ const map=CAMPAIGNS[selectedRaidMap];
+ const field=map&&!map.storyOnly&&!map.rangeOnly?map:CAMPAIGNS.find(c=>!c.storyOnly&&!c.rangeOnly);
+ el('arCheckoutBtn').textContent=field?'前往'+(field.mapName||field.title)+'配装':'前往配装';
+ el('arCarry').textContent=[META.loadout.primary,META.loadout.secondary].filter(k=>WPN_DEFS[k]).map(itemName).join(' / ')||'未配备武器';
+ el('arDepartments').querySelectorAll('[data-ar]').forEach(b=>{
+  const on=b.dataset.ar===section;
+  b.classList.toggle('sel',on); b.setAttribute('aria-pressed',String(on));
+ });
+ el('arToolbar').querySelectorAll('[data-ar],[data-stock]').forEach(b=>{
+  const on=(b.dataset.ar||b.dataset.stock)===tab;
+  b.classList.toggle('sel',on); b.setAttribute('aria-pressed',String(on));
+ });
+ el('arStockViews').hidden=section!=='warehouse';
+ el('arShopViews').hidden=section!=='store';
+ el('arCategory').hidden=section!=='warehouse'&&section!=='store';
+ el('arLayoutBtn').hidden=section!=='warehouse';
+ el('arFilters').hidden=section==='workbench';
+ el('arLayoutBtn').textContent=armoryGridMode?'返回清单':'整理格位';
+ el('arLayoutBtn').setAttribute('aria-pressed',String(armoryGridMode));
+ list.dataset.section=section;
+ if(section==='warehouse') renderArmoryGrid(tab);
+ else if(section==='store') list.innerHTML=renderStoreCatalog(tab);
+ else if(section==='workbench'){ list.innerHTML=renderWorkbenchRows(); bindWorkbench(); }
+ else if(section==='quests') list.innerHTML=renderQuestRows();
+ shopApplyFilter();
+ list.scrollTop=scroll;
+ if((section==='store'||section==='warehouse')&&typeof buildDeployConsumables==='function') buildDeployConsumables();
+}
 function initArmoryUI(){
- document.querySelectorAll('[data-ar]').forEach(b=>b.onclick=()=>renderArmory(b.dataset.ar));
- renderArmory('store');
+ el('mArmory').querySelectorAll('[data-ar],[data-stock]').forEach(b=>b.onclick=()=>renderArmory(b.dataset.ar||b.dataset.stock));
+ el('arLayoutBtn').onclick=()=>{ armoryGridMode=!armoryGridMode; renderArmory(ARMORY_TAB); };
+ el('arCheckoutBtn').onclick=()=>{
+  const map=CAMPAIGNS[selectedRaidMap];
+  selectMapAndDeploy(map&&!map.storyOnly&&!map.rangeOnly?selectedRaidMap:CAMPAIGNS.findIndex(c=>!c.storyOnly&&!c.rangeOnly));
+ };
+ renderArmory('warehouse');
  refreshLoadoutSelects();
 }
 function openArmoryFromEnd(){
  document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
  const menu=el('menu');
  if(menu) menu.classList.remove('hidden');
- const home=el('mHome'), armory=el('mArmory');
- if(home) home.classList.add('hidden');
- if(armory) armory.classList.remove('hidden');
- renderArmory('loot');
+ showMenuPanel('mArmory','loot');
 }
 document.addEventListener('click',e=>{
  const b=e.target.closest?.('[data-action]');
  if(!b) return;
  const key=b.dataset.key, action=b.dataset.action;
+ const restore=document.activeElement===b&&!!b.closest('#arList');
  if(action==='buy') buyItem(key);
  else if(action==='sell') sellItem(key);
- else if(action==='equip'){
-  const kind=itemKind(key);
-  // ⚠️ 原来写死 kind==='armor'?'armor':'primary' —— 头盔/耳机/背包会被装成主武器
-  const slot=(kind==='armor')?'armor'
-   :(kind==='helmet')?'helmet'
-   :(kind==='headset')?'headset'
-   :(kind==='pack')?'pack'
-   :(kind==='chest')?'chest'
-   :(kind==='gear')?'nvg'
-   :'primary';
+ else if(action==='equip'||action==='equip-side'){
+  if(!ownedCount(key)) return;
+  const slots={weapon:'primary',armor:'armor',helmet:'helmet',headset:'headset',pack:'pack',chest:'chest',gear:'nvg',plate:'plate'};
+  const slot=action==='equip-side'?'secondary':slots[itemKind(key)];
+  if(!slot) return;
+  const L=META.loadout;
+  if(slot==='secondary'&&L.primary===key) return;
+  if(slot==='primary'&&L.secondary===key) L.secondary=L.primary&&ownedCount(L.primary)?L.primary:'';
+  if(slot==='nvg') L.faceShield=false;
   setLoadout(slot,key);
   renderArmory('warehouse');
  }
+ else if(action==='workbench'){ WORKBENCH_KEY=key; renderArmory('workbench'); el('wbWeapon')?.focus(); }
+ else if(action==='find-supply'){
+  renderArmory('store');
+  const weapon=WPN_DEFS[key], search=el('arSearch');
+  el('arCategory').value=weapon?'ammo':armoryCategory(key);
+  search.value=weapon?AMMO_CAL_NAME[ammoCaliberOf(key)]:itemLabel(key);
+  shopApplyFilter(); search.focus(); search.select(); return;
+ }
  else if(action==='loot-sell') sellLoot(key);
  else if(action==='loot-keep') moveLootToOwned(key);
+ if(restore&&!b.isConnected&&action!=='workbench'){
+  const target=el('arList').querySelector('[data-action="'+action+'"][data-key="'+CSS.escape(key)+'"]:enabled')
+    ||el('arList').querySelector('.invTile.sel, .arProduct:not([hidden]) button:enabled');
+  (target||el('arSearch')).focus({preventScroll:true});
+ }
 });

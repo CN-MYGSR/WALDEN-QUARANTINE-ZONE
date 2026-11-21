@@ -68,12 +68,12 @@
 - 镜片遮罩 = 目镜本体：开镜时由 `63_scope.sightScale()` 反算倍率，`15_viewmodel` 把整个视模型（枪身+手臂）等比放大，目镜推到 `SCOPE.adsDist()`；狙击 82% / 非狙击 55% 屏高由目镜半径自动满足。不要再把遮罩单独放大成"全屏圆盘"，否则会出现遮罩巨大、枪身很小的割裂。
 - 库存 UI 统一走 `65_invgrid`：占位面积 = `itemSizeOf()`；`META.owned/META.loot/RUN.loot/RUN.secure` 仍是计数真相，layout 只存 `{x,y,rot}`，面板不要直接改计数。
 - 当前占格：背包 2×3、头盔 2×2、护甲 3×4、长枪 4×2、手枪/副武器 1×2；改尺寸必须同时改 `itemSizeOf()` 与 `INVGRID.foot()`，保持面积相等。
-- 弹药：开局 `mag/reserve=0`，由部署界面带入弹盒；弹种 0 RIP / 1 普通 / 2 M855 / 3 M995 / 4 AP，装填走 `loadAmmoFromBag()`，穿透只在 `applyPlayerBodyDamage()` 结算。不要恢复免费备弹或允许弹种混装。
+- 普通撤离开局 `mag/reserve=0`，弹盒随部署配装带入。按 `ammoCaliberOf()` 区分步枪、手枪和支援武器，拆盒走 `loadAmmoFromBag()`，按件扣除。保留同弹种装填和现有穿透结算。
 - 护甲：无插板=凯夫拉（`armorResist*0.35`）；插板等级存 `p.plateLevel`，破甲规则在 `applyPlayerBodyDamage()`；面罩用 `p.faceLevel` / `RUN.faceDown`，展开期间必须禁用 NVG。
 - 面罩与 NVG 共用 `N` 轻按：面罩/夜视二选一（`RUN.headGear`），所有头盔 `faceShield:true`；触屏 `tNvg` 文案跟随。库存旋转统一走 `INVGRID.rotate()`（触屏按钮，不依赖 R）。新增武器必须同时补 `WPN_DEFS`、`MOD_AVAIL`、`ARSENAL_ERA` 与枪模别名。
 - 改装视觉：镜座已在 14b 抬高；自带镜武器不使用外置镜模型；夜视仪占 `gear` 槽时 `effectiveOptic()` 会强制机瞄，UI 必须同步提示。
 - BOSS：每张可交战地图一名，定义在 `66_boss`（队伍=玩家对面，`unitId='BOSS'`，不编队、不倒地）。**不显示任何 BOSS 血量 HUD**。街区 `bfruins` 的守备与 BOSS 互不交火；其他地图允许同阵营 BOSS 与守备互相攻击。所有新的敌我过滤点必须走 `isHostileUnit(a,b)`，不要只写 `a.team===b.team`。
-- 背包/模态输入：Tab 打开背包时必须 `releaseAllInputs()` + 取消开镜 + `exitPointerLock()`；面板打开期间键盘只允许 Tab/Esc（关闭）、R（旋转）、↑/↓（选择），其余按键在 24_input 最前面吞掉且不写入 `keys`。`pointerlockchange` 在背包打开时不得弹部署界面；关闭背包后要恢复指针锁定（`bagRelockPointer`），画布点击也不得在背包打开时抢锁。
+- 背包、搜刮和弹药商店打开时释放战斗输入、取消开镜并交还光标。面板独占键盘事件。背包支持上下选物、左右选操作、Enter 确认、R 旋转、背包键或 Esc 关闭。面板之间切换时保持光标可用，回到对局才恢复指针锁定。
 - 依赖加载：`node_modules/` 已移除。浏览器端裸模块名走 `index.html` 的 Import Map：`three → ./vendor/three.module.min.js`、`cannon-es → ./vendor/cannon-es.js`。新增浏览器库必须放 `vendor/` 并补 import map，不要重新引入 node_modules 运行时依赖；经典脚本仍用 `vendor/three.min.js` 的全局 `THREE`。
 - `_tools` 探针不再依赖 `ws` 包：统一 `require('./ws')`（封装 Node 自带 WebSocket，见 `_tools/ws.js`）。Node 版本需 ≥22。
 - 修改后同步 `dist/`（index.html、css、js、vendor、assets）；`_tools`、截图、`.vibehub` 不进部署目录。

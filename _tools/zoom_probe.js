@@ -1,100 +1,157 @@
-// 无极变倍探针: 验证倍率区间 / 连续调整 / FOV 联动 / HUD
-const http = require('http');
-const { spawn } = require('child_process');
-const os = require('os');
-const URL_ = process.argv[2] || 'http://127.0.0.1:8123/index.html';
-const CHROME = 'C:/Program Files/Google/Chrome/Application/chrome.exe';
-const PORT = 9333;
-const profile = os.tmpdir() + '/zoom-probe-' + Date.now();
-const chrome = spawn(CHROME, [
-  '--headless=new', '--disable-gpu', '--no-sandbox', '--disable-dev-shm-usage',
-  '--remote-debugging-port=' + PORT, '--user-data-dir=' + profile,
-  '--window-size=1440,900', '--hide-scrollbars', '--mute-audio',
-  '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader', 'about:blank'
-], { stdio: ['ignore', 'pipe', 'pipe'] });
-let stderr = '';
-chrome.stderr.on('data', d => { stderr += d.toString(); });
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const getJSON = p => new Promise((res, rej) => {
-  http.get({ host: '127.0.0.1', port: PORT, path: p }, r => {
-    let b = ''; r.on('data', c => b += c); r.on('end', () => { try { res(JSON.parse(b)); } catch (e) { rej(e); } });
-  }).on('error', rej);
-});
-let idc = 0;
-function rpc(ws, method, params) {
-  const id = ++idc;
-  return new Promise((res, rej) => {
-    const on = raw => {
-      let m; try { m = JSON.parse(raw); } catch (e) { return; }
-      if (m.id === id) { ws.off('message', on); m.error ? rej(new Error(JSON.stringify(m.error))) : res(m.result); }
-    };
-    ws.on('message', on);
-    ws.send(JSON.stringify({ id, method, params: params || {} }));
-    setTimeout(() => { ws.off('message', on); rej(new Error('rpc timeout ' + method)); }, 60000);
+'use strict';
+// node _tools/zoom_probe.js <game URL> [Chrome debugging URL]
+const assert = require('node:assert/strict');
+const { spawn } = require('node:child_process');
+const { mkdtempSync } = require('node:fs');
+const path = require('node:path');
+const os = require('node:os');
+const { setTimeout: sleep } = require('node:timers/promises');
+
+const game = new URL(process.argv[2] || 'http://127.0.0.1:8123/');
+let chrome;
+async function browserEndpoint() {
+  if (process.argv[3]) {
+    const version = await (await fetch(new URL('/json/version', process.argv[3]))).json();
+    return version.webSocketDebuggerUrl;
+  }
+  const profile = mkdtempSync(path.join(os.tmpdir(), 'walden-zoom-'));
+  chrome = spawn('C:/Program Files/Google/Chrome/Application/chrome.exe', [
+    '--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile,
+    '--window-size=1200,800', '--mute-audio', 'about:blank'
+  ], { stdio: ['ignore', 'ignore', 'pipe'], windowsHide: true });
+  return new Promise((resolve, reject) => {
+    let log = '';
+    chrome.stderr.on('data', chunk => {
+      log += chunk;
+      const address = log.match(/DevTools listening on (ws:\/\/[^\s]+)/);
+      if (address) resolve(address[1]);
+    });
+    chrome.once('error', reject);
+    chrome.once('exit', code => reject(Error('Chrome exited ' + code)));
   });
 }
-(async () => {
-  let page;
-  for (let i = 0; i < 70; i++) {
-    try { const l = await getJSON('/json/list'); if (l && l.length) { page = l.find(t => t.type === 'page') || l[0]; break; } } catch (e) { }
-    await sleep(400);
+
+async function run() {
+  const socket = new WebSocket(await browserEndpoint());
+  await new Promise((ok, fail) => { socket.onopen = ok; socket.onerror = fail; });
+  let seq = 0, sessionId;
+  const pending = new Map();
+  socket.onmessage = ({ data }) => {
+    const { id, result, error } = JSON.parse(data);
+    if (!pending.has(id)) return;
+    const { ok, fail, timer } = pending.get(id);
+    pending.delete(id);
+    clearTimeout(timer);
+    error ? fail(Error(error.message)) : ok(result);
+  };
+  function rpc(method, params = {}, session) {
+    return new Promise((ok, fail) => {
+      const id = ++seq;
+      const timer = setTimeout(() => { pending.delete(id); fail(Error('Timed out: ' + method)); }, 45000);
+      pending.set(id, { ok, fail, timer });
+      socket.send(JSON.stringify({ id, method, params, sessionId: session }));
+    });
   }
-  if (!page) { console.log(JSON.stringify({ fatal: 'cdp not ready', stderr: stderr.slice(-800) })); process.exit(1); }
-  const WebSocket = require('./ws');
-  const ws = new WebSocket(page.webSocketDebuggerUrl, { perMessageDeflate: false });
-  await new Promise((r, j) => { ws.on('open', r); ws.on('error', j); });
+  const page = (method, params) => rpc(method, params, sessionId);
+  const read = async expression => {
+    const r = await page('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true, userGesture: true });
+    if (r.exceptionDetails) throw Error(r.exceptionDetails.exception?.description || r.exceptionDetails.text);
+    return r.result.value;
+  };
   const errors = [];
-  ws.on('message', raw => {
-    let m; try { m = JSON.parse(raw); } catch (e) { return; }
-    if (m.method === 'Runtime.exceptionThrown') errors.push('EXC ' + ((m.params.exceptionDetails.exception || {}).description || ''));
-    else if (m.method === 'Runtime.consoleAPICalled' && m.params.type === 'error')
-      errors.push('ERR ' + (m.params.args || []).map(a => a.value !== undefined ? a.value : a.description).join(' '));
+  socket.addEventListener('message', ({ data }) => {
+    const { method, params, sessionId: eventSession } = JSON.parse(data);
+    if (eventSession === sessionId && method === 'Runtime.exceptionThrown')
+      errors.push(params.exceptionDetails.exception?.description || params.exceptionDetails.text);
   });
-  await rpc(ws, 'Runtime.enable'); await rpc(ws, 'Page.enable');
-  await rpc(ws, 'Page.navigate', { url: URL_ });
-  await sleep(13000);
-  const expr = `(async function(){
-    const out={};
-    try{
-      PLAYER_MODS.m4=Object.assign({},PLAYER_MODS.m4,{optic:'optic_2x',gear:'gear_none'});
-      out.range4=zoomRangeOf('m4').map(v=>+v.toFixed(2));
-      out.z4=+zoomOf('m4').toFixed(2); out.fov4=+adsFovOf('m4').toFixed(2);
-      const seq=[];
-      for(let i=0;i<6;i++){ zoomAdjust('m4',-1); seq.push([+zoomOf('m4').toFixed(2),+adsFovOf('m4').toFixed(2)]); }
-      out.seq=seq;
-      out.rangeScoped=zoomRangeOf('kar98zf').map(v=>+v.toFixed(2));
-      out.zScoped=+zoomOf('kar98zf').toFixed(2); out.fovScoped=+adsFovOf('kar98zf').toFixed(2);
-      zoomAdjust('kar98zf',-1); out.fovScoped2=+adsFovOf('kar98zf').toFixed(2);
-      out.iron=zoomOf('m1911'); out.fovIron=+adsFovOf('m1911').toFixed(2);
-      out.keepWide=SCOPE.keepWide('m4',1);
-      VM.key='m4'; player.ads=true; zoomHudUpdate();
-      out.hud={txt:document.getElementById('zoomN').textContent,disp:document.getElementById('zoomN').style.display};
-      // 真实滚轮路径
-      player.alive=true; pointerLocked=true; player.ads=true; VM.key='m4';
-      const zb=zoomOf('m4'), c0=player.carry;
-      dispatchEvent(new WheelEvent('wheel',{deltaY:120,cancelable:true,bubbles:true}));
-      await new Promise(r=>setTimeout(r,260));
-      out.wheel={before:+zb.toFixed(2), after:+zoomOf('m4').toFixed(2), decreased:zoomOf('m4')<zb, carrySame:player.carry===c0};
-      // 实战: 部署 + 开镜后看镜内 FOV 是否跟着变倍
-      try{
-        el('menu').classList.add('hidden'); startMatch(); showDeploy(false); selectedSpawn=-1; deployPlayer();
-        await new Promise(r=>setTimeout(r,600));
-        PLAYER_MODS.m4=Object.assign({},PLAYER_MODS.m4,{optic:'optic_2x',gear:'gear_none'});
-        VM.key='m4'; player.curW={key:'m4',def:WPN_DEFS.m4,mag:30,reserve:90};
-        await new Promise(r=>setTimeout(r,1200));
-        player.ads=true;
-        await new Promise(r=>setTimeout(r,600));
-        out.scope={mode:SCOPE.state().mode,fov1:+SCOPE.state().fov.toFixed(2),z1:+zoomOf('m4').toFixed(2)};
-        zoomAdjust('m4',-1,0.3);
-        await new Promise(r=>setTimeout(r,350));
-        out.scope.fov2=+SCOPE.state().fov.toFixed(2); out.scope.z2=+zoomOf('m4').toFixed(2);
-        out.scope.wider=out.scope.fov2>out.scope.fov1;
-      }catch(e){ out.scopeErr=String(e); }
-    }catch(e){ out.err=String((e&&e.stack)||e); }
-    return out;
-  })()`;
-  const r = await rpc(ws, 'Runtime.evaluate', { expression: expr, awaitPromise: true, returnByValue: true });
-  console.log(JSON.stringify({ result: r.result && r.result.value, exceptions: errors.slice(0, 6) }, null, 1));
-  try { chrome.kill(); } catch (e) { }
-  process.exit(0);
-})();
+  async function waitFor(expression) {
+    const stop = Date.now() + 35000;
+    while (Date.now() < stop) {
+      if (await read(expression).catch(() => false)) return;
+      await sleep(100);
+    }
+    const state = await read("({screen:document.querySelector('.screen:not(.hidden)')?.id,alive:player.alive,weapon:player.curW?.key,map:CAMPAIGN.id})").catch(String);
+    throw Error('Timed out waiting for ' + expression + ': ' + JSON.stringify(state) + '\n' + errors.join('\n'));
+  }
+  const { browserContextId } = await rpc('Target.createBrowserContext');
+  try {
+    const { targetId } = await rpc('Target.createTarget', { browserContextId, url: 'about:blank' });
+    ({ sessionId } = await rpc('Target.attachToTarget', { targetId, flatten: true }));
+    await page('Page.enable');
+    await page('Runtime.enable');
+    await page('Emulation.setFocusEmulationEnabled', { enabled: true });
+    await page('Emulation.setDeviceMetricsOverride', { width: 960, height: 540, deviceScaleFactor: 1, mobile: true });
+    await page('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+    await page('Network.enable');
+    await page('Network.setBlockedURLs', { urls: ['*://gamesvibe.app/*', '*://vibe.lumigrav.space/*'] });
+    await page('Page.addScriptToEvaluateOnNewDocument', { source: `
+      localStorage.setItem('sf_campaign','6'); localStorage.setItem('sf_range','1'); localStorage.setItem('sf_autodeploy','1');
+      localStorage.setItem('sf_rangeWpn','m4'); localStorage.setItem('sf_touch','1'); localStorage.setItem('sf_fov','92');
+      localStorage.setItem('sf_mods',JSON.stringify({m4:{optic:'optic_2x'}}));
+      window.VibeHubWorkshop={beforeStart:Promise.resolve(),markGameReady(){}};
+      const raf=requestAnimationFrame.bind(window);
+      window.requestAnimationFrame=fn=>fn.name==='loop'?0:raf(fn);
+    ` });
+    await page('Page.navigate', { url: game.href });
+    await waitFor('document.readyState==="complete"&&typeof el("deployBtn").onclick==="function"&&!el("deploy").classList.contains("hidden")');
+    await read("el('deployBtn').click()");
+    await waitFor("player.deployed&&player.alive&&player.curW.key==='m4'&&!document.body.classList.contains('uiOpen')");
+    await read(`
+      window.sampleLens=()=>{
+        for(let i=0;i<100;i++) updateViewModel(1/60,player);
+        zoomHudUpdate();
+        if(!SCOPE.preRender()) throw Error('Scope render target was not rendered');
+        const s=SCOPE.state(), lens=s.lens;
+        const projectY=y=>lens.localToWorld(new THREE.Vector3(0,y,0)).project(vmCamera).y;
+        const diameter=(projectY(.5)-projectY(-.5))/2;
+        return {power:zoomOf(player.curW.key),fov:s.cam.fov,wide:camera.fov,
+          imagePower:diameter*s.cam.projectionMatrix.elements[5]/camera.projectionMatrix.elements[5],
+          hud:el('zoomN').textContent,carry:player.carry};
+      };
+      dispatchEvent(new MouseEvent('mousedown',{button:2}));
+    `);
+    const base = await read('sampleLens()');
+    assert.equal(base.power, 1, 'start at the wide end');
+    const wheel = async (dy, mode = 0) => read(`dispatchEvent(new WheelEvent('wheel',{deltaY:${dy},deltaMode:${mode},cancelable:true}))`);
+    await wheel(-100);
+    const near = await read('sampleLens()');
+    assert.ok(near.power > base.power && near.fov < base.fov, 'wheel zooms actual render camera');
+    assert.ok(Math.abs(base.wide - near.wide) < 0.03 && Math.abs(near.wide - 92) < 0.03);
+    assert.ok(Math.abs(near.imagePower - near.power) < 0.05, 'rendered size agrees with the power readout');
+    assert.ok(near.hud.includes(near.power.toFixed(2)) && near.carry === base.carry);
+    await read("for(const dy of [-1,-1,-1])dispatchEvent(new WheelEvent('wheel',{deltaY:dy,deltaMode:1,cancelable:true}))");
+    const fine = await read('sampleLens()');
+    assert.ok(fine.power > near.power && fine.fov < near.fov, 'fine line deltas are not eaten by a throttle');
+    await read("dispatchEvent(new KeyboardEvent('keydown',{code:'BracketLeft',bubbles:true}))");
+    assert.ok(await read("zoomOf('m4')") < fine.power);
+    await wheel(-10000);
+    assert.equal(await read("zoomOf('m4')===zoomRangeOf('m4')[1]"), true);
+    await wheel(10000);
+    assert.equal(await read("zoomOf('m4')"), base.power);
+    const { x, y } = await read("updateTouchVis();const rect=el('tAds').getBoundingClientRect();({x:rect.x+rect.width/2,y:rect.y+rect.height/2})");
+    assert.equal(await read(`document.elementFromPoint(${x},${y})?.closest('[data-act]')?.dataset.act`), 'ads', 'touch aim is visible');
+    const touch = (type, offset = 0) => page('Input.dispatchTouchEvent', {
+      type, touchPoints: type === 'touchEnd' ? [] : [{ x, y: y + offset, id: 1 }]
+    });
+    await touch('touchStart');
+    await touch('touchMove', -40);
+    await touch('touchEnd');
+    const dragged = await read('sampleLens()');
+    assert.ok(await read('player.ads') && dragged.power > near.power && dragged.fov < near.fov, 'drag zooms and stays aimed: ' + JSON.stringify(dragged));
+    await touch('touchStart');
+    await touch('touchEnd');
+    assert.equal(await read('player.ads'), false, 'tapping the same control exits aim');
+    await read('dispatchEvent(new MouseEvent("mousedown",{button:2}));');
+    await read("player.slots.push({key:'kar98zf',def:moddedDef('kar98zf'),mag:0,reserve:0});switchSlot(player.slots.length-1)");
+    const builtIn = await read('sampleLens()');
+    await wheel(-200);
+    assert.ok((await read('sampleLens()')).fov < builtIn.fov, 'built-in lens responds after switching weapons');
+    assert.equal(await read("zoomOf('m1911')"), null, 'iron sights do not advertise zoom');
+    console.log('PASS scope FOV', base.fov.toFixed(2), '→', near.fov.toFixed(2), '→', fine.fov.toFixed(2),
+      '| outer FOV', near.wide.toFixed(2), '| displayed / rendered power', near.power.toFixed(2), '/', near.imagePower.toFixed(2));
+  } finally {
+    await rpc('Target.disposeBrowserContext', { browserContextId });
+    socket.close();
+  }
+}
+run().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => { if (chrome) chrome.kill(); });

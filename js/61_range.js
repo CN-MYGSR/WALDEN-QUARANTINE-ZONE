@@ -141,7 +141,10 @@ function rangeUpdate(dt){
 function rangeAmmo(){
   const p=player;
   if(!p||!p.slots) return;
-  for(const s of p.slots) if(s) s.reserve=RANGE.AMMO;
+  for(const s of p.slots) if(s){
+    if(!s.ammo) s.ammo=ammoKeyOfCaliber(ammoCaliberOf(s.key));
+    s.reserve=RANGE.AMMO;
+  }
 }
 
 function rangeUpdateHud(){
@@ -202,24 +205,36 @@ function rangeDeployUI(){
     }
     sel.value=cur;
     sel.onchange=()=>{
-      RUN.rangeWpn=sel.value;
-      try{ localStorage.setItem('sf_rangeWpn',sel.value); }catch(e){}
+      const key=sel.value;
+      RUN.rangeWpn=key;
+      try{ localStorage.setItem('sf_rangeWpn',key); }catch(e){}
+      if(player.alive&&player.deployed&&player.curW?.key!==key&&WPN_DEFS[key]){
+        let slot=player.slots.findIndex(w=>w.key===key);
+        if(slot<0){
+          slot=0;
+          player.slots[slot]={key,def:moddedDef(key)||WPN_DEFS[key],mag:0,reserve:0,ammo:''};
+        }
+        player.curSlot=slot; player.curW=player.slots[slot]; player.ads=false;
+        VM.state='idle'; VM.stateT=0;
+        rangeAmmo(); vmEquip(key,player.team);
+      }
       rangeDeployStats();
     };
   }
   rangeDeployStats();
 
-  const rb=document.getElementById('resumeBtn');
-  if(rb&&rb.parentNode&&!document.getElementById('rangeExitBtn')){
-    const b=document.createElement('button');
-    b.className='bigBtn'; b.id='rangeExitBtn'; b.textContent='离 开 靶 场';
-    b.style.marginLeft='8px';
-    b.onclick=()=>{
-      try{ localStorage.removeItem('sf_range'); localStorage.setItem('sf_campaign','0'); }catch(e){}
-      location.reload();
-    };
-    rb.parentNode.insertBefore(b,rb.nextSibling);
+  let exit=document.getElementById('rangeExitBtn');
+  if(!exit){
+    exit=document.createElement('button');
+    exit.className='optBtn'; exit.id='rangeExitBtn';
+    document.getElementById('resumeBtn').after(exit);
   }
+  exit.textContent=player.deployed?'结束训练':'返回主菜单';
+  exit.onclick=player.deployed?finishRangeTraining:rangeLeave;
+}
+function rangeLeave(){
+  try{ localStorage.removeItem('sf_range'); localStorage.setItem('sf_campaign','0'); }catch(e){}
+  location.reload();
 }
 
 function rangeAfterDeploy(){

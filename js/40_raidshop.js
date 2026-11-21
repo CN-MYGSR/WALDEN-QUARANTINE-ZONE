@@ -23,26 +23,29 @@ const RAID_POP_MS       = 1700;
 const AMMO_SHOP_ENABLED = true;
 // 生效的游戏模式; 默认 ['extract'](仅撤离模式), 可改为 ['extract','conquest'] 等
 const AMMO_SHOP_MODES   = ['extract'];
-// 打开弹药商店的快捷键(e.code); 默认 'KeyO'
-const AMMO_SHOP_KEY     = 'KeyO';
 // 弹种等级: 0 RIP / 1 普通 / 2 M855 / 3 M995 / 4 AP
 // pen 0-4 决定穿透能力; armorMul 影响护甲耐久损耗, dmgMul 是肉体伤害倍率
 const AMMO_TIERS = [
  { id:'ammo_rip',  name:'RIP 弹',  short:'RIP',  tier:0, pen:0, dmgMul:1.35, armorMul:0.25, rounds:30, price:120, weight:0.40, icon:'🟥', desc:'0 级 · 几乎不穿甲，软组织伤害极高' },
- { id:'ammo_std',  name:'普通弹',   short:'普通', tier:1, pen:1, dmgMul:1.00, armorMul:1.00, rounds:30, price:180, weight:0.45, icon:'⬜', desc:'1 级 · 标准全金属被甲弹，通用' },
+ { id:'ammo_std',  name:'普通弹',   short:'普通', tier:1, pen:1, dmgMul:1.00, armorMul:1.00, rounds:30, price:180, weight:0.45, icon:'⬜', desc:'1 级 · 标准弹药' },
  { id:'ammo_m855', name:'M855 弹', short:'M855', tier:2, pen:2, dmgMul:1.05, armorMul:1.30, rounds:30, price:320, weight:0.50, icon:'🟦', desc:'2 级 · 钢芯穿甲，对 1–2 级护甲有效' },
  { id:'ammo_m995', name:'M995 弹', short:'M995', tier:3, pen:3, dmgMul:1.12, armorMul:1.70, rounds:30, price:520, weight:0.55, icon:'🟪', desc:'3 级 · 钨芯穿甲，对 3 级护甲有效' },
  { id:'ammo_ap',   name:'AP 弹',   short:'AP',   tier:4, pen:4, dmgMul:1.20, armorMul:2.20, rounds:20, price:780, weight:0.60, icon:'🟨', desc:'4 级 · 高硬度穿甲弹，专打重甲' }
 ];
-const AMMO_TIER_BY_ID={};
-for(const t of AMMO_TIERS) AMMO_TIER_BY_ID[t.id]=t;
-// 口径中文名(仅展示用)
-const AMMO_CAL_NAME = { '*':'通用' };
-// 弹药包价格表: 0–4 级通用弹种, 任何武器都能装填
-const AMMO_PACK_DEFS = AMMO_TIERS.map(t=>({
- id:t.id, name:t.name, cal:'*', rounds:t.rounds, price:t.price, icon:t.icon,
- tier:t.tier, pen:t.pen, dmgMul:t.dmgMul, short:t.short
-}));
+// 旧存档的五个物品键继续代表同档步枪弹，手枪弹和支援弹使用独立物品键。
+const AMMO_CAL_NAME = { rifle:'步枪弹', pistol:'手枪弹', heavy:'支援弹' };
+const AMMO_KEYS_BY_CAL = { rifle:'ammo_std', pistol:'ammo_pistol_std', heavy:'ammo_heavy_std' };
+const AMMO_PACK_DEFS = [];
+for(const cal of Object.keys(AMMO_CAL_NAME)){
+ for(const t of AMMO_TIERS){
+  if(cal==='heavy'&&t.tier!==1) continue;
+  const id=cal==='rifle'?t.id:t.id.replace('ammo_', 'ammo_'+cal+'_');
+  const short=cal==='pistol'?['RIP','普通','强化','精制','AP'][t.tier]:t.short;
+  AMMO_PACK_DEFS.push({...t,id,cal,short,size:1,name:AMMO_CAL_NAME[cal]+' · '+short,
+    rounds:cal==='heavy'?4:t.rounds});
+ }
+}
+const AMMO_DEFS=Object.fromEntries(AMMO_PACK_DEFS.map(d=>[d.id,d]));
 
 // ==================== 极简事件总线(对局生命周期) ====================
 // 目的: 让"拾取/使用/购买"这些动作可以对 OnMatchStart / OnMatchEnd / OnPlayerDeath
@@ -178,7 +181,8 @@ addLootToBag = function(key, n){
  const before = bagCount(key);
  if(!_origAddLootToBag(key, n)) return false;
  const after = bagCount(key);
- const useTip = itemUsableInRaid(key) ? ` <span style="color:#9fe0ff">· [E] ${raidUseVerb(key)}</span>` : '';
+ const action=AMMO_DEFS[key]?(TOUCHUI?'点换弹装填':'按 '+keyLabelOf('reload')+' 装填'):'可在背包使用';
+ const useTip=itemUsableInRaid(key)?' · '+action:'';
  raidOk(`获得 ${itemIconOf(key)} <b>${itemLabel(key)}</b> <b>×${n}</b> · 持有 <b>${after}</b>${before?`（原 ${before}）`:''}${useTip}`);
  emitRaidEvent('OnLootPickup', { key:key, n:n, total:after });
  return true;
@@ -250,7 +254,6 @@ function enhanceBagPanel(){
 // 背包面板按键表追加 KeyE(通过包裹既有 bagPanelKey, 不改 24_input.js)
 const _origBagPanelKey = (typeof bagPanelKey==='function') ? bagPanelKey : null;
 bagPanelKey = function(code, shift){
- if(AMMO_UI.open && ammoPanelKey(code, shift)) return true;
  if(code === 'KeyE' && typeof BAG_UI!=='undefined' && BAG_UI.open){
   const ks = bagEntryKeys();
   if(ks.length){
@@ -274,26 +277,18 @@ function ammoShopCanOpen(){
  return ammoShopActive() && !!p && p.alive && p.deployed
         && !(typeof matchOver!=='undefined' && matchOver);
 }
-function ammoCaliberOf(key){
- const d = WPN_DEFS[key];
- if(!d) return 'rifle';
- if(d.mortar || d.rocket || d.atRifle) return 'heavy';
- if(d.pistol) return 'pistol';
- if(d.snd === 'smg') return 'smg';
- if(d.snd === 'mg') return 'mg';
- if(d.type === 'bolt' || d.snd === 'sniper') return 'sniper';
- return 'rifle';
-}
+function ammoKeyOfCaliber(cal){ return AMMO_KEYS_BY_CAL[cal]; }
 function currentAmmoWeapon(){
  const p = (typeof player!=='undefined') ? player : null;
  return (p && p.curW && p.curW.def) ? p.curW : null;
 }
-// 报价: 0–4 级通用弹, 检查备弹余量与弹种混装
 function ammoNameOf(key){
-  try{ return (typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[key])?AMMO_DEFS[key].name:key; }catch(e){ return key; }
+ return AMMO_DEFS[key]?AMMO_DEFS[key].name:key;
 }
 function ammoQuote(pk, w){
  if(!w) return { ok:false, reason:'当前没有可装填的武器', give:0, price:pk.price, cur:0, cap:0 };
+ const cal=ammoCaliberOf(w.key);
+ if(pk.cal!==cal) return {ok:false,reason:w.def.name+' 使用'+AMMO_CAL_NAME[cal],give:0,price:pk.price};
  // 备弹/弹匣里已有别的弹种: 不允许混装, 先打空再换
  if(w.ammo && ((w.reserve||0)>0 || (w.mag||0)>0) && w.ammo!==pk.id)
   return { ok:false, reason:`枪里/备弹是「${ammoNameOf(w.ammo)}」，先打空再换 ${pk.name}`,
@@ -310,7 +305,7 @@ function ammoQuote(pk, w){
 // 模块: Shop · 调用入口: 弹药商店 [F]/[Enter]/[1-6]/点击购买 · 补给点 AMMO_CRATES 按 F
 function buyAmmoPack(id){
  if(!ammoShopCanOpen()){ raidWarn('仅在对局进行中可购买弹药'); return false; }
- const pk = AMMO_PACK_DEFS.filter(p => p.id === id)[0];
+ const pk = AMMO_DEFS[id];
  if(!pk) return false;
  const w = currentAmmoWeapon();
  const q = ammoQuote(pk, w);
@@ -324,7 +319,7 @@ function buyAmmoPack(id){
  }
  META.wallet = wallet - q.price;      // 扣费
  w.reserve = Math.min(q.cap, (w.reserve||0) + q.give);  // 发货(不超过备弹上限)
- if(!w.ammo) w.ammo = pk.id;                           // 空枪第一次装填时确定弹种
+ w.ammo = pk.id;
  RUN.ammoSpent  = (RUN.ammoSpent||0)  + q.price;       // 局内统计(RUN 不持久化)
  RUN.ammoRounds = (RUN.ammoRounds||0) + q.give;
  if(typeof saveMeta==='function') saveMeta();
@@ -333,27 +328,7 @@ function buyAmmoPack(id){
  if(typeof AudioSys!=='undefined' && AudioSys.metalSlide) AudioSys.metalSlide(0.3,0.15,500,900);
  emitRaidEvent('OnAmmoPurchased', { id:id, rounds:q.give, price:q.price });
  renderAmmoShop();
- autoSwitchToPrimaryAfterAmmo();
  return true;
-}
-// 购买成功后自动切回主武器 (slot 0)。
-// 修复: 之前买完后玩家"卡手"无法切枪 —— 根因是 buyAmmoPack 期间 VM 视图模型可能停留在
-// reload / equip / unequip 状态, 而 switchSlot() 要求 VM.state ∈ {idle, fire}, 直接 return。
-// 这里强制把 VM 状态重置回 idle 再切枪, 让玩家能立刻用主武器开打。
-// 边界: 玩家在操作工事(onMG/onAT/onAA)时不打断; 玩家已经在 slot 0 时不重复切。
-function autoSwitchToPrimaryAfterAmmo(){
- if(typeof player==='undefined' || !player || !player.alive) return;
- if(!player.slots || !player.slots[0]) return;
- if(player.curSlot === 0) return;
- if(player.onMG || player.onAT || player.onAA) return;
- if(typeof VM !== 'undefined' && VM){
-  if(VM.state !== 'idle' && VM.state !== 'fire'){
-   VM.state = 'idle';
-   VM.stateT = 0;
-   VM.stateDur = 0;
-  }
- }
- if(typeof switchSlot === 'function') switchSlot(0);
 }
 
 // ---------- 移除免费补给: 弹药箱不再白给 ----------
@@ -373,36 +348,69 @@ if(_origDoGrabResolve){
   return _origDoGrabResolve.call(this);
  };
 }
-// 备弹打空时给明确入口提示(而不是默默失败)
+function ammoBoxForReload(w){
+ if(!w) return '';
+ const cal=ammoCaliberOf(w.key);
+ if(w.ammo&&AMMO_DEFS[w.ammo]?.cal===cal&&(bagCount(w.ammo)>0||w.loanAmmoBox===w.ammo)) return w.ammo;
+ if(w.mag>0&&w.ammo) return '';
+ if(w.loanAmmoBox&&AMMO_DEFS[w.loanAmmoBox]?.cal===cal) return w.loanAmmoBox;
+ const basic=ammoKeyOfCaliber(cal);
+ if(bagCount(basic)>0) return basic;
+ for(const key in RUN.loot) if(RUN.loot[key]>0&&AMMO_DEFS[key]?.cal===cal) return key;
+ return '';
+}
+// 换弹统一走同一入口：先用现有备弹，需要时再拆与当前枪匹配的一盒。
 const _origTryReload = (typeof tryReload==='function') ? tryReload : null;
 tryReload = function(){
  const w = currentAmmoWeapon();
- if(ammoShopActive() && w && (w.reserve||0) <= 0 && (w.mag||0) <= 0){
-  raidWarn(`备弹耗尽 · 到弹药箱补给点按 <b>F</b>, 或按 <b>${AMMO_SHOP_KEY.replace('Key','')}</b> 打开弹药商店购买`);
-  return;
+ if(w&&w.mag<w.def.mag&&w.reserve<=0&&VM.state==='idle'&&player.alive&&player.deployed&&!matchOver){
+  const cal=ammoCaliberOf(w.key);
+  const key=ammoBoxForReload(w);
+  if(key){
+   if(!loadAmmoFromBag(key)) return;
+  } else if(ammoShopActive()){
+   const needed=w.mag&&w.ammo?ammoNameOf(w.ammo):AMMO_CAL_NAME[cal];
+   raidWarn(needed+'已用完 · '+(TOUCHUI?'到弹药补给点购买':keyLabelOf('ammoShop')+' 打开弹药商店'));
+   return;
+  }
  }
  if(_origTryReload) _origTryReload();
 };
 
 // ==================== UI: 弹药商店面板 ====================
 const AMMO_UI = { open:false, sel:0 };
+function currentAmmoPacks(){
+ const w=currentAmmoWeapon();
+ return w?AMMO_PACK_DEFS.filter(pk=>pk.cal===ammoCaliberOf(w.key)):[];
+}
 function ammoShopOpen(){
  if(!ammoShopCanOpen()){ raidWarn('仅在对局进行中可购买弹药'); return false; }
- if(typeof lootPanelClose==='function') lootPanelClose();
- if(typeof bagPanelClose==='function') bagPanelClose();
- AMMO_UI.open = true; AMMO_UI.sel = 0;
+ if(typeof lootPanelClose==='function') lootPanelClose(false);
+ if(typeof bagPanelClose==='function') bagPanelClose(false);
+ AMMO_UI.open = true;
+ const w=currentAmmoWeapon(), packs=currentAmmoPacks();
+ const initial=w&&(w.mag||w.reserve)&&w.ammo?w.ammo:(w&&ammoKeyOfCaliber(ammoCaliberOf(w.key)));
+ AMMO_UI.sel=Math.max(0,packs.findIndex(pk=>pk.id===initial));
+ releaseAllInputs();
+ player.ads=false;
+ if(!TOUCHUI&&document.pointerLockElement) document.exitPointerLock();
  renderAmmoShop();
+ el('ammoShopPanel').focus({preventScroll:true});
  if(typeof AudioSys!=='undefined' && AudioSys.click) AudioSys.click(900,0.2,0.04);
  return true;
 }
-function ammoShopClose(){
+function ammoShopClose(resume=true){
+ const wasOpen=AMMO_UI.open;
  AMMO_UI.open = false;
  const pnl = (typeof el==='function') ? el('ammoShopPanel') : document.getElementById('ammoShopPanel');
  if(pnl) pnl.classList.add('hidden');
+ if(wasOpen&&resume){ releaseAllInputs(); bagRelockPointer(); }
 }
 function ammoSelMove(d){
  if(!AMMO_UI.open) return;
- AMMO_UI.sel = (AMMO_UI.sel + d + AMMO_PACK_DEFS.length) % AMMO_PACK_DEFS.length;
+ const n=currentAmmoPacks().length;
+ if(!n) return;
+ AMMO_UI.sel = (AMMO_UI.sel + d + n) % n;
  renderAmmoShop();
  if(typeof AudioSys!=='undefined' && AudioSys.click) AudioSys.click(1400,0.1,0.03);
 }
@@ -419,37 +427,34 @@ function renderAmmoShop(){
    + ` · 弹种 <b>${w && w.ammo ? ammoNameOf(w.ammo) : '空'}</b>`
    + ` · 备弹 <b>${w ? (w.reserve||0) : 0}/${w ? (w.def.reserve||0) : 0}</b>`
    + ` · 余额 <b>¥${formatMoney((typeof META!=='undefined') ? (META.wallet||0) : 0)}</b>`;
- if(AMMO_UI.sel >= AMMO_PACK_DEFS.length) AMMO_UI.sel = 0;
+ const packs=currentAmmoPacks();
+ if(AMMO_UI.sel >= packs.length) AMMO_UI.sel = 0;
  let rows = '';
- AMMO_PACK_DEFS.forEach((pk,i)=>{
+ packs.forEach((pk,i)=>{
   const q = ammoQuote(pk, w);
-  const match = !!w;
-  let info = `T${pk.tier} · 穿甲 ${pk.pen}`;
-  if(match && q.ok) info += ` · 实发 ${q.give} 发`;
-  else if(match && !q.ok) info += ` · ${q.reason}`;
-  else info += ' · 当前没有武器';
-  rows += `<div class="lootRow ammoRow${i===AMMO_UI.sel?' sel':''}${match?'':' cant'}" data-ap="${pk.id}">`
+  const affordable=q.ok&&META.wallet>=q.price;
+  const info=q.ok?(affordable?'实发 '+q.give+' 发':'余额不足'):q.reason;
+  rows += `<div class="lootRow ammoRow${i===AMMO_UI.sel?' sel':''}${affordable?'':' cant'}" data-ap="${pk.id}">`
         + `<span class="lrMark">${i===AMMO_UI.sel?'▸':' '}</span>`
-        + `<span class="lrName">${pk.icon} ${pk.name} <span style="opacity:.6">满额 ${pk.rounds} 发</span></span>`
+        + `<span class="lrName">${pk.name} <span>T${pk.tier}</span></span>`
         + `<span class="lrInfo">${info}</span>`
-        + `<button class="apBuy" data-apbuy="${pk.id}">¥${formatMoney(q.ok?q.price:pk.price)} 购买</button>`
+        + `<button type="button" class="apBuy" data-apbuy="${pk.id}" ${affordable?'':'disabled'}>¥${formatMoney(q.ok?q.price:pk.price)} 购买</button>`
         + `</div>`;
  });
  const list = g('ammoShopList');
  if(list) list.innerHTML = rows;
  const hint = g('ammoShopHint');
- if(hint) hint.innerHTML = `<b>↑/↓</b> 选择 · <b>F</b>/<b>Enter</b> 购买 · <b>1-5</b> 直购 · <b>Esc</b> 关闭`
-   + ` · 从作战货币实时扣费, 购买后立即发放到当前武器备弹`;
+ if(hint) hint.textContent=TOUCHUI?'购买后加入当前武器备弹':('↑/↓ 选择 · Enter 购买 · 数字键直购 · Esc 关闭');
  if(list && !list._ammoBound){
   list._ammoBound = true;
   list.addEventListener('click', ev=>{
    const row = ev.target && ev.target.closest ? ev.target.closest('[data-ap]') : null;
    if(row && row.dataset.ap){
-    AMMO_UI.sel = Math.max(0, AMMO_PACK_DEFS.findIndex(p=>p.id===row.dataset.ap));
-    renderAmmoShop();
+    AMMO_UI.sel = Math.max(0, currentAmmoPacks().findIndex(p=>p.id===row.dataset.ap));
    }
    const b = ev.target && ev.target.closest ? ev.target.closest('[data-apbuy]') : null;
    if(b && b.dataset.apbuy){ ev.stopPropagation(); buyAmmoPack(b.dataset.apbuy); }
+   else renderAmmoShop();
   });
  }
 }
@@ -459,33 +464,19 @@ function ammoPanelKey(code, shift){
  if(code === 'ArrowUp'){ ammoSelMove(-1); return true; }
  if(code === 'ArrowDown'){ ammoSelMove(1); return true; }
  if(code === 'KeyF' || code === 'Enter' || code === 'NumpadEnter'){
-  const pk = AMMO_PACK_DEFS[AMMO_UI.sel];
+  const pk = currentAmmoPacks()[AMMO_UI.sel];
   if(pk) buyAmmoPack(pk.id);
   return true;
  }
  if(code === 'Escape'){ ammoShopClose(); return true; }
  const m = /^Digit([1-9])$/.exec(code);
  if(m){
-  const pk = AMMO_PACK_DEFS[(+m[1]) - 1];
+  const pk = currentAmmoPacks()[(+m[1]) - 1];
   if(pk) buyAmmoPack(pk.id);
   return true;
  }
  return false;
 }
-// 快捷键: 随时打开/关闭商店 (无需站在补给点旁边, 但只在对局中生效)
-addEventListener('keydown', e=>{
- if(e.repeat) return;
- if(e.code === AMMO_SHOP_KEY){
-  if(!ammoShopCanOpen()) return;
-  if(AMMO_UI.open) ammoShopClose(); else ammoShopOpen();
-  return;
- }
- if(!AMMO_UI.open) return;
- // 已锁定指针时, 按键由 bagPanelKey 包裹层统一消费(避免与 tryInteract/lootSelMove 抢键)
- const locked = (typeof pointerLocked !== 'undefined') ? !!pointerLocked : false;
- if(locked) return;
- if(ammoPanelKey(e.code, e.shiftKey)) e.preventDefault();
-});
 
 // ==================== 生命周期挂载 (兼容性) ====================
 // 模块: GameMode · 调用入口: startMatch / finishRaid / onPlayerRaidDeath
@@ -503,10 +494,8 @@ finishRaid = function(extracted){
  const r = _origFinishRaid ? _origFinishRaid(extracted) : undefined;
  // 结算追加一行弹药采购支出(只读展示, 不写 META)
  const spent = RUN.ammoSpent || 0;
- if(spent > 0){
-  const es = document.getElementById('endStats');
-  if(es) es.insertAdjacentHTML('beforeend',
-   `<div style="margin-top:6px;color:#d8d8d8;font-size:13px">局内弹药采购 <b>${RUN.ammoRounds||0}</b> 发 · 支出 <b>¥${formatMoney(spent)}</b></div>`);
+ if(spent>0&&!el('endStats').querySelector('.reportAmmo')){
+  reportGroup('局内弹药采购',[(RUN.ammoRounds||0)+' 发 · 支出 ¥'+formatMoney(spent)]).classList.add('reportAmmo');
  }
  emitRaidEvent('OnMatchEnd', { extracted:!!extracted, ammoSpent:spent });
  return r;

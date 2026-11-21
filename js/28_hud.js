@@ -153,7 +153,12 @@ mmC.beginPath(); mmC.arc(half,half,half-2,0,TAU); mmC.stroke();
 }
 const cpC=el('compass').getContext('2d');
 function drawCompass(){
-const W=460,H=26;
+const W=cpC.canvas.clientWidth||460,H=34, dpr=Math.min(devicePixelRatio||1,2);
+const pixels=Math.round(W*dpr);
+if(cpC.canvas.width!==pixels||cpC.canvas.height!==Math.round(H*dpr)){
+  cpC.canvas.width=pixels; cpC.canvas.height=Math.round(H*dpr);
+  cpC.setTransform(dpr,0,0,dpr,0,0);
+}
 cpC.clearRect(0,0,W,H);
 cpC.fillStyle='rgba(0,0,0,.35)'; cpC.fillRect(0,0,W,H);
 const yaw=player.alive?player.yaw:0;
@@ -164,7 +169,7 @@ let rel=angDiff(yaw,a);
 if(Math.abs(rel)>1.2) continue;
 const x=W/2-rel/1.2*(W/2);
 cpC.fillStyle='rgba(255,255,255,.75)';
-cpC.fillText(label,x,17);
+cpC.fillText(label,x,15);
 }
 for(const f of FLAGS){
 const a=Math.atan2(player.pos.x-f.x,player.pos.z-f.z);
@@ -173,8 +178,7 @@ if(Math.abs(rel)>1.2) continue;
 const x=W/2-rel/1.2*(W/2);
 cpC.fillStyle=f.owner===0?'#8fc1ff':f.owner===1?'#ff9c8a':'#ccc';
 cpC.font='bold 13px sans-serif';
-cpC.fillText(f.id,x,13);
-cpC.fillRect(x-1,18,2,5);
+cpC.fillText(f.id,x,30);
 cpC.font='12px sans-serif';
 }
 if(typeof EXTRACT_POINTS!=='undefined'){
@@ -184,11 +188,10 @@ let rel=angDiff(yaw,a);
 if(Math.abs(rel)>1.2) continue;
 const x=W/2-rel/1.2*(W/2);
 cpC.fillStyle='#35e0a0'; cpC.font='bold 13px sans-serif';
-cpC.fillText('撤',x,13);
-cpC.fillRect(x-1,18,2,5);
+cpC.fillText('撤',x,30);
 }
 }
-cpC.fillStyle='#ffd77a'; cpC.fillRect(W/2-1,2,2,6);
+cpC.fillStyle='#ffd77a'; cpC.fillRect(W/2-1,0,2,4);
 }
 // ===== 大地图 (M键): 北向上全图, 全局态势 =====
 const bmC=el('bigmap').getContext('2d');
@@ -325,7 +328,7 @@ bmC.fillStyle='#e8e8e8'; bmC.fillText(`${mm}:${ss2<10?'0':''}${ss2}`, half, S-22
 let modeLine='';
 if(GAMEMODE==='assault') modeLine='攻防战 · 目标 '+FLAGS[Math.min(assaultIdx,FLAGS.length-1)].id+' 点';
 else if(GAMEMODE==='demolition') modeLine='破袭战 · 补给库 '+DEPOTS.filter(d=>!d.destroyed).length+'/'+DEPOTS.length;
-else if(GAMEMODE==='extract') modeLine='撤离行动 · 搜刮并抵达南侧撤离灯塔';
+else if(GAMEMODE==='extract') modeLine='撤离行动 · 前往地图上绿色的「撤」字标记';
 else modeLine='征服战 · 抢占全部旗点';
 bmC.fillStyle='#b8b8b8'; bmC.font='13px sans-serif';
 bmC.fillText(modeLine+' · '+CAMPAIGN.title, half, S-36);
@@ -343,6 +346,34 @@ if(node._hudMarkup===markup) return;
 node.innerHTML=markup;
 node._hudMarkup=markup;
 }
+function emptyMagAction(w){
+  if(!w||player.onVehicle||player.onMG||player.onAT||player.onAA||player.onMortar||!player.alive) return '';
+  if(VM.state==='reload') return 'loading';
+  if(w.mag>0) return '';
+  if(w.reserve>0) return 'reload';
+  if(ammoBoxForReload(w)) return 'unbox';
+  return ammoShopCanOpen()?'buy':'find';
+}
+function updateWeaponGuide(w){
+  const handheld=!!w&&!player.onVehicle&&!player.onMG&&!player.onAT&&!player.onAA&&!player.onMortar;
+  const action=emptyMagAction(w);
+  const panel=el('ammoPanel');
+  panel.classList.toggle('hasRounds',handheld);
+  const slot=player.curSlot===0?'主武器':'副武器';
+  setHudText(el('wslot'),handheld?slot:'');
+  const touch=document.body.classList.contains('touchui');
+  const reload=touch?'点换弹':'按 '+keyLabelOf('reload');
+  let message='';
+  if(action==='loading') message='正在换弹…';
+  else if(action==='reload') message=reload+'，装入备弹';
+  else if(action==='unbox') message=touch?'点拆盒，自动装填':reload+'，拆盒装填';
+  else if(action==='buy'||action==='find'){
+    const family=AMMO_CAL_NAME[ammoCaliberOf(w.key)];
+    message=action==='find'?'寻找'+family:'缺'+family+' · '+(touch?'点买弹':keyLabelOf('ammoShop')+' 买弹');
+  }
+  setHudText(el('ammoAction'),message);
+  if(touch) setHudText(el('tReload').querySelector('.tLbl'),action==='buy'?'买弹':action==='unbox'?'拆盒':'换弹');
+}
 let hudSlowT=0;
 function updateHUD(dt){
 if(typeof zoomHudUpdate==='function') zoomHudUpdate();
@@ -350,9 +381,9 @@ if(typeof zoomHudUpdate==='function') zoomHudUpdate();
 try{
   const at=el('ammoType');
   if(at){
-    let s='空';
     const w=player&&player.curW;
-    if(w&&w.ammo&&typeof AMMO_DEFS!=='undefined'&&AMMO_DEFS[w.ammo]) s=AMMO_DEFS[w.ammo].short||AMMO_DEFS[w.ammo].name;
+    const d=w&&AMMO_DEFS[w.ammo];
+    const s=d&&(w.mag||w.reserve)?d.name:(w?AMMO_CAL_NAME[ammoCaliberOf(w.key)]:'');
     if(at.textContent!==s) at.textContent=s;
   }
 }catch(e){}
@@ -381,7 +412,7 @@ setHudText(el('wname'),w.def.name+' · 搭乘'+t.name);
 setHudText(el('wmode'),w.def.mode);
 setHudText(el('magN'),w.mag);
 el('magN').style.color=w.mag<=w.def.mag*0.25?'#e8836a':'#eee';
-setHudText(el('resN'),'| '+w.reserve);
+setHudText(el('resN'),w.reserve);
 setHudText(el('nadeN'),'车况 '+Math.max(0,Math.round(t.hp/t.maxHp*100))+'% · F 下车');
 }
 } else if(player.onVehicle&&player.onVehicle.kind==='apc'){
@@ -416,32 +447,43 @@ setHudText(el('resN'),''); setHudText(el('nadeN'),'');
 setHudText(el('wname'),player.onMG?'MG42 通用机枪':w.def.name);
 setHudText(el('wmode'),player.onMG?'全自动':w.def.mode);
 setHudText(el('magN'),player.onMG?'∞':w.mag);
-setHudText(el('resN'),player.onMG?'':'/ '+w.reserve);
+setHudText(el('resN'),player.onMG?'':w.reserve);
 el('magN').style.color=(!player.onMG&&w.mag<=Math.max(2,w.def.mag*0.25))?'#ff7060':'#eee';
-// 投掷物自费: 直接显示带入的余量, 与兵种无关
-setHudText(el('nadeN'),'手雷[3] ×'+player.nadeCount+' · 闪光[4] ×'+(player.flashCount||0)+' · 烟雾[5] ×'+player.smokeCount+(player.cls===2?' · 医疗箱['+keyLabelOf('skill')+'] ×'+(player.medkitUsed?'0':'1'):''));
+if(hudSlowT<=dt){
+const utility=[];
+if(player.nadeCount) utility.push(keyLabelOf('nade')+' 手雷 ×'+player.nadeCount);
+if(player.flashCount) utility.push(keyLabelOf('flash')+' 闪光 ×'+player.flashCount);
+if(player.smokeCount) utility.push(keyLabelOf('smoke')+' 烟雾 ×'+player.smokeCount);
+setHudText(el('nadeN'),utility.join(' · '));
 }
-// 血条已移除: 血量完全由左下角人体状态图表达(白/黄/红/黑), 不再显示任何 hp 数字与进度条
+} else {
+setHudText(el('wname'),'未持武器');
+for(const id of ['wmode','magN','resN','nadeN']) setHudText(el(id),'');
+}
 el('stamBar').style.width=(player.stamina*100)+'%';
-if(el('armorHud')) setHudText(el('armorHud'),player.armorDef?`护甲 ${player.armorDef.name} · 减伤 ${Math.round(player.armorResist*100)}%`+(player.armorMax?` · 耐久 ${Math.round(player.armorDur||0)}/${Math.round(player.armorMax)}`:''):'未装备护甲');
-if(el('lootHud')) setHudText(el('lootHud'),`战利品 ${runLootTotal()} 件 · 撤离点 ${typeof EXTRACT_POINTS!=='undefined'&&EXTRACT_POINTS.length?Math.round(Math.min(...EXTRACT_POINTS.map(p=>Math.hypot(player.pos.x-p.x,player.pos.z-p.z))))+'m':''}`);
 // 人体状态图: 七部位按血量比例着色(白/黄/红/黑), 取代旧的四肢血条
 if(typeof renderBodyFigure==='function') renderBodyFigure(!player.alive||!player.body);
 // 低频HUD(10Hz): 小地图/罗盘/票数/旗帜状态, 减少每帧DOM与Canvas开销
 hudSlowT-=dt;
 if(hudSlowT<=0){
 hudSlowT=0.1;
+updateWeaponGuide(w);
+const durability=player.armorMax?Math.round(player.armorDur||0)+'/'+Math.round(player.armorMax):'';
+setHudText(el('armorHud'),player.armorDef?(TOUCHUI&&durability?'护甲耐久 '+durability:player.armorDef.name+(durability?' · '+durability:'')):'未穿护甲');
+const exits=typeof EXTRACT_POINTS!=='undefined'&&EXTRACT_POINTS.length;
+setHudText(el('lootHud'),GAMEMODE==='extract'&&exits?'最近撤离点 '+Math.round(Math.min(...EXTRACT_POINTS.map(p=>Math.hypot(player.pos.x-p.x,player.pos.z-p.z))))+' m':'');
 {
 const t0s=(!isFinite(tickets[0])||(GAMEMODE!=='conquest'&&DEF===0))?'∞':Math.ceil(tickets[0]);
 const t1s=(!isFinite(tickets[1])||(GAMEMODE!=='conquest'&&DEF===1))?'∞':Math.ceil(tickets[1]);
 let modeLine='';
 if(GAMEMODE==='assault') modeLine=`<div style="font-size:11px;color:#ffd77a">攻防战 · 当前目标: ${FLAGS[Math.min(assaultIdx,FLAGS.length-1)].id} 点</div>`;
 else if(GAMEMODE==='demolition') modeLine=`<div style="font-size:11px;color:#ffd77a">破袭战 · 剩余补给库: ${DEPOTS.filter(d=>!d.destroyed).length}/${DEPOTS.length}</div>`;
-else if(GAMEMODE==='extract') modeLine=`<div style="font-size:11px;color:#7dd87d">带出战利品 ${runLootTotal()} 件</div>`;
-setHudHTML(el('tickets'),GAMEMODE==='extract'?`<span class="tl">撤离行动</span> &nbsp;·&nbsp; <span class="tr">搜索-带出-出售</span>`+modeLine:`<span class="tl">${TEAM_NAME[0]} ${t0s}</span> &nbsp;·&nbsp; <span class="tr">${t1s} ${TEAM_NAME[1]}</span>`+modeLine);
+setHudHTML(el('tickets'),GAMEMODE==='extract'?'撤离倒计时':`<span class="tl">${TEAM_NAME[0]} ${t0s}</span> · <span class="tr">${t1s} ${TEAM_NAME[1]}</span>`+modeLine);
 }
 const mm=Math.floor(Math.max(0,matchTime)/60), ss2=Math.floor(Math.max(0,matchTime)%60);
 setHudText(el('timeTxt'),`${mm}:${ss2<10?'0':''}${ss2}`);
+el('timeTxt').classList.toggle('urgent',matchTime<60);
+el('timeTxt').classList.toggle('hidden',!!CAMPAIGN.rangeOnly);
 FLAGS.forEach((f,i)=>{
 const fi=el('fi'+f.id);
 fi.className=(f.owner===0?'f0':f.owner===1?'f1':'')+(f.capTeam!==-1&&f.cap>0.03?' fc':'');
@@ -454,7 +496,7 @@ if(SQUAD.members.length&&player.deployed){
 const alive=SQUAD.members.filter(s=>s.alive).length;
 sqEl.style.display='block';
 const modeTxt=SQUAD.mode==='move'?'<b>进攻标记点</b>':SQUAD.mode==='guard'?'<b>驻守标记点</b>':SQUAD.mode==='attack'?'<b>集火目标</b>':'跟随中';
-setHudHTML(sqEl,`◆ 小队 <b>${alive}/${SQUAD.members.length}</b> · ${modeTxt}<br><span style="opacity:.65">[T] 攻击 · [U] 驻守 · [Y] 跟随 · [M] 大地图</span>`);
+setHudHTML(sqEl,`小队 <b>${alive}/${SQUAD.members.length}</b> · ${modeTxt}`);
 } else sqEl.style.display='none';
 if(bigMapVisible&&typeof bigMapVisible==='function'&&bigMapVisible()) drawBigMap();
 }
@@ -482,20 +524,19 @@ el('nadeWarn').style.display=nadeWarnT>0?'block':'none';
 // 架枪状态指示
 const bi=el('braceInd');
 if(player.alive&&player.braced){ bi.style.display='block'; bi.className='on'; setHudText(bi,'▙ 已架枪'); }
-else if(player.alive&&player.canBrace&&!player.prone&&!player.onVehicle){ bi.style.display='block'; bi.className=''; setHudText(bi,'[X] 架枪'); }
+else if(player.alive&&player.canBrace&&!player.prone&&!player.onVehicle){ bi.style.display='block'; bi.className=''; setHudText(bi,keyLabelOf('brace')+' 架枪'); }
 else bi.style.display='none';
 // 高低姿态持枪指示
 const ci=el('carryInd');
-if(player.alive&&!player.onVehicle&&!player.onMG&&!player.onAT&&!player.onAA&&!player.onMortar){
-if(player.carryLow){ ci.style.display='block'; ci.className='low'; setHudText(ci,'▼ 低位持枪 · 移动 +18%'); }
-else { ci.style.display='block'; ci.className=''; setHudText(ci,'滚轮↓ 低位持枪'); }
+if(player.alive&&player.carryLow&&!player.onVehicle&&!player.onMG&&!player.onAT&&!player.onAA&&!player.onMortar){
+ci.style.display='block'; ci.className='low'; setHudText(ci,'低位持枪 · 滚轮向上抬枪');
 } else ci.style.display='none';
 // 战术手电指示 (状态由 15c_flashlight.updateFlashlight 每帧刷新)
 const fi=el('flashInd');
 if(fi){
-if(player.alive&&!player.onVehicle&&typeof FLASH!=='undefined'&&FLASH.hasMod){
+if(player.alive&&!player.onVehicle&&typeof FLASH!=='undefined'&&FLASH.hasMod&&FLASH.on){
 const _nm=(typeof FLASH.isLaser!=='undefined'&&FLASH.isLaser)?'激光指示器':'战术手电';
-fi.style.display='block'; fi.className=FLASH.on?'on':''; setHudText(fi,FLASH.on?('✦ '+_nm+' · 开 [G]'):('[G] '+_nm));
+fi.style.display='block'; fi.className='on'; setHudText(fi,_nm+'已开启 · '+keyLabelOf('flashLight')+' 关闭');
 } else fi.style.display='none';
 }
 // 手雷蓄力条 (状态由 24_input 的 nadeEquip/nadeCharge* 维护)
@@ -504,7 +545,7 @@ if(ni){
 if(player.alive&&VM.state==='nade'&&player.nadeHeld){
 const c=clamp(player.nadeCharge||0,0,1);
 ni.style.display='block'; ni.className=player.nadeCharging?'on':'';
-setHudText(el('nadeIndTxt'),player.nadeCharging?('蓄力 '+Math.round(c*100)+'%'):'手雷就位 · 按住右键蓄力');
+setHudText(el('nadeIndTxt'),player.nadeCharging?('蓄力 '+Math.round(c*100)+'%'):(TOUCHUI?'手雷就位 · 按住手雷蓄力':'手雷就位 · 按住右键蓄力'));
 el('nadeIndBar').style.width=(c*100).toFixed(1)+'%';
 } else ni.style.display='none';
 }

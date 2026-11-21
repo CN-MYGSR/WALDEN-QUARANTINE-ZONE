@@ -437,7 +437,7 @@ if(k>0.62) vmPlayOnce('r3',()=>AudioSys.click(1400,0.3,0.05));
 if(k>0.74){
 const ch=pulse(k,0.74,0.84,0.96);
 if(g.bolt) g.bolt.position.z=(g.bolt.userData.z0??0)+ch*0.07;
-if(g.slide) g.slide.position.z=-0.02+ch*0.055;
+if(g.slide) g.slide.position.z=g.slide.userData.z0+ch*0.055;
 vmPlayOnce('r4',()=>AudioSys.metalSlide(0.3,0.1,1200,700));
 }
 // 左手跟随弹匣井: 拔匣下拉 → 插新匣推入

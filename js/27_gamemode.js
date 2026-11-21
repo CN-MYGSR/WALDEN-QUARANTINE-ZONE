@@ -86,16 +86,9 @@ matchOver=true;
 const winner=forceWinner!==undefined?forceWinner:(tickets[0]===tickets[1]?-1:(tickets[0]>tickets[1]?0:1));
 document.exitPointerLock&&document.exitPointerLock();
 startEndCut(winner,()=>{
-document.querySelectorAll('.screen').forEach(s=>s.classList.add('hidden'));
-const end=document.getElementById('end');
-end.classList.remove('hidden');
-const title=document.getElementById('endTitle');
-if(winner===player.team){ title.textContent='胜  利'; title.className='win'; }
-else if(winner===-1){ title.textContent='平  局'; title.className='win'; }
-else { title.textContent='战  败'; title.className='lose'; }
-document.getElementById('endStats').innerHTML=
-`${TEAM_NAME[0]} 剩余兵力 <b>${fmtTickets(tickets[0])}</b> · ${TEAM_NAME[1]} 剩余兵力 <b>${fmtTickets(tickets[1])}</b><br>`+
-`你的战绩：<b>${player.kills}</b> 击杀 / <b>${player.deaths}</b> 阵亡 · 得分 <b>${player.score}</b>`;
+prepareReport(winner===-1?'平局':winner===player.team?'胜利':'战败',winner===player.team||winner===-1);
+reportMetrics([['击杀',player.kills],['阵亡',player.deaths],['得分',player.score]]);
+reportGroup('双方剩余兵力',[TEAM_NAME[0]+'　'+fmtTickets(tickets[0]),TEAM_NAME[1]+'　'+fmtTickets(tickets[1])]);
 });
 }
 function fmtTickets(v){ return isFinite(v)?String(Math.ceil(v)):'∞'; }

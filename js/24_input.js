@@ -145,6 +145,8 @@ const KEY_ACTIONS=[
 {a:'crouch',     n:'蹲下',        d:'KeyC'},
 {a:'prone',      n:'趴下',        d:'KeyZ'},
 {a:'brace',      n:'架枪',        d:'KeyX'},
+{a:'zoomOut',    n:'降低瞄具倍率', d:'BracketLeft'},
+{a:'zoomIn',     n:'提高瞄具倍率', d:'BracketRight'},
 {a:'slot1',      n:'主武器',      d:'Digit1'},
 {a:'slot2',      n:'副武器',      d:'Digit2'},
 {a:'melee',      n:'近战/垂直起降',d:'KeyV'},
@@ -156,6 +158,7 @@ const KEY_ACTIONS=[
 {a:'eat',        n:'进食/喝水',   d:'KeyK'},
 {a:'food',       n:'切换食物',    d:'KeyJ'},
 {a:'skill',      n:'兵种技能',    d:'KeyO'},
+{a:'ammoShop',   n:'弹药商店',    d:'KeyI'},
 {a:'medwheel',   n:'药品轮盘',    d:'KeyB'},
 {a:'interact',   n:'互动/搜刮',   d:'KeyF'},
 {a:'bag',        n:'背包面板',    d:'Tab'},
@@ -191,6 +194,8 @@ if(c.indexOf('Digit')===0) return c.slice(5);
 if(c==='ShiftLeft') return 'Shift';
 if(c==='Space') return '空格';
 if(c==='Tab') return 'Tab';
+if(c==='BracketLeft') return '[';
+if(c==='BracketRight') return ']';
 if(c.indexOf('Arrow')===0) return {ArrowUp:'↑',ArrowDown:'↓',ArrowLeft:'←',ArrowRight:'→'}[c]||c;
 return c;
 }
@@ -393,10 +398,54 @@ showScorePop('建造选择: '+bn+' (消耗'+BUILD_COST[bt]+'点'+(TOUCHUI?'':' �
 },
 };
 addEventListener('keydown',e=>{
-// 弹药商店打开时, Esc 只关闭商店, 不继续触发暂停/部署界面。
-if(e.code==='Escape'&&typeof AMMO_UI!=='undefined'&&AMMO_UI.open){
+if(typeof medWheelIsOpen==='function'&&medWheelIsOpen()){
   e.preventDefault(); e.stopImmediatePropagation();
-  ammoShopClose();
+  if(e.repeat) return;
+  if(e.code==='Escape'||isKey(e,'medwheel')) closeMedWheel();
+  else if(e.code==='Tab') (document.activeElement===el('mwClose')?el('mwRing'):el('mwClose')).focus();
+  else if(e.code==='Enter'||e.code==='NumpadEnter'||e.code==='Space'){
+    if(document.activeElement===el('mwClose')) closeMedWheel();
+    else medWheelConfirm();
+  }
+  else if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.code)){
+    const n=MEDWHEEL.keys.length, step=e.code==='ArrowLeft'||e.code==='ArrowUp'?-1:1;
+    MEDWHEEL.sel=(MEDWHEEL.sel+n+step)%n;
+    medWheelRender();
+    el('mwRing').focus({preventScroll:true});
+  }
+  return;
+}
+if(typeof AMMO_UI!=='undefined'&&AMMO_UI.open){
+  e.stopImmediatePropagation();
+  if(e.repeat&&['Enter','Space','NumpadEnter'].includes(e.code)){ e.preventDefault(); return; }
+  if(e.code==='Tab'){
+    const buttons=el('ammoShopPanel').querySelectorAll('button:enabled');
+    const first=buttons[0], last=buttons[buttons.length-1];
+    if(e.shiftKey&&(document.activeElement===first||document.activeElement===el('ammoShopPanel'))){ e.preventDefault(); last?.focus(); }
+    else if(!e.shiftKey&&document.activeElement===last){ e.preventDefault(); first?.focus(); }
+    return;
+  }
+  if(e.code==='Escape'||isKey(e,'ammoShop')){
+    e.preventDefault(); if(!e.repeat) ammoShopClose();
+  } else if(!(e.target.closest&&e.target.closest('#ammoShopPanel button')&&['Enter','Space','NumpadEnter'].includes(e.code))){
+    if(!e.repeat&&ammoPanelKey(e.code,e.shiftKey)) e.preventDefault();
+  }
+  return;
+}
+if(!player.deployed||!player.alive||matchOver||document.querySelector('.screen:not(.hidden)')) return;
+if(typeof LOOT_UI!=='undefined'&&LOOT_UI.open){
+  e.stopImmediatePropagation();
+  if(isKey(e,'lootUp')||isKey(e,'lootDown')){
+    e.preventDefault();
+    lootSelMove(isKey(e,'lootUp')?-1:1);
+  } else if(e.code==='Escape'||isKey(e,'bag')||isKey(e,'interact')){
+    e.preventDefault();
+    if(!e.repeat){
+      if(e.code==='Escape') lootPanelClose();
+      else if(isKey(e,'bag')) toggleBagPanel();
+      else lootTakeSelected();
+    }
+  }
   return;
 }
 // ===== 背包面板打开时: 只响应 Tab / Esc / R / ↑ / ↓ =====
@@ -425,31 +474,40 @@ if(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open){
     if(typeof bagPanelKey==='function') bagPanelKey(_c,e.shiftKey);
     return;
   }
+  if(_c==='ArrowLeft'||_c==='ArrowRight'){
+    e.preventDefault(); e.stopImmediatePropagation();
+    const actions=Array.from(el('bagPanel').querySelectorAll('button:not(:disabled)')).filter(b=>b.offsetWidth>0);
+    const pos=actions.indexOf(document.activeElement), step=_c==='ArrowRight'?1:-1;
+    const next=pos<0?(step>0?0:actions.length-1):(pos+step+actions.length)%actions.length;
+    actions[next]?.focus();
+    return;
+  }
+  if(['Enter','NumpadEnter','Space'].includes(_c)&&e.target.closest?.('#bagPanel button')){
+    e.stopImmediatePropagation();
+    if(e.repeat) e.preventDefault();
+    return;
+  }
   // 其余按键一律吞掉: 不写入 keys、不触发换弹/切枪/使用/建造等游戏动作
   e.preventDefault(); e.stopImmediatePropagation();
   return;
 }
-// 无极变倍: [ / ] 只在开镜时生效, 不占用其他键位
-if(player&&player.ads&&(e.code==='BracketLeft'||e.code==='BracketRight')&&typeof zoomAdjust==='function'){
-  if(zoomAdjust(VM.key,e.code==='BracketRight'?1:-1)){
-    e.preventDefault();
-    if(typeof zoomHudUpdate==='function') zoomHudUpdate();
-    return;
-  }
+if((isKey(e,'zoomIn')||isKey(e,'zoomOut'))&&player.ads&&weaponControlsActive()&&
+    zoomAdjust(player.curW.key,isKey(e,'zoomIn')?1:-1)){
+  e.preventDefault();
+  zoomHudUpdate();
+  return;
 }
 if(isKey(e,'bag')){
-  if(!player.deployed||!player.alive||matchOver||document.querySelector('.screen:not(.hidden)')) return;
   e.preventDefault();
   if(!e.repeat&&typeof toggleBagPanel==='function') toggleBagPanel();
   return;
 }
 if(isKey(e,'score')){ document.getElementById('scoreboard').style.display='block'; updateScoreboard(); }
-// 药品轮盘: 和背包一样放在 pointerLocked 检查之前 —— 退出指针锁定(暂停菜单)时也得能按开
-if(e.code==='Escape'&&typeof medWheelIsOpen==='function'&&medWheelIsOpen()){ e.preventDefault(); closeMedWheel(); return; }
-if(isKey(e,'medwheel')){ e.preventDefault(); if(typeof toggleMedWheel==='function') toggleMedWheel(); }
+if(isKey(e,'medwheel')){ e.preventDefault(); if(!e.repeat) toggleMedWheel(); return; }
 if(e.repeat) return;
 { const c=canonKey(e.code); if(c) keys[c]=true; }
 if(!player.alive||!pointerLocked) return;
+if(isKey(e,'ammoShop')&&ammoShopCanOpen()){ e.preventDefault(); ammoShopOpen(); return; }
 // 背包面板打开时优先消费方向键/G/Q/Esc, 避免与游戏操作冲突
 if(typeof bagPanelKey==='function'&&bagPanelKey(e.code,e.shiftKey)) return;
 // N: 轻按切换本局选定的头部装备 —— 面罩模式切面罩, 夜视模式切夜视仪
@@ -495,7 +553,7 @@ if(typeof medWheelIsOpen==='function'&&medWheelIsOpen()){
 const t=e.target;
 // 只有"点格子"和"点空白背景"要让给 DOM click(前者选那一格, 后者关闭);
 // 其余(桌面端指针锁定下 target 就是 canvas)一律走确认/取消。
-const onItem=!!(t&&t.closest&&t.closest('.mwItem'));
+const onItem=!!t.closest?.('.mwItem,#mwClose');
 const onBackdrop=!!(t&&t.id==='medWheel');
 if(!onItem&&!onBackdrop){
 e.preventDefault();
@@ -503,7 +561,7 @@ if(e.button===0) medWheelConfirm(); else if(e.button===2) closeMedWheel();
 }
 return;
 }
-if(!pointerLocked){ return; }
+if(!pointerLocked||BAG_UI.open||LOOT_UI.open||AMMO_UI.open){ return; }
 if(e.button===0) mouseDown=true;
 if(e.button===2){
 mouse2Down=true;
@@ -527,38 +585,42 @@ if(!SETTINGS.adsToggle) player.ads=false;
 }
 });
 addEventListener('contextmenu',e=>e.preventDefault());
-// ===== 鼠标滚轮: 切换高低姿态持枪 =====
-// 上滚 → 高位持枪(抵肩待发), 下滚 → 低位持枪(枪口下压, 移动加速)
-// 仅在步兵状态下生效; 背包面板打开时滚轮用于滚动列表, 不切姿态。
-// 无极变倍 HUD: 只在开镜且当前武器可放大时显示 ×N.N
-let _zoomHudTxt='', _zoomHudOn=false;
+function weaponControlsActive(){
+  return pointerLocked&&player.deployed&&player.alive&&player.curW&&!matchOver&&
+    !player.onMG&&!player.onVehicle&&!player.onAT&&!player.onAA&&!player.onMortar&&
+    !bigMapOn&&!document.body.classList.contains('uiOpen')&&
+    !(typeof LOOT_UI!=='undefined'&&LOOT_UI.open)&&!(typeof AMMO_UI!=='undefined'&&AMMO_UI.open);
+}
+let _zoomHundredths=null, _zoomTouch=false;
 function zoomHudUpdate(){
-  const elz=document.getElementById('zoomN'); if(!elz) return;
-  let z=null;
-  try{ z=(typeof zoomOf==='function'&&typeof VM!=='undefined')?zoomOf(VM.key):null; }catch(err){}
-  const on=!!(z&&typeof player!=='undefined'&&player&&player.ads);
-  const t=on?('×'+z.toFixed(1)):'';
-  if(t!==_zoomHudTxt){ _zoomHudTxt=t; elz.textContent=t; }
-  if(on!==_zoomHudOn){ _zoomHudOn=on; elz.style.display=on?'inline':'none'; }
+  const z=player.ads&&weaponControlsActive()?zoomOf(player.curW.key):null;
+  const n=z===null?null:Math.round(z*100);
+  const touch=n!==null&&document.body.classList.contains('touchui');
+  if(n===_zoomHundredths&&touch===_zoomTouch) return;
+  _zoomHundredths=n; _zoomTouch=touch;
+  const label=document.getElementById('zoomN');
+  label.textContent=n===null?'':(n/100).toFixed(2)+'× · '+(touch?'滑动瞄准键':'滚轮调倍');
+  label.style.display=n===null?'none':'inline';
 }
 let _wheelAcc=0, _wheelLockT=0;
 addEventListener('wheel',e=>{
-if(!pointerLocked||!player.alive) return;
-if(typeof BAG_UI!=='undefined'&&BAG_UI.open) return;      // 背包打开时不抢滚轮
-if(player.onMG||player.onVehicle||player.onAT||player.onAA||player.onMortar) return;
+if(!weaponControlsActive()||!e.deltaY) return;
+const dy=e.deltaY*(e.deltaMode===1?16:e.deltaMode===2?innerHeight:1);
+if(player.ads){
+  if(zoomAdjust(player.curW.key,-dy/100)){
+    e.preventDefault();
+    zoomHudUpdate();
+  }
+  _wheelAcc=0;
+  return;
+}
 e.preventDefault();
 const now=performance.now();
-if(now-_wheelLockT<180) return;                            // 防抖: 触控板惯性滚动会连发
-const dy=e.deltaY;
+if(now-_wheelLockT<180) return;                            // 持枪姿态是离散动作，才需要防抖
 _wheelAcc+=dy;
 if(Math.abs(_wheelAcc)<8) return;
 const up=_wheelAcc<0;
 _wheelAcc=0; _wheelLockT=now;
-// 开镜 + 放大瞄具: 滚轮改为无极变倍, 不再切持枪姿态
-if(player.ads&&typeof zoomAdjust==='function'&&zoomAdjust(VM.key,up?1:-1)){
-  if(typeof zoomHudUpdate==='function') zoomHudUpdate();
-  return;
-}
 const dir=up?'high':'low';                                 // 下滚=低位, 上滚=高位
 if(player.carry!==dir&&typeof setCarryStance==='function') setCarryStance(dir);
 },{passive:false});
@@ -592,9 +654,12 @@ pointerLocked=document.pointerLockElement===renderer.domElement;
 lockGraceUntil=performance.now()+120;
 toggleBigMap(false);
 if(!pointerLocked&&player.alive&&player.deployed&&!matchOver){
+if(typeof medWheelIsOpen==='function'&&medWheelIsOpen()) closeMedWheel();
 // 背包面板主动解锁鼠标用于拖拽: 这不是"暂停/失焦", 不能弹部署界面
 const _bagOpen=!!(typeof BAG_UI!=='undefined'&&BAG_UI&&BAG_UI.open);
-if(!_bagOpen) showDeploy(false);
+const lootOpen=typeof LOOT_UI!=='undefined'&&LOOT_UI.open;
+const ammoOpen=typeof AMMO_UI!=='undefined'&&AMMO_UI.open;
+if(!_bagOpen&&!lootOpen&&!ammoOpen) showDeploy(false);
 }
 });
 function lockPointer(){
